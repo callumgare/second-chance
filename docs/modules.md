@@ -346,8 +346,14 @@ every user, so a test account doesn't fetch and prepare every engine again
 use and add to it, and the lock and the rename work across users as across builds.
 A user who can't write it uses their own store. Since any user could change a shared
 engine, and a wrapp signs and runs what it copies, an engine another user prepared is
-used only when its tree hashes to its package's `prepared` hash (`isTrusted`, a second
-or two for Wine); one that doesn't is prepared again.
+used only when its tree hashes to the hash recorded for it when it was signed,
+`.signed/<prepared hash>` (`isTrusted`, a second or two for Wine); one that doesn't, or
+has no record, is prepared again. The package's `prepared` hash can't be checked there:
+it's taken before signing, as `codesign` signs ad hoc differently each time, and the
+store keeps the signed tree. Checked against it, no user ever trusted another's engine,
+and each deleted the shared one and prepared it again, sometimes under another
+account's build that was copying it. The record is written by whoever prepared the
+engine, so it catches a tree damaged or changed since rather than proving who made it.
 
 It is a cache: a wrapp holds its own copy of its engine, so clearing it costs
 only the next build's download. `sc engine fetch [<id>…]` fills it here, as

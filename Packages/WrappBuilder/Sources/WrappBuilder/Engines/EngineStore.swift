@@ -100,12 +100,13 @@ public nonisolated final class EngineStore: Sendable {
         let lock = try await LayerStore.lock(lockFile(hash))
         defer { lock.release() }
         let tree = folder(hash)
-        if Self.isWhole(tree, module: id), Self.isTrusted(tree, hash: hash) {
+        if Self.isWhole(tree, module: id), Self.isTrusted(tree, signedHash: signedHash(hash)) {
             touch(tree)
             return Engine(module: id, version: version, hash: hash, tree: tree, prepared: false)
         }
         let files = FileManager.default
         if files.fileExists(atPath: tree.path) { try files.removeItem(at: tree) }
+        try? files.removeItem(at: signedRecord(hash))
         let incoming = root.appendingPathComponent("\(Self.incomingPrefix)\(hash)-\(UUID().uuidString)", isDirectory: true)
         do {
             try files.createDirectory(at: root, withIntermediateDirectories: true)
@@ -113,6 +114,10 @@ public nonisolated final class EngineStore: Sendable {
             guard made == hash else {
                 throw EngineError("\(id) \(version) prepared as \(made), not the \(hash) its package says")
             }
+            // The record goes first, so a tree another user finds always has one.
+            let signed = try await Blocking.run { try EngineTree.hash(of: incoming) }
+            try files.createDirectory(at: signedRecord(hash).deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data((signed + "\n").utf8).write(to: signedRecord(hash), options: .atomic)
             try files.moveItem(at: incoming, to: tree)
         } catch {
             try? files.removeItem(at: incoming)
@@ -131,13 +136,33 @@ public nonisolated final class EngineStore: Sendable {
     }
 
     /// Whether an engine found in the store can be used as it is: one this
-    /// user prepared, or one whose tree hashes to its package's prepared
-    /// hash. In the shared store another user could have changed one, and a
-    /// wrapp signs and runs what it copies.
-    static func isTrusted(_ tree: URL, hash: String, user: uid_t = getuid()) -> Bool {
+    /// user prepared, or one whose tree hashes to the hash recorded when it
+    /// was signed (`signedRecord`). In the shared store another user could
+    /// have changed one, and a wrapp signs and runs what it copies.
+    ///
+    /// The package's `prepared` hash can't be checked here: it's taken
+    /// before signing, as `codesign` signs ad hoc differently each time, and
+    /// the store keeps the signed tree. Checking against it, no user ever
+    /// trusted another's engine: each deleted the shared one and prepared
+    /// it again, while another's build might be copying it. The record is
+    /// written by whoever prepared the engine, so it shows a tree damaged
+    /// or changed since rather than proving who made it; a user who could
+    /// change the tree could change the record too.
+    static func isTrusted(_ tree: URL, signedHash: String?, user: uid_t = getuid()) -> Bool {
         guard let owner = (try? FileManager.default.attributesOfItem(atPath: tree.path))?[.ownerAccountID] as? NSNumber,
               owner.uint32Value != user else { return true }
-        return (try? EngineTree.hash(of: tree)) == hash
+        guard let signedHash else { return false }
+        return (try? EngineTree.hash(of: tree)) == signedHash
+    }
+
+    /// Where the hash of `hash`'s signed tree is kept: `.signed/<hash>`.
+    func signedRecord(_ hash: String) -> URL {
+        root.appendingPathComponent(".signed/\(hash)")
+    }
+
+    /// The hash recorded for `hash`'s signed tree, if there is one.
+    func signedHash(_ hash: String) -> String? {
+        (try? String(contentsOf: signedRecord(hash), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// A preparation's folder until it is whole: `.incoming-<hash>-<uuid>`.
@@ -179,7 +204,7 @@ public nonisolated final class EngineStore: Sendable {
         let files = FileManager.default
         guard let entries = try? files.contentsOfDirectory(atPath: root.path) else { return [] }
         var removed: [String] = []
-        for name in entries.sorted() where name != ".locks" {
+        for name in entries.sorted() where name != ".locks" && name != ".signed" {
             let incoming = name.hasPrefix(Self.incomingPrefix)
             // A hash has no dashes, so it ends at the first.
             let hash = incoming ? String(name.dropFirst(Self.incomingPrefix.count).prefix { $0 != "-" }) : name
@@ -187,7 +212,10 @@ public nonisolated final class EngineStore: Sendable {
             guard let lock = LayerStore.tryLock(lockFile(hash)) else { continue }
             defer { lock.release() }
             try files.removeItem(at: root.appendingPathComponent(name))
-            if !incoming { removed.append(hash) }
+            if !incoming {
+                try? files.removeItem(at: signedRecord(hash))
+                removed.append(hash)
+            }
         }
         return removed
     }

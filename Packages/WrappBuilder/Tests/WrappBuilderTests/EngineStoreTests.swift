@@ -51,6 +51,9 @@ struct EngineStoreTests {
         let first = try await store.engine(module)
         #expect(first.prepared)
         #expect(FileManager.default.fileExists(atPath: first.tree.appendingPathComponent("SharedSupport/engine").path))
+        // The signed tree's hash is recorded, for another user to check it by.
+        #expect(store.signedHash(first.hash) == (try EngineTree.hash(of: first.tree)))
+        #expect(EngineStore.isTrusted(first.tree, signedHash: store.signedHash(first.hash), user: getuid() + 1))
         let second = try await store.engine(module)
         #expect(!second.prepared)
         #expect(second.tree == first.tree)
@@ -138,16 +141,19 @@ struct EngineStoreTests {
         #expect(EngineStore.sharedRootIfUsable(shared: shared, pool: pool) == nil)
     }
 
-    @Test("An engine another user prepared is trusted only when it hashes to its package's hash")
+    @Test("An engine another user prepared is trusted only when it hashes to the hash recorded for its signed tree")
     func trustedEngine() throws {
         let tree = FileManager.default.temporaryDirectory.appendingPathComponent("engine-tree-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: tree) }
         try FileManager.default.createDirectory(at: tree.appendingPathComponent("SharedSupport"), withIntermediateDirectories: true)
         try Data("engine".utf8).write(to: tree.appendingPathComponent("SharedSupport/engine"))
         let hash = try EngineTree.hash(of: tree)
-        #expect(EngineStore.isTrusted(tree, hash: "anything"))
+        // This user's own needs no record.
+        #expect(EngineStore.isTrusted(tree, signedHash: nil))
         let someoneElse = getuid() + 1
-        #expect(EngineStore.isTrusted(tree, hash: hash, user: someoneElse))
-        #expect(!EngineStore.isTrusted(tree, hash: String(repeating: "0", count: 64), user: someoneElse))
+        #expect(EngineStore.isTrusted(tree, signedHash: hash, user: someoneElse))
+        #expect(!EngineStore.isTrusted(tree, signedHash: String(repeating: "0", count: 64), user: someoneElse))
+        // One prepared before records were kept is prepared again.
+        #expect(!EngineStore.isTrusted(tree, signedHash: nil, user: someoneElse))
     }
 }
