@@ -8,3 +8,6 @@
 //  brings `ImageFingerprint`, `TemplateMatcher` and `TextRecognizer`.
 
 @_exported import PictureMatching
+// The control sockets' requests and replies (Packages/PuppetProtocol), shared
+// with sc the same way.
+@_exported import PuppetProtocol

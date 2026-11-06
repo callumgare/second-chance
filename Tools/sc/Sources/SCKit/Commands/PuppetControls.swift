@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import PuppetProtocol
 
 // `sc puppet controls`, `do <name> click|type|check c<n>` and `sc puppet
 // autoit`: a Wine session's dialogs read and driven by their controls, as
@@ -106,7 +107,7 @@ enum PuppetControlAction {
         try WineControls.appendDraft(lines, to: puppet)
         try await Task.sleep(for: .seconds(wait))
         let after = Probe(puppet)
-        return PuppetReply.outcome(of: "\(verb) \(ref) \(control.summary)", before: before, after: after, puppet: puppet)
+        return PuppetOutcome.outcome(of: "\(verb) \(ref) \(control.summary)", before: before, after: after, puppet: puppet)
             + "\nautoit: " + lines.joined(separator: "\nautoit: ")
     }
 }

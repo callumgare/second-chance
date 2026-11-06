@@ -720,6 +720,14 @@ after the arguments. `PUPPET_CONTROL_EXE=*` arms it in every process that loads
 it (an installer, a launcher and the game each get a socket), as
 `HIDDEN_WINDOWS_EXE=*` does for hidden windows.
 
+Clients write these requests and read their replies through
+`Packages/PuppetProtocol` (`PuppetRequest`, `WrappRequest`, `PuppetReply`
+and what it reads, `PuppetSocket`), a package needing nothing but
+Foundation: the one definition WrappPuppeteer (through PuppeteerCore, which
+re-exports it) and `sc puppet` share. A new request goes there and in the
+helper's `handle` together, and raises `hello`'s `version`
+(`PuppetProtocolVersion`).
+
 A capture has to show what the screen shows, or clicks aimed by it miss. On
 macOS 15 they didn't always. The move into a fullscreen Space left a Direct3D
 game's OpenGL surface at a size from partway through it: 2485×1399 in a

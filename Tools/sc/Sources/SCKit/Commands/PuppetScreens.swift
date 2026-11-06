@@ -3,6 +3,7 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import PictureMatching
+import PuppetProtocol
 import WrappBuilder
 
 // `sc puppet screen`, `name` and `expect`, and the locators `do` takes:
@@ -705,7 +706,7 @@ final class PuppetFrame {
         let path = puppet.shots.appendingPathComponent(".frame-\(UUID().uuidString).png")
         // Never above the window's own scale: asked for more, an OpenGL
         // game's surface comes back at its own size in a corner.
-        _ = try puppet.ask("capture \(path.path) scale=\(size.scale)", timeout: 20)
+        _ = try puppet.ask(.capture(path: path.path, scale: size.scale), timeout: 20)
         guard let image = Frames.image(at: path) else {
             try? FileManager.default.removeItem(at: path)
             throw SCError("Couldn't read the capture of \(puppet.name)'s window.")

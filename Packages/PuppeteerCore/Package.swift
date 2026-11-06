@@ -31,6 +31,8 @@ let package = Package(
         .package(path: "../SecondChanceKit"),
         // Fingerprints, template matching and OCR, re-exported (Exports.swift).
         .package(path: "../PictureMatching"),
+        // The control sockets' requests and replies, re-exported (Exports.swift).
+        .package(path: "../PuppetProtocol"),
     ],
     targets: [
         .target(
@@ -39,6 +41,7 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "SecondChanceKit", package: "SecondChanceKit"),
                 .product(name: "PictureMatching", package: "PictureMatching"),
+                .product(name: "PuppetProtocol", package: "PuppetProtocol"),
             ],
             swiftSettings: swiftSettings
         ),

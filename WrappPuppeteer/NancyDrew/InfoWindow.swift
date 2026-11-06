@@ -13,14 +13,8 @@ import PuppeteerCore
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.InfoWindow")
 
 enum InfoWindow {
-    struct Info {
-        let open: Bool
-        let warning: Bool
-    }
-
-    static func info(_ wrapp: ControlSocket) -> Info? {
-        guard let fields = ControlSocket.fields(of: wrapp.request("info", timeout: 10)) else { return nil }
-        return Info(open: fields["open"] == "1", warning: fields["warning"] == "1")
+    static func info(_ wrapp: ControlSocket) -> WrappInfo? {
+        wrapp.request(.info, timeout: 10).flatMap(WrappInfo.init)
     }
 
     /// Wait for the save warning and confirm it. False if it never showed, or
@@ -30,7 +24,7 @@ enum InfoWindow {
         let deadline = Date().addingTimeInterval(timeout)
         while info(wrapp)?.warning != true {
             if Date() >= deadline {
-                logger.critical("❌ The save warning didn't show within \(Int(timeout))s (wrapp says: \(wrapp.request("info", timeout: 10) ?? "nothing — is its socket up?"))")
+                logger.critical("❌ The save warning didn't show within \(Int(timeout))s (wrapp says: \(wrapp.request(.info, timeout: 10)?.text ?? "nothing — is its socket up?"))")
                 return false
             }
             Thread.sleep(forTimeInterval: 0.3)
@@ -38,7 +32,7 @@ enum InfoWindow {
         logger.notice("  → Save warning showing")
 
         for attempt in 1...5 {
-            let reply = wrapp.request("confirm") ?? "no reply"
+            let reply = wrapp.request(.confirm)?.text ?? "no reply"
             logger.notice("  ✓ Confirming it: \(reply)")
             if reply == "ok pressed" {
                 logger.warning("⚠️  The click on I Understand didn't take; the wrapp confirmed the warning directly")

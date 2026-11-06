@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import PuppetProtocol
 import ImageIO
 import Vision
 
@@ -101,51 +102,35 @@ struct PuppetSession: Codable {
             throw SCError("\(name)'s game isn't answering yet: no helper socket in \(sockets.path).",
                           hints: ["Its log: sc puppet log \(name)", "Its state: sc puppet status \(name)"])
         }
-        return candidates.first { (try? HelperSocket.ask($0, "state"))?.hasPrefix("ok window=") == true } ?? candidates[0]
+        return candidates.first { (try? HelperSocket.ask($0, .state)).flatMap(PuppetWindowState.init) != nil } ?? candidates[0]
     }
 
     var wrappSocket: URL { sockets.appendingPathComponent("wrapp.sock") }
 
-    func ask(_ request: String, timeout: TimeInterval = 45) throws -> String {
+    func ask(_ request: PuppetRequest, timeout: TimeInterval = 45) throws -> PuppetReply {
         let reply = try HelperSocket.ask(try gameSocket(), request, timeout: timeout)
-        guard reply.hasPrefix("ok") else { throw SCError("The game's helper said: \(reply)") }
+        guard reply.isOK else { throw SCError("The game's helper said: \(reply.text)") }
         return reply
     }
 }
 
-/// One request to an in-process helper's Unix socket, and its reply.
+/// One request to a control socket, the helper's or the wrapp's
+/// (PuppetProtocol has them), and its reply.
 enum HelperSocket {
-    static func ask(_ socketURL: URL, _ request: String, timeout: TimeInterval = 45) throws -> String {
-        let socket = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
-        guard socket >= 0 else { throw SCError("Couldn't open a socket: \(String(cString: strerror(errno))).") }
-        defer { close(socket) }
-        var time = timeval(tv_sec: Int(timeout), tv_usec: 0)
-        setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &time, socklen_t(MemoryLayout<timeval>.size))
-        var address = sockaddr_un()
-        address.sun_family = sa_family_t(AF_UNIX)
-        let path = Array(socketURL.path.utf8CString)
-        guard path.count <= MemoryLayout.size(ofValue: address.sun_path) else { throw SCError("Socket path too long: \(socketURL.path)") }
-        withUnsafeMutableBytes(of: &address.sun_path) { buffer in
-            for (index, byte) in path.enumerated() { buffer[index] = UInt8(bitPattern: byte) }
+    static func ask(_ socketURL: URL, _ request: PuppetRequest, timeout: TimeInterval = 45) throws -> PuppetReply {
+        try send(socketURL, request.line, timeout: timeout)
+    }
+
+    static func ask(_ socketURL: URL, _ request: WrappRequest, timeout: TimeInterval = 45) throws -> PuppetReply {
+        try send(socketURL, request.line, timeout: timeout)
+    }
+
+    private static func send(_ socketURL: URL, _ line: String, timeout: TimeInterval) throws -> PuppetReply {
+        do {
+            return try PuppetSocket(path: socketURL.path).send(line: line, timeout: timeout)
+        } catch let failure as PuppetSocket.Failure {
+            throw SCError(failure.description)
         }
-        let connected = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(socket, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
-        }
-        guard connected == 0 else {
-            throw SCError("Nothing is listening on \(socketURL.lastPathComponent): \(String(cString: strerror(errno))).")
-        }
-        let line = Array((request + "\n").utf8)
-        _ = line.withUnsafeBytes { write(socket, $0.baseAddress, line.count) }
-        var reply = Data()
-        var buffer = [UInt8](repeating: 0, count: 4096)
-        while true {
-            let count = buffer.withUnsafeMutableBytes { read(socket, $0.baseAddress, 4096) }
-            if count <= 0 { break }
-            reply.append(contentsOf: buffer[0..<count])
-        }
-        let text = String(decoding: reply, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { throw SCError("\(socketURL.lastPathComponent) gave no answer to `\(request)` in \(Int(timeout)) s.") }
-        return text
     }
 }
 

@@ -1,6 +1,7 @@
 import ArgumentParser
 import CoreGraphics
 import Foundation
+import PuppetProtocol
 
 // `sc puppet` senses beyond a single picture: a stretch of play as a movie
 // (`record`) or one picture of what changed in it (`sheet`), and how loud
@@ -84,8 +85,8 @@ struct PuppetRecordCommand: AsyncParsableCommand {
                     while Date() < deadline, failures < 5 {
                         let file = folder.appendingPathComponent(String(format: "%d-%05d.png", worker, mine.count + failures))
                         let asked = Date()
-                        let reply = try? HelperSocket.ask(socket, "capture \(file.path) scale=\(String(format: "%.3f", scale))", timeout: 20)
-                        guard reply?.hasPrefix("ok") == true else {
+                        let reply = try? HelperSocket.ask(socket, .capture(path: file.path, scale: scale), timeout: 20)
+                        guard reply?.isOK == true else {
                             failures += 1
                             continue
                         }

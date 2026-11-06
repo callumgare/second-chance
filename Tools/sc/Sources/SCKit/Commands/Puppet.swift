@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import PuppetProtocol
 import WineKit
 
 struct PuppetCommand: AsyncParsableCommand {
@@ -142,7 +143,7 @@ struct PuppetStartCommand: AsyncParsableCommand {
 
         // Until the game's helper answers with a window, or the server gives up.
         let deadline = Date().addingTimeInterval(300)
-        var state = ""
+        var state: PuppetReply?
         while Date() < deadline {
             try await Task.sleep(for: .seconds(1))
             let current = (try? PuppetSession.load(name)) ?? puppet
@@ -152,22 +153,22 @@ struct PuppetStartCommand: AsyncParsableCommand {
                               + log.split(separator: "\n").suffix(8).joined(separator: "\n"),
                               exitCode: log.contains("screen is in use") ? ScreenLease.heldExitCode : 1)
             }
-            if let socket = try? current.gameSocket(), let reply = try? HelperSocket.ask(socket, "state", timeout: 10),
-               reply.hasPrefix("ok window=") {
+            if let socket = try? current.gameSocket(), let reply = try? HelperSocket.ask(socket, .state, timeout: 10),
+               PuppetWindowState(reply) != nil {
                 state = reply
                 break
             }
         }
-        guard !state.isEmpty else {
+        guard let state, let window = PuppetWindowState(state) else {
             throw SCError("\(name)'s game hasn't answered in 5 minutes.", hints: ["Its log: sc puppet log \(name)", "Stop it: sc puppet stop \(name)"])
         }
         let current = (try? PuppetSession.load(name)) ?? puppet
-        let hello = (try? current.ask("hello")) ?? "error (an older helper: version 1)"
+        let hello = (try? current.ask(.hello))?.summary ?? "error (an older helper: version 1)"
         session.ui.line("\(name): \(app.lastPathComponent), pid \(current.wrappPID.map(String.init) ?? "?"), "
                         + "screen \(SessionPool.screenName()) leased; stops after \(idle) idle or \(max)")
-        session.ui.line("helper: \(hello.replacingOccurrences(of: "ok ", with: ""))")
-        session.ui.line("state: \(state.replacingOccurrences(of: "ok ", with: ""))")
-        if state.contains("native=0"), state.contains("fullscreen=1") {
+        session.ui.line("helper: \(hello)")
+        session.ui.line("state: \(state.summary)")
+        if !window.native, window.fullscreen {
             session.ui.line("waiting: native fullscreen is still settling; shots work once state says native=1")
         }
     }
@@ -250,9 +251,9 @@ struct PuppetServeCommand: AsyncParsableCommand {
 
         // Past the save warning, which a Wine wrapp waits on.
         for _ in 0..<(puppet.command == nil ? 60 : 0) where process.isRunning {
-            if let info = try? HelperSocket.ask(puppet.wrappSocket, "info", timeout: 5) {
-                if info.contains("warning=1") { log("save warning: \((try? HelperSocket.ask(puppet.wrappSocket, "confirm")) ?? "?")") }
-                if info.contains("warning=") { break }
+            if let info = (try? HelperSocket.ask(puppet.wrappSocket, .info, timeout: 5)).flatMap(WrappInfo.init) {
+                if info.warning { log("save warning: \((try? HelperSocket.ask(puppet.wrappSocket, .confirm))?.text ?? "?")") }
+                break
             }
             try await Task.sleep(for: .seconds(1))
         }
@@ -273,7 +274,7 @@ struct PuppetServeCommand: AsyncParsableCommand {
         }
         log("stopping: \(reason)")
         if process.isRunning {
-            _ = try? puppet.ask("quit", timeout: 10)
+            _ = try? puppet.ask(.quit, timeout: 10)
             for _ in 0..<20 where process.isRunning { try await Task.sleep(for: .seconds(1)) }
         }
         if process.isRunning {
@@ -361,7 +362,7 @@ struct PuppetStatusCommand: AsyncParsableCommand {
         puppet.touch()
         let stopsAt = Date().addingTimeInterval(puppet.idleMinutes * 60)
         session.ui.line("\(name): running since \(ScreenLease.clock(puppet.started)); idle stop at \(ScreenLease.clock(stopsAt))")
-        session.ui.line("state: " + ((try? puppet.ask("state")) ?? "no answer").replacingOccurrences(of: "ok ", with: ""))
+        session.ui.line("state: " + ((try? puppet.ask(.state))?.summary ?? "no answer"))
     }
 }
 
@@ -406,24 +407,16 @@ struct PuppetActionCommand: AsyncParsableCommand {
             session.ui.line(reply)
             return
         }
-        var request: String
-        switch (verb, arguments.count) {
-        case ("click", 2), ("move", 2), ("down", 2), ("up", 2), ("drag", 4):
-            guard arguments.allSatisfy({ Double($0) != nil }) else { throw ValidationError("\(verb) takes numbers.") }
-            request = ([verb] + arguments).joined(separator: " ")
-        case ("key", 1):
-            request = "key \(arguments[0])"
-        case ("type", 1...):
-            let text = arguments.joined(separator: " ")
-            request = "type " + (text.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? text)
-        case ("focus", 0):
-            request = "focus"
-        default:
-            throw ValidationError("Unknown action, or the wrong number of arguments: \(action.joined(separator: " ")).")
+        let mouseButton = try button.map { name in
+            guard let parsed = MouseButton(rawValue: name) else { throw ValidationError("--button is left or right: \(name).") }
+            return parsed
         }
-        if let button { request += " button=\(button)" }
-        if let count { request += " count=\(count)" }
-        if let hold { request += " hold=\(hold)" }
+        let request: PuppetRequest
+        do {
+            request = try PuppetRequest.action([verb] + arguments, button: mouseButton, count: count, hold: hold)
+        } catch let error as PuppetProtocolError {
+            throw ValidationError(error.description)
+        }
 
         let before = Probe(puppet)
         puppet.noteAction(action.joined(separator: " "))
@@ -431,7 +424,7 @@ struct PuppetActionCommand: AsyncParsableCommand {
         try await Task.sleep(for: .seconds(wait))
         let after = Probe(puppet)
         let screen = PuppetScreens.replyName(puppet, repo: session.repo.root).map { " → screen: \($0)" } ?? ""
-        session.ui.line(PuppetReply.outcome(of: described, before: before, after: after, puppet: puppet) + screen)
+        session.ui.line(PuppetOutcome.outcome(of: described, before: before, after: after, puppet: puppet) + screen)
     }
 }
 
@@ -444,27 +437,22 @@ struct Probe {
     init(_ puppet: PuppetSession) {
         let path = puppet.shots.appendingPathComponent(".probe-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: path) }
-        if (try? puppet.ask("capture \(path.path) scale=0.1", timeout: 20)) != nil, let image = Frames.image(at: path) {
+        if (try? puppet.ask(.capture(path: path.path, scale: 0.1), timeout: 20)) != nil, let image = Frames.image(at: path) {
             thumbnail = Frames.thumbnail(image)
         }
-        windows = PuppetReply.windows((try? puppet.ask("windows", timeout: 10)) ?? "")
+        windows = PuppetOutcome.windows((try? puppet.ask(.windows, timeout: 10)) ?? PuppetReply(""))
         running = puppet.wrappPID.map { kill($0, 0) == 0 } ?? false
     }
 }
 
-enum PuppetReply {
+/// What an action did, as its reply says it.
+enum PuppetOutcome {
     /// Visible windows by id, from a `windows` reply, as "title (WxH)".
-    static func windows(_ reply: String) -> [String: String] {
+    static func windows(_ reply: PuppetReply) -> [String: String] {
         var found: [String: String] = [:]
-        for line in reply.split(separator: "\n").dropFirst() {
-            let fields = Dictionary(line.split(separator: " ").compactMap { word -> (String, String)? in
-                let parts = word.split(separator: "=", maxSplits: 1)
-                return parts.count == 2 ? (String(parts[0]), String(parts[1])) : nil
-            }, uniquingKeysWith: { first, _ in first })
-            guard fields["visible"] == "1", let id = fields["id"] else { continue }
-            let size = fields["frame"].map { $0.split(separator: ",").suffix(2).joined(separator: "x") } ?? "?"
-            let title = fields["title"]?.removingPercentEncoding ?? ""
-            found[id] = (title.isEmpty ? "untitled" : "\"\(title)\"") + " (\(size))"
+        for window in PuppetWindow.all(in: reply) where window.visible {
+            let size = "\(PuppetRequest.number(window.frame.width))x\(PuppetRequest.number(window.frame.height))"
+            found[String(window.id)] = (window.title.isEmpty ? "untitled" : "\"\(window.title)\"") + " (\(size))"
         }
         return found
     }
@@ -518,23 +506,22 @@ struct PuppetShotCommand: AsyncParsableCommand {
         let chosen = min(scale ?? 1280 / max(longEdge, 1), size.scale)
         let number = ((try? FileManager.default.contentsOfDirectory(atPath: puppet.shots.path))?.filter { $0.hasSuffix(".png") && !$0.hasPrefix(".") }.count ?? 0) + 1
         let path = puppet.shots.appendingPathComponent(String(format: "%@-%03d.png", name, number))
-        var request = "capture \(path.path) scale=\(String(format: "%.3f", chosen))"
-        if let region { request += " region=\(region)" }
-        let reply = try puppet.ask(request)
-        let pixels = reply.replacingOccurrences(of: "ok ", with: "").split(separator: "x").compactMap { Int($0) }
+        let reply = try puppet.ask(.capture(path: path.path, region: try region.map(PuppetShotCommand.region), scale: chosen))
+        let pixels = reply.size.map { [Int($0.width), Int($0.height)] } ?? []
         let tokens = pixels.count == 2 ? Frames.tokens(width: pixels[0], height: pixels[1]) : 0
         session.ui.line("\(path.path)  \(pixels.map(String.init).joined(separator: "x")) at \(String(format: "%.2f", chosen)) px/pt, ~\(tokens) tokens to look at")
         session.ui.line("fetch: " + PuppetShotCommand.fetchLine(path))
     }
 
     static func windowSize(_ puppet: PuppetSession) -> (width: Double, height: Double, scale: Double) {
-        let state = (try? puppet.ask("state", timeout: 10)) ?? ""
-        let fields = Dictionary(state.split(separator: " ").compactMap { word -> (String, String)? in
-            let parts = word.split(separator: "=", maxSplits: 1)
-            return parts.count == 2 ? (String(parts[0]), String(parts[1])) : nil
-        }, uniquingKeysWith: { first, _ in first })
-        let size = (fields["size"] ?? "").split(separator: "x").compactMap { Double($0) }
-        return (size.first ?? 1280, size.last ?? 720, Double(fields["scale"] ?? "") ?? 1)
+        guard let state = (try? puppet.ask(.state, timeout: 10)).flatMap(PuppetWindowState.init) else { return (1280, 720, 1) }
+        return (state.size.width, state.size.height, state.scale)
+    }
+
+    /// A `--region` given as x,y,w,h.
+    static func region(_ text: String) throws -> CGRect {
+        guard let region = PuppetRequest.region(text) else { throw ValidationError("--region takes x,y,w,h in points: \(text).") }
+        return region
     }
 
     /// How to copy a file here back to the Mac the agent works on.
@@ -567,9 +554,7 @@ struct PuppetTextCommand: AsyncParsableCommand {
         defer { try? FileManager.default.removeItem(at: path) }
         // At the window's own scale: asked for more, an OpenGL game's surface
         // comes back at its own size in a corner of a bigger picture.
-        var request = "capture \(path.path) scale=\(size.scale)"
-        if let region { request += " region=\(region)" }
-        _ = try puppet.ask(request)
+        _ = try puppet.ask(.capture(path: path.path, region: try region.map(PuppetShotCommand.region), scale: size.scale))
         guard let captured = Frames.image(at: path) else { throw SCError("Couldn't read the capture.") }
         // Enlarged, pixel for pixel, to at least 2 pixels a point: Vision
         // misreads small pixel fonts.
@@ -601,7 +586,7 @@ struct PuppetWindowsCommand: AsyncParsableCommand {
         let session = try Session.start(global)
         let puppet = try PuppetSession.load(name)
         puppet.touch()
-        session.ui.line(try puppet.ask("windows").replacingOccurrences(of: "ok ", with: ""))
+        session.ui.line(try puppet.ask(.windows).summary)
     }
 }
 
@@ -766,7 +751,7 @@ struct PuppetWaitCommand: AsyncParsableCommand {
     static func findText(_ wanted: String, in puppet: PuppetSession) -> String? {
         let path = puppet.shots.appendingPathComponent(".wait-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: path) }
-        guard (try? puppet.ask("capture \(path.path) scale=2", timeout: 20)) != nil, let image = Frames.image(at: path),
+        guard (try? puppet.ask(.capture(path: path.path, scale: 2), timeout: 20)) != nil, let image = Frames.image(at: path),
               let lines = try? Frames.text(in: image) else { return nil }
         return lines.first { $0.text.localizedCaseInsensitiveContains(wanted) }?.text
     }
@@ -776,7 +761,7 @@ extension Probe {
     static func thumbnail(_ puppet: PuppetSession) -> [UInt8]? {
         let path = puppet.shots.appendingPathComponent(".probe-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: path) }
-        guard (try? puppet.ask("capture \(path.path) scale=0.1", timeout: 20)) != nil, let image = Frames.image(at: path) else { return nil }
+        guard (try? puppet.ask(.capture(path: path.path, scale: 0.1), timeout: 20)) != nil, let image = Frames.image(at: path) else { return nil }
         return Frames.thumbnail(image)
     }
 }

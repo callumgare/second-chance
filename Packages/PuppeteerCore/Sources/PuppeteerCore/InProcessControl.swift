@@ -7,10 +7,13 @@
 //  permission, so rather than WrappPuppeteer needing Screen Recording and
 //  Accessibility to act on them from outside, the app does it and answers
 //  over a Unix socket: one request per connection, one line each way, replies
-//  starting `ok` or `error`.
+//  starting `ok` or `error`. The requests and their replies are
+//  PuppetProtocol's (Packages/PuppetProtocol), shared with `sc puppet`.
 
+import CoreGraphics
 import Foundation
 import Logging
+import PuppetProtocol
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.InProcessControl")
 
@@ -21,59 +24,27 @@ nonisolated public struct ControlSocket: Sendable {
     /// Whether something has created the socket. It may not be listening yet.
     public var exists: Bool { FileManager.default.fileExists(atPath: path) }
 
-    /// Send `line` and return the reply, without its newline; nil if nothing
-    /// is listening, or nothing came back within `timeout`.
-    public func request(_ line: String, timeout: TimeInterval = 40) -> String? {
-        let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard descriptor >= 0 else { return nil }
-        defer { close(descriptor) }
-
-        var address = sockaddr_un()
-        address.sun_family = sa_family_t(AF_UNIX)
-        guard path.utf8.count < MemoryLayout.size(ofValue: address.sun_path) else {
-            logger.error("Socket path too long for a Unix socket: \(path)")
-            return nil
-        }
-        withUnsafeMutableBytes(of: &address.sun_path) { buffer in
-            buffer.copyBytes(from: path.utf8)
-            buffer[path.utf8.count] = 0
-        }
-        let connected = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard connected == 0 else { return nil }
-
-        var wait = timeval(tv_sec: Int(timeout), tv_usec: 0)
-        setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &wait, socklen_t(MemoryLayout<timeval>.size))
-        let written = (line + "\n").withCString { write(descriptor, $0, strlen($0)) }
-        guard written > 0 else { return nil }
-
-        var reply = Data()
-        var buffer = [UInt8](repeating: 0, count: 1024)
-        while true {
-            let count = read(descriptor, &buffer, buffer.count)
-            if count <= 0 { break }
-            reply.append(contentsOf: buffer[0..<count])
-            if buffer[count - 1] == UInt8(ascii: "\n") { break }
-        }
-        guard !reply.isEmpty else {
-            logger.warning("No reply to '\(line)' from \(path) within \(Int(timeout))s")
-            return nil
-        }
-        return String(decoding: reply, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Send a request to the in-process helper; nil if nothing is listening,
+    /// or nothing came back within `timeout`.
+    public func request(_ request: PuppetRequest, timeout: TimeInterval = 40) -> PuppetReply? {
+        send(request.line, timeout: timeout)
     }
 
-    /// The `key=value` fields of an `ok` reply; nil for an error or no reply.
-    public static func fields(of reply: String?) -> [String: String]? {
-        guard let reply, reply == "ok" || reply.hasPrefix("ok ") else { return nil }
-        var fields: [String: String] = [:]
-        for part in reply.split(separator: " ").dropFirst() {
-            let pair = part.split(separator: "=", maxSplits: 1)
-            if pair.count == 2 { fields[String(pair[0])] = String(pair[1]) }
+    /// Send a request to the wrapp's own socket; nil as above.
+    public func request(_ request: WrappRequest, timeout: TimeInterval = 40) -> PuppetReply? {
+        send(request.line, timeout: timeout)
+    }
+
+    private func send(_ line: String, timeout: TimeInterval) -> PuppetReply? {
+        do {
+            return try PuppetSocket(path: path).send(line: line, timeout: timeout)
+        } catch let failure as PuppetSocket.Failure {
+            if case .noReply = failure { logger.warning("\(failure)") }
+            if case .pathTooLong = failure { logger.error("\(failure)") }
+            return nil
+        } catch {
+            return nil
         }
-        return fields
     }
 
     public init(path: String) {
@@ -82,67 +53,36 @@ nonisolated public struct ControlSocket: Sendable {
 }
 
 /// What a window control reports about the window it serves.
-nonisolated public struct ControlledWindowState: Sendable {
-    public let windowNumber: Int
-    /// In points.
-    public let size: CGSize
-    /// Pixels per point.
-    public let scale: CGFloat
-    /// In a macOS fullscreen Space, or exactly covering its screen.
-    public let fullscreen: Bool
-    /// In a macOS fullscreen Space.
-    public let native: Bool
-    public let key: Bool
-    public let active: Bool
-    /// On the Space on screen; nil when the window doesn't say.
-    public let onActiveSpace: Bool?
-    /// The app has hidden the cursor and confined it to its window.
-    public let cursorHeld: Bool
-    /// What the app's own cursor-locking, if it has any, says it is doing;
-    /// nil when the app doesn't say.
-    public let cursorLock: String?
-}
+public typealias ControlledWindowState = PuppetWindowState
 
-/// A window served over a control socket: `state`, `capture <path>`,
-/// `click <x> <y>` and `move <x> <y>`, in window points with a top-left
-/// origin — a capture's pixels divided by its scale — `yield <pid>` and
-/// `quit`.
+/// A window served over a control socket (PuppetProtocol has the requests):
+/// points in the window, top-left origin — a capture's pixels divided by its
+/// scale.
 nonisolated public struct WindowControl: Sendable {
     public let socket: ControlSocket
 
     public func state() -> ControlledWindowState? {
-        guard let fields = ControlSocket.fields(of: socket.request("state", timeout: 10)),
-              let window = fields["window"].flatMap(Int.init),
-              let sizeParts = fields["size"]?.split(separator: "x"), sizeParts.count == 2,
-              let width = Double(sizeParts[0]), let height = Double(sizeParts[1]),
-              let scale = fields["scale"].flatMap(Double.init) else { return nil }
-        return ControlledWindowState(
-            windowNumber: window, size: CGSize(width: width, height: height), scale: CGFloat(scale),
-            fullscreen: fields["fullscreen"] == "1", native: fields["native"] == "1",
-            key: fields["key"] == "1", active: fields["active"] == "1", onActiveSpace: fields["onspace"].map { $0 == "1" },
-            cursorHeld: fields["cursor"] == "held", cursorLock: fields["cursorlock"])
+        socket.request(.state, timeout: 10).flatMap(PuppetWindowState.init)
     }
 
     /// Capture the window to a PNG at `path`; its size in pixels, or nil.
     public func capture(to path: String) -> CGSize? {
         let started = Date()
-        let reply = socket.request("capture \(path)")
+        let reply = socket.request(.capture(path: path))
         let seconds = Date().timeIntervalSince(started)
         if seconds > 5 {
             logger.warning("Capturing the window took \(String(format: "%.1f", seconds))s — a slow capture on every app suggests systemstatusd (docs/testing.md)")
         }
-        guard let reply, reply.hasPrefix("ok "),
-              let sizeParts = reply.dropFirst(3).split(separator: " ").first?.split(separator: "x"), sizeParts.count == 2,
-              let width = Double(sizeParts[0]), let height = Double(sizeParts[1]) else {
-            logger.warning("Capture failed: \(reply ?? "no reply")")
+        guard let reply, reply.isOK, let size = reply.size else {
+            logger.warning("Capture failed: \(reply?.text ?? "no reply")")
             return nil
         }
-        return CGSize(width: width, height: height)
+        return size
     }
 
     @discardableResult
     public func click(at point: CGPoint) -> Bool {
-        report(socket.request("click \(point.x) \(point.y)"), for: "click")
+        send(.click(point))
     }
 
     /// Press a key, by the helper's name for it (`escape`, `return`, `cmd+q`).
@@ -150,18 +90,18 @@ nonisolated public struct WindowControl: Sendable {
     @discardableResult
     public func press(_ key: String) -> Bool {
         // Held long enough for a game that polls the keyboard each frame.
-        report(socket.request("key \(key) hold=150"), for: "key")
+        send(.key(key, hold: 150))
     }
 
     @discardableResult
     public func move(to point: CGPoint) -> Bool {
-        report(socket.request("move \(point.x) \(point.y)"), for: "move")
+        send(.move(point))
     }
 
     /// Ask the window's app to quit, as its Quit menu item does.
     @discardableResult
     public func quitApp() -> Bool {
-        report(socket.request("quit"), for: "quit")
+        send(.quit)
     }
 
     /// Hand activation from the window's app to the app with `pid`, which
@@ -169,12 +109,13 @@ nonisolated public struct WindowControl: Sendable {
     /// hand it on.
     @discardableResult
     public func yieldActivation(to pid: pid_t) -> Bool {
-        report(socket.request("yield \(pid)"), for: "yield")
+        send(.yield(pid: pid))
     }
 
-    private func report(_ reply: String?, for request: String) -> Bool {
-        guard reply == "ok" else {
-            logger.warning("\(request) failed: \(reply ?? "no reply")")
+    private func send(_ request: PuppetRequest) -> Bool {
+        let reply = socket.request(request)
+        guard let reply, reply.isOK else {
+            logger.warning("\(request.verb) failed: \(reply?.text ?? "no reply")")
             return false
         }
         return true

@@ -651,7 +651,10 @@ dependency only runs one way:
 
 - **`Packages/PuppeteerCore`** (a local package, so its matching can be tested
   with `swift test`, in `Tests/PuppeteerCoreTests`) — reusable automation with no knowledge of Nancy
-  Drew, wrapps or engines: the control-socket client (`InProcessControl`),
+  Drew, wrapps or engines: the control-socket client (`InProcessControl`,
+  over `Packages/PuppetProtocol`, the one definition of the control sockets'
+  requests and replies, which `sc puppet` uses too and PuppeteerCore
+  re-exports),
   OCR (`TextRecognizer`), template matching (`TemplateMatcher`) and screen
   fingerprints (`ImageFingerprint`) (these three a package of their own,
   `Packages/PictureMatching`, re-exported, so `sc puppet` matches needles with
