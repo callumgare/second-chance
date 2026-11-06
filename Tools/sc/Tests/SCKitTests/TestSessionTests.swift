@@ -167,13 +167,13 @@ struct PeekabooSetupTests {
         #expect(Remote.runsHere(["session", "setup", "sctest"]))
         #expect(Remote.runsHere(["session", "screenshot"]))
         #expect(Remote.runsHere(["session", "view", "sctest"]))
-        #expect(Remote.followUp(after: ["session", "add", "--count", "2"]) == ["session", "setup", "--just-added"])
+        #expect(Remote.followedBySetup(["session", "add", "--count", "2"]))
         let setup = try? SC.parseAsRoot(["session", "setup", "--task", "signing", "--task", "peekaboo"]) as? SessionSetupCommand
         #expect(setup?.only == [.signing, .peekaboo])
-        #expect((try? SC.parseAsRoot(["session", "setup", "--just-added"]) as? SessionSetupCommand)?.justAdded == true)
-        #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["session", "setup", "--just-added", "sctest"]) }
-        #expect(Remote.followUp(after: ["session", "add", "--no-setup"]) == nil)
-        #expect(Remote.followUp(after: ["session", "list"]) == nil)
+        #expect((try? SC.parseAsRoot(["session", "setup", "sctest", "sctest2"]) as? SessionSetupCommand)?.users == ["sctest", "sctest2"])
+        #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["session", "setup", "--just-added"]) }
+        #expect(!Remote.followedBySetup(["session", "add", "--no-setup"]))
+        #expect(!Remote.followedBySetup(["session", "list"]))
         #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["session", "remove"]) }
         #expect((try? SC.parseAsRoot(["session", "remove", "sctest2", "--delete-account"])) is SessionRemoveCommand)
         let port = try? Network.freePort()

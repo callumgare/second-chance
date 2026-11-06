@@ -696,9 +696,10 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
   "logged in". A re-run frees a user stuck there, logging it out for the
   keep-alive to log in again (name the user to re-run it on one). Then it makes the Mac's installers store (below) and
   installs the keep-alive if it isn't running. It records the users it made or
-  checked, and last, unless `--no-setup`, the `sc` you ran sets those up
-  (`session setup --just-added`, with `--on` if `add` ran there: below), first
-  waiting up to five minutes for the keep-alive to log new ones in. That gives each the console user's
+  checked, and last, unless `--no-setup`, the `sc` you ran reads them back and
+  sets them up by name (`session setup <user>…`, with `--on` if `add` ran
+  there: below), saying so first, as it's a command of its own after `add`'s
+  success. That gives each the console user's
   [signing certificate](#signing-in-test-sessions): over SSH macOS can't ask to
   allow exporting the key, so it exports it in the GUI session instead, where
   macOS asks on that Mac's screen (reach it over Screen Sharing; Always Allow
@@ -716,6 +717,12 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
   counterpart. It takes each user out of the pool, clears its lease and
   restarts the keep-alive so it lets the session go, then asks whether to
   delete the account too, with all its files (default no; no terminal means
+- **It isn't activity.** It sends no input, and a game's posted events aren't
+  the person's, so macOS counts a test session as idle whatever runs there.
+  Left at its default, the screen saver starts after 20 minutes and locks the
+  session, and a launch that lands before the keep-alive unlocks it fails
+  with "the screen is locked". `sc session setup --task screensaver` turns
+  each test user's screen saver off (below).
   no, unless `--delete-account`). Deleting logs the user out, runs
   `sudo sysadminctl -deleteUser`, which removes the home, and removes the
   password from the keychain. Kept, the account and its password stay, so
@@ -791,9 +798,13 @@ Peekaboo reads and drives Mac windows (system prompts, installers, Finder) where
 puppet helper only sees a game's window. Its Screen Recording and Accessibility grants
 are per user, and no script can give them: they live in the system's TCC database
 behind SIP, and even an MDM profile can't pre-approve Screen Recording. So
-`sc session setup [<user>… | --just-added] [--task signing|peekaboo|audio]… [--on <host>]`, run
+`sc session setup [<user>…] [--task screensaver|signing|peekaboo|audio]… [--on <host>]`, run
 on the Mac you're at, does every set-up task a test session needs, or those each `--task` names, each
-skipping what's done: `signing` gives each test user the console user's signing
+skipping what's done. A user named who isn't logged in yet is waited for first, up
+to five minutes, as the keep-alive logs a new one in. `screensaver` sets each test user's screen saver to never
+start (`defaults -currentHost write com.apple.screensaver idleTime -int 0`, as
+that user over SSH), which takes effect in the running session; it shows nothing,
+so it alone goes ahead in a session someone else has leased; `signing` gives each test user the console user's signing
 certificate (above), done on the test Mac, where that certificate is (it asks to unlock the
 keychain there, locked over SSH, which holds the test users' passwords too); `peekaboo` makes the
 grants a minute each: with `--on`, for that Mac's test sessions, and without, this

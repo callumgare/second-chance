@@ -6,9 +6,11 @@ import Foundation
 /// Screen Sharing window into a session. `session setup` and
 /// `session view` use it.
 enum TestSessionAccess {
-    /// A command as the user sc runs as: here, or over SSH on `mac`.
+    /// A command as the user sc runs as: here, or over SSH on `mac`. It's
+    /// bash there too, whatever that user's login shell: fish can't read an
+    /// `if … fi` or a `for` loop.
     static func asConsoleUser(_ mac: String?, _ command: String, input: String? = nil) async throws -> Proc.Collected {
-        if let mac { return try await ssh(mac, command, input: input) }
+        if let mac { return try await ssh(mac, "/bin/bash -c \(Remote.quote(command))", input: input) }
         return try await Proc.collect("/bin/bash", ["-c", command], input: input)
     }
 
@@ -82,13 +84,26 @@ enum TestSessionAccess {
 }
 
 extension Remote {
-    /// What runs here once a command has finished, here or on another Mac:
-    /// `session add` sets up the test sessions it made or checked
-    /// (`session setup --just-added`: the signing certificate, and Peekaboo,
-    /// which opens Screen Sharing where the person is), unless `--no-setup`.
-    static func followUp(after arguments: [String]) -> [String]? {
-        guard Array(arguments.prefix(2)) == ["session", "add"], !arguments.contains("--no-setup") else { return nil }
-        return ["session", "setup", "--just-added"]
+    /// Whether a command, once finished here or on another Mac, is followed
+    /// here by `session setup`: `session add` is, unless `--no-setup`, as
+    /// setting up opens Screen Sharing where the person is.
+    static func followedBySetup(_ arguments: [String]) -> Bool {
+        Array(arguments.prefix(2)) == ["session", "add"] && !arguments.contains("--no-setup")
+    }
+
+    /// What runs here once a command has finished, on `remote` (`--on`'s
+    /// value) or here: `session add` sets up the test users it made or
+    /// checked, by name, read back from the Mac it ran on
+    /// (`SessionPool.justAddedFile`); nothing when it made none.
+    static func followUp(after arguments: [String], on remote: String?) async throws -> [String]? {
+        guard followedBySetup(arguments) else { return nil }
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let users = try await SessionSetupCommand.addedLast(on: remote.map { parse($0, localRoot: cwd).host })
+        guard !users.isEmpty else { return nil }
+        let next = ["session", "setup"] + users
+        TTY.write("▸ Now setting up the test users session add made or checked: sc \(next.joined(separator: " "))"
+                  + (remote.map { " --on \($0)" } ?? "") + "\n")
+        return next
     }
 
     /// Commands that take `--on` but run here and reach the other Mac

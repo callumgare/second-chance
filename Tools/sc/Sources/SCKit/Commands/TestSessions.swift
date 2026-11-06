@@ -365,7 +365,7 @@ struct SessionAddCommand: AsyncParsableCommand {
         let taken = await SessionPool.existingUsers()
         if users.isEmpty, count == nil,
            try !confirmAnother(existing: Self.existingTestUsers(pool: pool, taken: taken), pool: pool, session: session) {
-            // Nothing for the `session setup --just-added` that follows to do.
+            // Nothing for the `session setup` that follows to set up.
             try? FileManager.default.removeItem(at: SessionPool.justAddedFile)
             return
         }

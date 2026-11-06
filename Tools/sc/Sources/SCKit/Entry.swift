@@ -15,7 +15,7 @@ public enum Entry {
                 // Validate here, so a typo fails before anything is synced.
                 _ = try SC.parseAsRoot(arguments)
                 let status = try await Interrupts.run { try await Remote.run(on: remote, arguments: arguments) }
-                if status == 0, let next = Remote.followUp(after: arguments) {
+                if status == 0, let next = try await Remote.followUp(after: arguments, on: remote) {
                     try await runHere(next)
                 }
                 finish(status)
@@ -28,7 +28,7 @@ public enum Entry {
                 try command.run()
             }
             // Over SSH the sc that sent it there runs the follow-up, where the person is.
-            if let next = Remote.followUp(after: arguments), ProcessInfo.processInfo.environment["SSH_CONNECTION"] == nil {
+            if ProcessInfo.processInfo.environment["SSH_CONNECTION"] == nil, let next = try await Remote.followUp(after: arguments, on: nil) {
                 try await runHere(next)
             }
             finish(0)

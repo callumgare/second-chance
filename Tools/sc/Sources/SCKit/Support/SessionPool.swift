@@ -12,7 +12,7 @@ enum SessionPool {
     /// a generic password with the user's name as its account.
     static let keychainService = "second-chance-session"
     /// The users the last `session add` made or checked, one a line, for
-    /// the `session setup --just-added` that follows it.
+    /// the `session setup` that follows it, which names them (`Remote.followUp`).
     static let justAddedFile = folder.appendingPathComponent("just-added")
 
     static func users(fromPool text: String) -> [String] {

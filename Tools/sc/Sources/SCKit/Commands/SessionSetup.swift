@@ -3,16 +3,19 @@ import Foundation
 import WrappBuilder
 
 /// Everything a test session needs beyond its login, done or put right:
-/// the console user's signing certificate in its keychain, Peekaboo with
-/// its grants, and SC Audio Tap with its permission. `session add` runs it last, for the users it made or checked
-/// (`--just-added`).
+/// its screen saver off (`ScreenSaverSetup`), the console user's signing
+/// certificate in its keychain, Peekaboo with its grants, and SC Audio Tap
+/// with its permission. `session add` runs it last, naming the users it
+/// made or checked (`Remote.followUp`).
 struct SessionSetupCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "setup",
-        abstract: "Set test sessions up: your signing certificate, Peekaboo and SC Audio Tap with their grants (or only the --task ones).",
+        abstract: "Set test sessions up: the screen saver off, your signing certificate, Peekaboo and SC Audio Tap with their grants (or only the --task ones).",
         discussion: """
         Run it on the Mac you're at. With --on it sets up that Mac's test \
         sessions; without, this Mac's. Each task skips what's done already. \
+        screensaver: turns each test user's screen saver off, as nothing they \
+        do counts as activity and its lock, after 20 minutes, stops a run. \
         signing: gives each test user your Apple Development certificate, so \
         its builds are signed as yours are (done on the test Mac, from your \
         keychain there; macOS may ask on its screen to allow the export). \
@@ -26,7 +29,7 @@ struct SessionSetupCommand: AsyncParsableCommand {
     )
 
     enum Task: String, CaseIterable, ExpressibleByArgument {
-        case signing, peekaboo, audio
+        case screensaver, signing, peekaboo, audio
     }
 
     @OptionGroup var global: GlobalOptions
@@ -34,29 +37,30 @@ struct SessionSetupCommand: AsyncParsableCommand {
     @Argument(help: "Test users. Default: every one in that Mac's pool.")
     var users: [String] = []
 
-    @Flag(help: "Only the users the last session add made or checked, once they've logged in. session add runs setup with it.")
-    var justAdded = false
-
-    @Option(name: .customLong("task"), help: "A task to do, signing, peekaboo or audio; give it again for more. Default: every one.")
+    @Option(name: .customLong("task"), help: "A task to do, screensaver, signing, peekaboo or audio; give it again for more. Default: every one.")
     var only: [Task] = []
-
-    func validate() throws {
-        if justAdded, !users.isEmpty { throw ValidationError("Name test users or pass --just-added, not both.") }
-    }
 
     func run() async throws {
         let session = try Session.start(global)
         let tasks = only.isEmpty ? Task.allCases : Task.allCases.filter(only.contains)
         let mac = Invocation.remote.map { Remote.parse($0, localRoot: session.repo.root).host }
-        var users = users
-        if justAdded {
-            users = try await Self.justAdded(on: mac)
-            // session add made nobody (it was asked not to).
-            if users.isEmpty { return }
-            try await Self.waitForLogins(users, on: mac, session: session)
+        // Nothing can be set up in a session before its login, and a user
+        // session add has just made waits for the keep-alive's.
+        if !users.isEmpty { try await Self.waitForLogins(users, on: mac, session: session) }
+        // Turning the screen saver off writes a setting and shows nothing, so
+        // it alone goes ahead under someone else's lease.
+        if tasks.contains(where: { $0 != .screensaver }) {
+            try await Self.checkLeases(users, on: mac, session: session, ignoring: global.ignoreScreenLease)
         }
-        try await Self.checkLeases(users, on: mac, session: session, ignoring: global.ignoreScreenLease)
         var failed: [String] = []
+        if tasks.contains(.screensaver) {
+            do {
+                try await ScreenSaverSetup.run(users: users.isEmpty ? nil : users, on: mac, session: session)
+            } catch {
+                failed.append("screensaver")
+                session.ui.warning("The screen saver's set-up stopped: \(error)")
+            }
+        }
         if tasks.contains(.signing) {
             if let remote = Invocation.remote {
                 // The certificate is in the console user's keychain on that Mac.
@@ -158,13 +162,13 @@ struct SessionSetupCommand: AsyncParsableCommand {
 
     /// Who the last `session add` on `mac` (this Mac when nil) made or
     /// checked: none when it made nobody.
-    static func justAdded(on mac: String?) async throws -> [String] {
+    static func addedLast(on mac: String?) async throws -> [String] {
         let path = SessionPool.justAddedFile.path
         let read = try await TestSessionAccess.asConsoleUser(mac, "if [ -f \(path) ]; then cat \(path); fi")
         guard read.succeeded else {
             throw SCError("Couldn't read which test users session add made on \(mac ?? ScreenLease.shortHostName()): "
                           + read.error.trimmingCharacters(in: .whitespacesAndNewlines),
-                          hints: ["Name them: sc session setup <user>…" + (mac.map { " --on \($0)" } ?? "")])
+                          hints: ["Set them up by name: sc session setup <user>…" + (mac.map { " --on \($0)" } ?? "")])
         }
         return SessionPool.users(fromPool: read.output)
     }
