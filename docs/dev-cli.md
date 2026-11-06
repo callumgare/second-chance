@@ -976,7 +976,8 @@ outlasts rebuilds; signed ad hoc, it says so, as a rebuild loses it.
 opens a Screen Sharing window here into that session, logged in with the password from
 that Mac's keychain, handed over as `session setup` does (never saved). Like it, it
 keeps `--on` for itself. For this Mac's own test sessions it goes through an SSH tunnel,
-which it keeps open until you press Return. If Screen Sharing asks, choose "Log in as
+which it keeps open until the window closes (or you press Return, or Ctrl-C). If Screen
+Sharing asks, choose "Log in as
 yourself". A session someone else has leased opens all the same, with a warning naming
 who has it and for what: watching disturbs nothing, but what you do there could.
 

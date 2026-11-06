@@ -49,8 +49,11 @@ enum TestSessionAccess {
     /// and goes to Screen Sharing by AppleScript, not a command line any
     /// process here could read. It's never written anywhere. Screen Sharing
     /// won't connect a Mac to itself, so this Mac's sessions are reached
-    /// through an SSH tunnel to its own Screen Sharing.
-    static func openScreenSharing(_ user: String, on mac: String?) async throws {
+    /// through an SSH tunnel to its own Screen Sharing. With
+    /// `tunnelEndsWithWindow`, that tunnel ends once the window it carries
+    /// closes: ssh runs a command that outlasts Screen Sharing connecting,
+    /// then waits only for the connections still forwarded.
+    static func openScreenSharing(_ user: String, on mac: String?, tunnelEndsWithWindow: Bool = false) async throws {
         let script = inGUISession(["/usr/bin/security", "find-generic-password", "-s", SessionPool.keychainService, "-a", user, "-w"])
         let result = try await asConsoleUser(mac, "bash -s", input: script)
         let password = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -63,7 +66,8 @@ enum TestSessionAccess {
             let port = try Network.freePort()
             let tunnel = Process()
             tunnel.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-            tunnel.arguments = ["-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-N", "-L", "\(port):localhost:5900", "\(user)@localhost"]
+            tunnel.arguments = ["-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "LogLevel=ERROR", "-L", "\(port):localhost:5900", "\(user)@localhost"]
+                + (tunnelEndsWithWindow ? ["sleep", "60"] : ["-N"])
             tunnel.standardInput = FileHandle.nullDevice
             try tunnel.run()
             // Ended once this user is done (`setUp`); a second or two to listen.
@@ -81,6 +85,65 @@ enum TestSessionAccess {
 
     /// Tunnels this run opened, ended when it's done.
     nonisolated(unsafe) static var tunnels: [Process] = []
+
+    /// Waits until every tunnel has ended (its window closed), Return is
+    /// pressed, or the task is cancelled (Ctrl-C), whichever comes first.
+    /// Return is read on a thread of its own, left blocked if it never comes,
+    /// so neither of the others waits on it.
+    static func untilTunnelsEndOrReturn() async {
+        let once = Once()
+        let open = tunnels
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                once.set(continuation)
+                let remaining = Countdown(open.count)
+                for tunnel in open {
+                    tunnel.terminationHandler = { _ in if remaining.decrement() { once.resume() } }
+                    if !tunnel.isRunning, remaining.decrement() { once.resume() }
+                }
+                if open.isEmpty { once.resume() }
+                Thread.detachNewThread {
+                    _ = readLine()
+                    once.resume()
+                }
+            }
+        } onCancel: {
+            once.resume()
+        }
+    }
+
+    /// Resumes a continuation exactly once, from whichever caller is first.
+    private final class Once: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Never>?
+        private var done = false
+        func set(_ continuation: CheckedContinuation<Void, Never>) {
+            let resumeNow = lock.withLock {
+                if done { return true }
+                self.continuation = continuation
+                return false
+            }
+            if resumeNow { continuation.resume() }
+        }
+        func resume() {
+            let pending: CheckedContinuation<Void, Never>? = lock.withLock {
+                if done { return nil }
+                done = true
+                defer { continuation = nil }
+                return continuation
+            }
+            pending?.resume()
+        }
+    }
+
+    /// Counts tunnels down to none, each counted once.
+    private final class Countdown: @unchecked Sendable {
+        private let lock = NSLock()
+        private var left: Int
+        init(_ count: Int) { left = count }
+        /// Whether this was the last.
+        func decrement() -> Bool { lock.withLock { left -= 1; return left == 0 } }
+    }
 }
 
 extension Remote {

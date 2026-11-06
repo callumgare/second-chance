@@ -10,7 +10,7 @@ struct SessionViewCommand: AsyncParsableCommand {
         discussion: """
         With --on, into that Mac's test session; without, this Mac's (through an \
         SSH tunnel, as Screen Sharing won't connect a Mac to itself, kept open \
-        until you press Return). The password comes from that Mac's keychain \
+        until the window closes or you press Return). The password comes from that Mac's keychain \
         and goes straight to Screen Sharing, never saved. If Screen Sharing asks, \
         choose "Log in as yourself".
         """
@@ -53,10 +53,10 @@ struct SessionViewCommand: AsyncParsableCommand {
             TestSessionAccess.tunnels.removeAll()
         }
         try await session.ui.progressStep("Opening Screen Sharing into \(chosen)@\(host)", success: "Screen Sharing is open into \(chosen)@\(host)") { _ in
-            try await TestSessionAccess.openScreenSharing(chosen, on: mac)
+            try await TestSessionAccess.openScreenSharing(chosen, on: mac, tunnelEndsWithWindow: true)
         }
         guard mac == nil else { return }
-        session.ui.line("The window goes through a tunnel this command keeps open: press Return here when you've finished with it.")
-        _ = readLine()
+        session.ui.line("The window goes through a tunnel this command keeps open until you close the window (or press Return here).")
+        await TestSessionAccess.untilTunnelsEndOrReturn()
     }
 }
