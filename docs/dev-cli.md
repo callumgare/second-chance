@@ -492,6 +492,10 @@ of this checkout's gigabytes. It holds:
   `Release`'s products are gigabytes nothing there runs.
 - **The data sc reads there:** `Bundles/` and `Modules/` (manifests, needles),
   as the app carries them inside itself.
+- **For `puppet` commands, the audio tap** (`SC Audio Tap.app`, below), built
+  and signed here, as `.sc/SC Audio Tap.app` with its stamp: `puppet audio`
+  there installs it into the user's own folder when its stamp differs,
+  rather than build it.
 - **Only the paths under `.local` the command names**, such as a porting
   workspace's installer in `puppet start --wine <wrapp> --
   .local/porting/<program>/inputs/setup.exe` (`Remote.localPaths`), each to
@@ -888,6 +892,8 @@ Beyond a single picture:
   the tap is a small app of its own: `SC Audio Tap`
   (`Tools/sc/AudioTap/main.swift`), which `sc` builds with `swiftc` into
   `~/Library/Application Support/SecondChance/sc-audio-tap/` on first use
+  (in a [runtime copy](#runtime-copies), which has no source, it installs
+  the one the copy brought)
   and starts as its own responsible process. It's signed with the user's
   Apple Development identity when there is one (test users get it from
   `session setup`), so the permission outlasts a rebuild; signed ad hoc, a

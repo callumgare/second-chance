@@ -514,7 +514,11 @@ enum AudioTapApp {
     /// then outlasts a rebuild), otherwise ad hoc. Returns how it's signed.
     static func ensure(repo: URL, ui: UI) async throws -> String {
         let source = repo.appendingPathComponent("Tools/sc/AudioTap/main.swift")
-        guard let code = try? Data(contentsOf: source) else { throw SCError("No \(source.path) to build the audio tap from.") }
+        guard let code = try? Data(contentsOf: source) else {
+            // A runtime copy has no sources: it brings the tap built and
+            // signed on the Mac that sent it (`stage`).
+            return try await installShipped(from: repo.appendingPathComponent(shippedPath))
+        }
         let plist = try infoPlist()
         let identity = SigningIdentity.development().first
         let signer = identity.map { "\($0.name) (\($0.hash))" } ?? "ad hoc"
@@ -546,6 +550,52 @@ enum AudioTapApp {
             try usedStamp.write(to: stampFile, atomically: true, encoding: .utf8)
             return used
         }
+    }
+
+    /// Where a runtime copy carries the tap: `.sc/SC Audio Tap.app`, its
+    /// stamp beside it (`RuntimeCopy`).
+    static let shippedPath = ".sc/\(name).app"
+
+    /// Put this sc's tap, built and signed (`ensure`), in a runtime copy's
+    /// staging folder, so the copy needn't build it.
+    static func stage(into staging: URL, repo: URL, ui: UI) async throws {
+        _ = try await ensure(repo: repo, ui: ui)
+        let shipped = staging.appendingPathComponent(shippedPath)
+        let files = FileManager.default
+        try? files.removeItem(at: shipped)
+        try files.createDirectory(at: shipped.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try files.copyItem(at: app, to: shipped)
+        let stamp = shipped.deletingLastPathComponent().appendingPathComponent("\(name).stamp")
+        try? files.removeItem(at: stamp)
+        try files.copyItem(at: stampFile, to: stamp)
+    }
+
+    /// In a runtime copy: the tap it brought, installed into this user's
+    /// folder unless that's the same build already (its stamp), so a
+    /// permission given to it lasts until a new build arrives. It's signed
+    /// as on the Mac that built it, with the identity a test user shares
+    /// with the console user (`sc session add`), or ad hoc.
+    static func installShipped(from shipped: URL) async throws -> String {
+        let files = FileManager.default
+        let shippedStamp = shipped.deletingLastPathComponent().appendingPathComponent("\(name).stamp")
+        guard files.fileExists(atPath: shipped.path), let stamp = try? String(contentsOf: shippedStamp, encoding: .utf8) else {
+            throw SCError("No audio tap to use: this copy brought none, and has no source to build one from.",
+                          hints: ["Run it with sc --on from the Mac with the checkout, which builds the tap there and sends it."])
+        }
+        if (try? String(contentsOf: stampFile, encoding: .utf8)) != stamp || !files.isExecutableFile(atPath: executable.path) {
+            try files.createDirectory(at: folder, withIntermediateDirectories: true)
+            try? files.removeItem(at: app)
+            try files.copyItem(at: shipped, to: app)
+            try stamp.write(to: stampFile, atomically: true, encoding: .utf8)
+        }
+        return await signer(of: app)
+    }
+
+    /// Who signed `app`, as `codesign` names the first authority, or "ad hoc".
+    static func signer(of app: URL) async -> String {
+        guard let result = try? await Proc.collect("/usr/bin/codesign", ["-dvv", app.path]) else { return "ad hoc" }
+        let authority = (result.output + result.error).split(separator: "\n").first { $0.hasPrefix("Authority=") }
+        return authority.map { String($0.dropFirst("Authority=".count)) } ?? "ad hoc"
     }
 
     /// Runs it as its own responsible process, so macOS asks about the

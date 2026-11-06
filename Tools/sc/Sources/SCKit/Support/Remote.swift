@@ -278,6 +278,8 @@ enum Remote {
             // --executability and would drop them without a word. Links stay
             // links (never -L, -k): a Wine prefix's z: is a link to /.
             let staging = try RuntimeCopy.stage(in: repo)
+            // `puppet audio` there needs the tap, which a copy can't build.
+            if arguments.first == "puppet" { try await AudioTapApp.stage(into: staging, repo: repo.root, ui: ui) }
             var rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + syncFilters(for: arguments)
             rsyncArgs += ["./", "\(target.host):\(target.path)/"]
             let runtimeArgs = ["-aE", "--rsync-path=/usr/bin/rsync", staging.path + "/", "\(target.host):\(target.path)/"]
