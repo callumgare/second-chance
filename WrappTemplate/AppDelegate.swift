@@ -104,7 +104,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             mainLogger.notice("[Fullscreen setting] The game made the last change, to \(choice): \(name) left as it wrote it")
             return
         }
-        guard let url = WrappLayout(app: config.appPath).location("wine:" + setting.file) else {
+        guard let url = WrappLayout(app: config.appPath).location("wine:" + setting.file, places: .shipped) else {
             mainLogger.warning("[Fullscreen setting] \(setting.file) has no place in the app: the player's choice of \(choice) isn't kept")
             return
         }
