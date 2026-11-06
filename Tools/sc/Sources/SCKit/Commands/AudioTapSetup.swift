@@ -74,20 +74,52 @@ enum AudioTapSetup {
         _ = try? await TestSessionAccess.ssh(destination, "bash -s", input: TestSessionAccess.inGUISession(["/usr/bin/open", Self.paneURL]))
         ui.line("Or in System Settings, which is open there at Privacy & Security › Screen & System Audio Recording, turn "
                 + "\(AudioTapApp.name) on under \"System Audio Recording Only\". macOS asks for an admin's name and password.")
-        let granted = try await ui.progressStep("Waiting for \(AudioTapApp.name)'s permission in \(host)/\(user) (up to 15 minutes)",
-                                                success: "\(host)/\(user): \(AudioTapApp.name) has its permission. You can close that Screen Sharing window.") { update in
-            let deadline = Date().addingTimeInterval(900)
-            while Date() < deadline {
-                try await Task.sleep(for: .seconds(5))
-                if try await permission(executable, destination) == "authorized" { return true }
-                update("Waiting for you to allow \(AudioTapApp.name) in \(host)/\(user)'s session")
+        let deadline = Date().addingTimeInterval(900)
+        var warned = false
+        while true {
+            // Steps out once if macOS records a no meanwhile, to say so, then waits on:
+            // turning the tap on in System Settings still gives it.
+            let outcome = try await ui.progressStep("Waiting for \(AudioTapApp.name)'s permission in \(host)/\(user) (up to 15 minutes)") { update in
+                while Date() < deadline {
+                    try await Task.sleep(for: .seconds(5))
+                    let state = try await permission(executable, destination)
+                    if state == "authorized" { return WaitOutcome.granted }
+                    if state == "denied", !warned { return WaitOutcome.denied }
+                    update("Waiting for you to allow \(AudioTapApp.name) in \(host)/\(user)'s session")
+                }
+                return WaitOutcome.timedOut
             }
-            return false
+            switch outcome {
+            case .granted:
+                ui.success("\(host)/\(user): \(AudioTapApp.name) has its permission. You can close that Screen Sharing window.")
+                return
+            case .denied:
+                warned = true
+                ui.warning("\(Self.deniedMessage(host: host, user: user))", next: "\(Self.deniedFix(user: user, mac: mac))")
+            case .timedOut:
+                throw SCError("\(host)/\(user)'s \(AudioTapApp.name) still has no permission to record system audio after 15 minutes.",
+                              hints: [Self.deniedFix(user: user, mac: mac)])
+            }
         }
-        guard granted else {
-            throw SCError("\(host)/\(user)'s \(AudioTapApp.name) still has no permission to record system audio after 15 minutes.",
-                          hints: ["Run it again for that user: sc session setup --task audio \(user)" + (mac.map { " --on \($0)" } ?? "")])
-        }
+    }
+
+    enum WaitOutcome: Sendable { case granted, denied, timedOut }
+
+    /// What happened when macOS records a no for the tap: its prompt was
+    /// closed, or answered Don't Allow, which macOS keeps rather than asking
+    /// again.
+    static func deniedMessage(host: String, user: String) -> String {
+        "macOS has recorded that \(AudioTapApp.name) may not record system audio in \(host)/\(user): its prompt was answered "
+            + "Don't Allow, or closed (bringing System Settings to the front closes it), and macOS won't ask again."
+    }
+
+    /// How to put it right: the switch in System Settings, which is still
+    /// waited for, or clearing the no and asking again.
+    static func deniedFix(user: String, mac: String?) -> String {
+        "Turn \(AudioTapApp.name) on under \"System Audio Recording Only\" in that session's System Settings (still waited for), "
+            + "checking the menu bar shows \(user)'s session; or clear the no and ask again: "
+            + "ssh \(user)@\(mac ?? "localhost") 'tccutil reset AudioCapture \(AudioTapApp.identifier)', then "
+            + "sc session setup --task audio \(user)" + (mac.map { " --on \($0)" } ?? "")
     }
 
     /// The tap and its stamp copied into the user's folder, unless the same

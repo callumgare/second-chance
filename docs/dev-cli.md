@@ -941,7 +941,12 @@ goes by the process responsible for the asker and over SSH that would be SSH's. 
 not, it opens Screen Sharing here and has the tap ask, which puts macOS's prompt on
 that session's screen: Allow gives it. Otherwise it opens Screen & System Audio
 Recording there, where you turn the tap on under "System Audio Recording Only"
-(with an admin's password), and waits up to 15 minutes. Signed with your Apple
+(with an admin's password), and waits up to 15 minutes. If macOS records a no
+meanwhile (the prompt answered Don't Allow, or closed, which bringing System Settings to
+the front does), it won't ask again, and the permission is per account, so a switch
+turned on in another session's window doesn't count: setup warns once, with the fix
+(that session's switch, or `tccutil reset AudioCapture` as the user and setup again), and
+waits on. Signed with your Apple
 Development identity, which `signing` gives the test users, the permission
 outlasts rebuilds; signed ad hoc, it says so, as a rebuild loses it.
 
