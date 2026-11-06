@@ -47,6 +47,8 @@ struct SessionSetupCommand: AsyncParsableCommand {
         var users = users
         if justAdded {
             users = try await Self.justAdded(on: mac)
+            // session add made nobody (it was asked not to).
+            if users.isEmpty { return }
             try await Self.waitForLogins(users, on: mac, session: session)
         }
         var failed: [String] = []
@@ -76,15 +78,17 @@ struct SessionSetupCommand: AsyncParsableCommand {
         }
     }
 
-    /// Who the last `session add` on `mac` (this Mac when nil) made or checked.
+    /// Who the last `session add` on `mac` (this Mac when nil) made or
+    /// checked: none when it made nobody.
     static func justAdded(on mac: String?) async throws -> [String] {
-        let read = try await TestSessionAccess.asConsoleUser(mac, "cat \(SessionPool.justAddedFile.path)")
-        let users = SessionPool.users(fromPool: read.output)
-        guard read.succeeded, !users.isEmpty else {
-            throw SCError("No record of which test users session add made on \(mac ?? ScreenLease.shortHostName()).",
+        let path = SessionPool.justAddedFile.path
+        let read = try await TestSessionAccess.asConsoleUser(mac, "if [ -f \(path) ]; then cat \(path); fi")
+        guard read.succeeded else {
+            throw SCError("Couldn't read which test users session add made on \(mac ?? ScreenLease.shortHostName()): "
+                          + read.error.trimmingCharacters(in: .whitespacesAndNewlines),
                           hints: ["Name them: sc session setup <user>…" + (mac.map { " --on \($0)" } ?? "")])
         }
-        return users
+        return SessionPool.users(fromPool: read.output)
     }
 
     /// A user `session add` just made isn't logged in until the keep-alive

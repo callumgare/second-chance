@@ -126,6 +126,15 @@ struct TestSessionTests {
         #expect(SessionAddCommand.names(given: ["sctest"], count: nil, taken: taken) == ["sctest"])
     }
 
+    @Test("sc session add gives a new user a UID no account has and no process runs as")
+    func freeUID() {
+        #expect(SessionPool.freeUID(accounts: [], running: []) == 501)
+        #expect(SessionPool.freeUID(accounts: [501, 502, 503], running: [0, 501]) == 504)
+        // A deleted account's processes still running as 504.
+        #expect(SessionPool.freeUID(accounts: [501, 502, 503], running: [504]) == 505)
+        #expect(SessionPool.freeUID(accounts: [501, 503], running: []) == 502)
+    }
+
     @Test("sc session add counts the pool's users and accounts named as test users outside it as existing")
     func existingTestUsers() {
         let taken: Set = ["callum", "sctest", "second-chance-testing-1", "second-chance-testing-10", "second-chance-testing-2"]

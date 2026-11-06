@@ -68,6 +68,29 @@ enum SessionPool {
         return names
     }
 
+    /// The first UID macOS gives a user who isn't an administrator's own.
+    static let firstUID = 501
+
+    /// The lowest UID from `firstUID` that no account has and no process
+    /// runs as (a deleted account's can outlive it until a restart).
+    static func freeUID(accounts: Set<Int>, running: Set<Int>) -> Int {
+        var uid = firstUID
+        while accounts.contains(uid) || running.contains(uid) { uid += 1 }
+        return uid
+    }
+
+    /// The UIDs this Mac's accounts have, and those its processes run as.
+    static func usedUIDs() async throws -> (accounts: Set<Int>, running: Set<Int>) {
+        let listed = try await Proc.collect("/usr/bin/dscl", [".", "-list", "/Users", "UniqueID"])
+        let processes = try await Proc.collect("/bin/ps", ["-axo", "uid="])
+        guard listed.succeeded, processes.succeeded else {
+            throw SCError("Couldn't list this Mac's users and processes to choose a UID: \(listed.error)\(processes.error)")
+        }
+        let accounts = listed.output.split(whereSeparator: \.isNewline).compactMap { $0.split(separator: " ").last.flatMap { Int($0) } }
+        let running = processes.output.split(whereSeparator: \.isNewline).compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+        return (Set(accounts), Set(running))
+    }
+
     /// Every user name on this Mac.
     static func existingUsers() async -> Set<String> {
         guard let result = try? await Proc.collect("/usr/bin/dscl", [".", "-list", "/Users"]), result.succeeded else { return [] }

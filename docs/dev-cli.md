@@ -667,8 +667,11 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
   and adds them to the pool. On a Mac that has test users already (the pool's,
   or accounts named as test users outside it), a bare `session add` lists them
   and asks before adding another (no terminal is a failure; `--count` adds
-  without asking). Declined, it stops before anything else, `session setup`
-  included. Naming an existing user puts it right instead: one whose password
+  without asking). Told no, it does nothing, `session setup` included. A new
+  user gets the lowest UID that no account has and no process runs as: a
+  deleted account's processes can outlive it until a restart, and a new user
+  given its UID (as macOS would) shares a UID with them, which then reach
+  into the new home, making its login keychain with the old password. Naming an existing user puts it right instead: one whose password
   is in the keychain is adopted, and a step already done is skipped, so only
   what's missing is fixed. A step needing `sudo` with no terminal fails at once rather
   than wait for a password. A new user's Setup Assistant is marked done

@@ -363,8 +363,11 @@ struct SessionAddCommand: AsyncParsableCommand {
         let session = try Session.start(global)
         var pool = SessionPool.users()
         let taken = await SessionPool.existingUsers()
-        if users.isEmpty, count == nil {
-            try confirmAnother(existing: Self.existingTestUsers(pool: pool, taken: taken), pool: pool, session: session)
+        if users.isEmpty, count == nil,
+           try !confirmAnother(existing: Self.existingTestUsers(pool: pool, taken: taken), pool: pool, session: session) {
+            // Nothing for the `session setup --just-added` that follows to do.
+            try? FileManager.default.removeItem(at: SessionPool.justAddedFile)
+            return
         }
         let names = Self.names(given: users, count: count, taken: taken)
         try await Self.unlockKeychain(session)
@@ -408,10 +411,10 @@ struct SessionAddCommand: AsyncParsableCommand {
     }
 
     /// A bare `session add` on a Mac with test users asks before making
-    /// another, rather than taking a re-run as a request for one. Declined,
-    /// it stops (as a cancel, so the `session setup` that follows doesn't run).
-    private func confirmAnother(existing: [String], pool: [String], session: Session) throws {
-        guard !existing.isEmpty else { return }
+    /// another, rather than taking a re-run as a request for one. False when
+    /// the person says no.
+    private func confirmAnother(existing: [String], pool: [String], session: Session) throws -> Bool {
+        guard !existing.isEmpty else { return true }
         let host = ScreenLease.shortHostName()
         session.ui.line("\(host) has test users already:")
         for user in existing {
@@ -423,10 +426,10 @@ struct SessionAddCommand: AsyncParsableCommand {
         guard let answer = try session.ui.confirm("Add another?", default: true) else {
             throw SCError("\(host) has test users already, and there's no terminal to ask whether to add another.", hints: hints)
         }
-        guard answer else {
+        if !answer {
             session.ui.line("Nothing added. To set the existing ones up: sc session setup" + (ProcessInfo.processInfo.environment["SSH_CONNECTION"] == nil ? "" : " --on \(host)"))
-            throw CancellationError()
         }
+        return answer
     }
 
     private func add(_ user: String, session: Session) async throws {
@@ -437,8 +440,17 @@ struct SessionAddCommand: AsyncParsableCommand {
         } else {
             let password = Self.newPassword()
             let name = "Second Chance Test" + (user.last?.isNumber == true ? " " + String(user.reversed().prefix { $0.isNumber }.reversed()) : "")
-            session.ui.detail("Creating \(user) (\(name)), a standard user. sudo may ask for your password.")
-            try await sudo(["/usr/sbin/sysadminctl", "-addUser", user, "-fullName", name, "-password", password])
+            // macOS would give the lowest UID no account has, even one a
+            // deleted account's processes still run as, which then reach
+            // into the new user's home (its keychain made with the old
+            // password). So the UID is one nothing uses.
+            let (accounts, running) = try await SessionPool.usedUIDs()
+            let uid = SessionPool.freeUID(accounts: accounts, running: running)
+            let skipped = running.subtracting(accounts).filter { $0 >= SessionPool.firstUID && $0 < uid }.sorted()
+            session.ui.detail("Creating \(user) (\(name)), a standard user with UID \(uid)"
+                              + (skipped.isEmpty ? "" : ", passing over \(skipped.map(String.init).joined(separator: ", ")), still in use by a deleted user's processes")
+                              + ". sudo may ask for your password.")
+            try await sudo(["/usr/sbin/sysadminctl", "-addUser", user, "-fullName", name, "-UID", String(uid), "-password", password])
             let stored = try await Proc.collect("/usr/bin/security", ["add-generic-password", "-U", "-s", SessionPool.keychainService,
                                                                            "-a", user, "-w", password])
             guard stored.succeeded else {
