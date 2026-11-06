@@ -469,7 +469,10 @@ copy](#runtime-copies) to `<path>` and runs `./sc` there with the same
 arguments over `ssh` (`-t` when interactive). Output stays there: a test run's
 results and report are in that copy's `test-results/`, and the terminal shows
 the summary table. `<path>` defaults to this repo's path relative to your home
-directory. Commands that work on the sources (`lint`, `generate`, `release`,
+directory. A `~/` in it is that Mac's home, expanded there, so quote it
+(`--on 'user@host:~/tmp/second-chance'`): zsh expands `~` after a `:` in a
+variable assignment (`P=user@host:~/…`), handing sc this Mac's home instead.
+Commands that work on the sources (`lint`, `generate`, `release`,
 `worktree`, `module`, `bundle`, `app build`, `test unit`) aren't sent: run
 them here. A command that may read installers (one that builds, runs or tests
 games from a disc or a Her download) also sends this Mac's [installers
