@@ -46,6 +46,18 @@ RUN --mount=type=bind,source=${input.installer},target=C:/setup \
     C:/setup/LT4_Setup.exe /S
 ```
 
+What a shipped bundle does (`freeware/icy-tower`, an Inno Setup download
+edition, `unpack: "none"`): copy the installer in, run it into a folder of
+your choosing, remove it. `/DIR=` takes a Windows path without spaces
+unquoted; the installer module's `INSTALLER.RUN` installs to the
+installer's default folder instead and links `--creates` to it.
+
+```dockerfile
+COPY --from=${input.game} . C:/setup/
+RUN "C:/setup/icytower13_install.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /NOICONS /DIR=C:\IcyTower
+REMOVE C:/setup
+```
+
 Silent switches by family: Inno `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 /SP- /DIR="C:\…"`; NSIS `/S /D=C:\…` (`/D` last, unquoted); InstallShield
 5+ `-s` with a recorded `setup.iss` (`-r` records one; `-f1<path>` names it);
