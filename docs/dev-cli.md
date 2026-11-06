@@ -57,7 +57,10 @@ command that takes it.
 - The *app build* is everything xcodebuild produces: Second Chance.app,
   WrappTemplate.app inside it, WrappPuppeteer and the test bundle. Commands that
   need it run an incremental app build first; `--skip-app-build` uses what is
-  already in `DerivedData/` instead and fails if there is nothing there.
+  already in `DerivedData/` instead and fails if there is nothing there. The
+  app carries its own copies of `Bundles/` and `Modules/`, which a build
+  reads, so it warns when the checkout's differ from them (`StaleAppData`,
+  about 20 ms): an edited Wrappfile isn't used until the app is built again.
 - A *wrapp build* installs a game into a wrapp. Commands that use an existing
   wrapp take `--refresh-wrapp skip|template|full`: use it as it is, put the app
   build's WrappTemplate binary and dylib into it and re-sign it, or rebuild it

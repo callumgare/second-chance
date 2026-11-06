@@ -87,9 +87,23 @@ struct Xcode {
         if options.skipAppBuild || repo.isRuntimeCopy {
             try repo.requireDebugApp()
             ui.detail("Using the existing app build (--skip-app-build).")
+            warnIfAppDataIsStale()
         } else {
             try await buildApp()
         }
+    }
+
+    /// Say when the checkout's Bundles/ or Modules/ has changed since the
+    /// app was built: a build reads the app's own copies, so the change
+    /// isn't in what --skip-app-build builds. Not in a runtime copy, whose
+    /// app and folders were sent together.
+    private func warnIfAppDataIsStale() {
+        guard !repo.isRuntimeCopy else { return }
+        let changed = StaleAppData.differences(checkout: repo.root, appResources: repo.app.appendingPathComponent("Contents/Resources"))
+        guard !changed.isEmpty else { return }
+        let files = changed.joined(separator: " and ")
+        let advice = "Leave out --skip-app-build to build the app again."
+        ui.warning("The app was built before \(files) changed, and a build reads the app's own copy: this run won't see the change. \(advice)")
     }
 
     private var testArguments: [String] {
@@ -127,6 +141,7 @@ struct Xcode {
                 )
             }
             ui.detail("Using the existing test build (--skip-app-build).")
+            warnIfAppDataIsStale()
         } else {
             try await buildForTesting()
         }
