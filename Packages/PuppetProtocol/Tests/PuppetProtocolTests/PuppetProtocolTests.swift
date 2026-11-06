@@ -24,10 +24,13 @@ struct PuppetRequestTests {
     func actions() throws {
         #expect(try PuppetRequest.action(["click", "10", "20"], button: .right) == .click(CGPoint(x: 10, y: 20), button: .right))
         #expect(try PuppetRequest.action(["type", "hello", "there"]) == .type("hello there"))
-        #expect(try PuppetRequest.action(["scroll", "1", "2", "-3"]) == .scroll(CGPoint(x: 1, y: 2), lines: -3))
+        #expect(try PuppetRequest.action(["scroll", "1", "2", "up"]) == .scroll(CGPoint(x: 1, y: 2), lines: -3))
+        #expect(try PuppetRequest.action(["scroll", "1", "2", "down", "10"]) == .scroll(CGPoint(x: 1, y: 2), lines: 10))
+        #expect(try PuppetRequest.action(["scroll", "1", "2", "left", "2"]) == .scroll(CGPoint(x: 1, y: 2), lines: 0, across: -2))
         #expect(try PuppetRequest.action(["key", "cmd+s"], hold: 80) == .key("cmd+s", hold: 80))
         #expect(throws: PuppetProtocolError.self) { try PuppetRequest.action(["click", "10"]) }
-        #expect(throws: PuppetProtocolError.self) { try PuppetRequest.action(["scroll", "1", "2", "1.5"]) }
+        #expect(throws: PuppetProtocolError.self) { try PuppetRequest.action(["scroll", "1", "2", "3"]) }
+        #expect(throws: PuppetProtocolError.self) { try PuppetRequest.action(["scroll", "1", "2", "down", "0"]) }
         #expect(throws: PuppetProtocolError.self) { try PuppetRequest.action(["jump"]) }
     }
 

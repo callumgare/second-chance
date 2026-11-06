@@ -23,6 +23,11 @@ nonisolated public enum MouseButton: String, Sendable, CaseIterable {
     case left, right
 }
 
+/// Which way a scroll action turns the wheel.
+nonisolated public enum ScrollDirection: String, Sendable, CaseIterable {
+    case up, down, left, right
+}
+
 /// A request to the in-process helper, which answers for the game's window
 /// from inside the game's process.
 nonisolated public enum PuppetRequest: Sendable, Equatable {
@@ -154,12 +159,19 @@ nonisolated public enum PuppetRequest: Sendable, Equatable {
             let n = try numbers(4)
             return .drag(from: CGPoint(x: n[0], y: n[1]), to: CGPoint(x: n[2], y: n[3]), hold: hold)
         case "scroll":
-            guard arguments.count == 3 || arguments.count == 4,
-                  let x = Double(arguments[0]), let y = Double(arguments[1]), let lines = Int(arguments[2]),
-                  arguments.count == 3 || Int(arguments[3]) != nil else {
-                throw PuppetProtocolError("scroll takes a point and whole lines: \(usage["scroll"] ?? "scroll").")
+            // A direction in words, not a sign: a command line takes `-3` for an option.
+            let amount = arguments.count == 4 ? Int(arguments[3]) : 3
+            guard arguments.count == 3 || arguments.count == 4, let x = Double(arguments[0]), let y = Double(arguments[1]),
+                  let amount, amount > 0, let direction = ScrollDirection(rawValue: arguments[2]) else {
+                throw PuppetProtocolError("scroll takes a point, a direction and whole lines: \(usage["scroll"] ?? "scroll").")
             }
-            return .scroll(CGPoint(x: x, y: y), lines: lines, across: arguments.count == 4 ? Int(arguments[3]) : nil)
+            let at = CGPoint(x: x, y: y)
+            switch direction {
+            case .down: return .scroll(at, lines: amount)
+            case .up: return .scroll(at, lines: -amount)
+            case .right: return .scroll(at, lines: 0, across: amount)
+            case .left: return .scroll(at, lines: 0, across: -amount)
+            }
         case "key":
             guard arguments.count == 1 else { throw PuppetProtocolError("key takes one key: \(usage["key"] ?? "key").") }
             return .key(arguments[0], hold: hold)
@@ -184,7 +196,7 @@ nonisolated public enum PuppetRequest: Sendable, Equatable {
         "down": "down <x> <y>",
         "up": "up <x> <y>",
         "drag": "drag <x> <y> <x2> <y2>",
-        "scroll": "scroll <x> <y> <lines down, negative up> [<lines right>]",
+        "scroll": "scroll <x> <y> up|down|left|right [<lines>, 3 unless given]",
         "key": "key [<mod>+…]<name>",
         "type": "type <text>",
         "focus": "focus",

@@ -743,7 +743,7 @@ macOS 26 doesn't leave the surface undersized.
 
 | Request | Reply |
 | --- | --- |
-| `hello` | `ok version=2 pid=<n> exe=<name> commands=<list>`: older helpers in built wrapps answer `error unknown request`, which says they're version 1 |
+| `hello` | `ok version=3 pid=<n> exe=<name> commands=<list>`: older helpers in built wrapps answer `error unknown request`, which says they're version 1; version 2 has no `scroll` |
 | `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 native=0\|1 key=0\|1 active=0\|1 onspace=0\|1 cursor=held\|free cursorlock=off\|waiting\|locked\|not-locked` — `fullscreen` for a macOS fullscreen Space (`native`) or a borderless window exactly covering the screen, as Direct3D games draw; `onspace` whether the window is on the Space on screen; `cursor` whether cnc-ddraw holds the mouse now, and `cursorlock` how the [cursor lock](#cursor-lock) got on (`off` where it isn't armed, as in ScummVM) |
 | `windows` | `ok <n> windows`, then a line each: `id=<n> frame=<x>,<y>,<w>,<h> level=<n> visible=0\|1 key=0\|1 main=0\|1 kind=game\|panel\|other title=<percent-encoded>`, the frame from the screen's top left; `game` is the window the other requests act on |
 | `capture <path> [region=<x>,<y>,<w>,<h>] [scale=<s>]` | `ok <w>x<h>`, with a PNG of the game window at `<path>`: a part of it (in points) for `region`, and at `scale` pixels a point rather than the window's own |
@@ -751,6 +751,7 @@ macOS 26 doesn't leave the surface undersized.
 | `move <x> <y>` | `ok`: a mouse move alone (to park the game's drawn cursor) |
 | `down <x> <y>`, `up <x> <y>` `[button=]` | `ok`: a press, or a release, alone |
 | `drag <x> <y> <x2> <y2> [steps=<n>] [hold=<ms>]` | `ok`: a press at the start, `steps` moves (10) along the line with the button down, a release at the end |
+| `scroll <x> <y> <lines> [across=<n>]` | `ok`: a mouse move to the point, 150 ms, then one scroll-wheel turn of `lines` lines down (negative: up) and `across` right (negative: left), as a wheel's notches are; a `CGEvent`, as AppKit can't make a scroll event, told the game window is under it |
 | `key [<mod>+…]<name> [hold=<ms>]` | `ok`: modifiers down, the key down, held 60 ms, up, modifiers up, each with its own virtual keycode (US layout), which is what Wine and SDL read. Names: `a`–`z`, `0`–`9`, punctuation, `return`, `escape`, `tab`, `space`, `delete`, the arrows `left` `right` `up` `down`, `f1`–`f12`, `home`, `end`, `pageup`, `pagedown`; modifiers `cmd`, `shift`, `opt`, `ctrl` |
 | `type <text>` | `ok`: each character as its key, with shift where it needs it, 40 ms apart; the text percent-encoded (`Hi%20there`) |
 | `focus` | `ok`: the app made active and the game window key |

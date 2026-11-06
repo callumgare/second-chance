@@ -22,7 +22,8 @@
 //  window, top-left origin -- a capture's pixels divided by its `scale`.
 //  Options are `name=value` words after the arguments.
 //
-//    hello            -> ok version=2 pid=<n> exe=<name> commands=<list>   (version 1 helpers say error)
+//    hello            -> ok version=3 pid=<n> exe=<name> commands=<list>   (version 1 helpers say error;
+//                                       2 has no scroll)
 //    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 native=0|1 key=0|1 active=0|1 onspace=0|1
 //                           cursor=held|free cursorlock=off|waiting|locked|not-locked
 //    windows          -> ok <n> windows, then a line each: id=<n> frame=<x>,<y>,<w>,<h> level=<n> visible=0|1
@@ -37,6 +38,8 @@
 //    move <x> <y>     -> ok             mouse moved only
 //    down|up <x> <y> [button=]   -> ok  a press or a release alone
 //    drag <x> <y> <x2> <y2> [steps=<n>] [hold=<ms>] -> ok   press, moves along the line, release
+//    scroll <x> <y> <lines> [across=<n>] -> ok   a move there, then the wheel turned <lines> lines
+//                                       down (negative: up), and <n> right (negative: left)
 //    key [<mod>+...]<name> [hold=<ms>] -> ok   key down, held (60 ms), up, with the key's own
 //                                       keycode: a-z, 0-9, return, escape, tab, space, delete,
 //                                       left, right, up, down, f1-f12, home, end, pageup,
@@ -497,6 +500,49 @@ static NSString *dragCommand(double x1, double y1, double x2, double y2, NSDicti
     return postMouseEvent(NSEventTypeLeftMouseUp, x2, y2, 1) ?: @"ok";
 }
 
+/// A move to the point, then one scroll-wheel event of `lines` lines down
+/// (negative: up) and `across` right (negative: left), in line units, as a
+/// mouse wheel's notches are. Like the mouse events it comes out on the game
+/// window, marked as ours.
+static NSString *scrollCommand(double x, double y, int lines, int across) {
+    NSString *error = postMouseEvent(NSEventTypeMouseMoved, x, y, 0);
+    if (error) return error;
+    usleep(kHoverBeforeClickMicroseconds);
+    __block NSString *result = @"error no game window";
+    onMainThread(^BOOL {
+        NSWindow *window = gameWindow();
+        if (!window) return NO;
+        // AppKit can't make a scroll event, and one made as a CGEvent has no
+        // window. So a mouse move made for the window (which carries it) is
+        // turned into one. Wheel 1 is vertical and wheel 2 horizontal;
+        // positive scrolls up and left, as turning a wheel away does.
+        NSPoint point = NSMakePoint(x, window.frame.size.height - y);
+        NSEvent *move = mouseEvent(NSEventTypeMouseMoved, point, window, 0);
+        CGEventRef cgEvent = move.CGEvent ? CGEventCreateCopy(move.CGEvent) : NULL;
+        if (!cgEvent) {
+            result = @"error could not make a scroll event";
+            return NO;
+        }
+        CGEventSetType(cgEvent, kCGEventScrollWheel);
+        CGEventSetIntegerValueField(cgEvent, kCGScrollWheelEventIsContinuous, 0);
+        CGEventSetIntegerValueField(cgEvent, kCGScrollWheelEventDeltaAxis1, -lines);
+        CGEventSetIntegerValueField(cgEvent, kCGScrollWheelEventDeltaAxis2, -across);
+        CGEventSetIntegerValueField(cgEvent, kCGScrollWheelEventPointDeltaAxis1, -lines * 10);
+        CGEventSetIntegerValueField(cgEvent, kCGScrollWheelEventPointDeltaAxis2, -across * 10);
+        CGEventSetIntegerValueField(cgEvent, kCGEventSourceUserData, kPuppetEventTag);
+        NSEvent *event = [NSEvent eventWithCGEvent:cgEvent];
+        CFRelease(cgEvent);
+        if (!event || event.window != window) {
+            result = @"error the event would not land on the game window";
+            return NO;
+        }
+        [NSApp postEvent:event atStart:NO];
+        result = @"ok";
+        return YES;
+    });
+    return result;
+}
+
 #pragma mark - Keys
 
 /// A key's virtual keycode (US layout) and whether shift types it: a
@@ -668,7 +714,7 @@ static NSString *focusCommand(void) {
 
 static NSString *helloCommand(void) {
     const char *exe = getprogname();
-    return [NSString stringWithFormat:@"ok version=2 pid=%d exe=%s commands=hello,state,windows,capture,click,move,down,up,drag,key,type,focus,yield,quit",
+    return [NSString stringWithFormat:@"ok version=3 pid=%d exe=%s commands=hello,state,windows,capture,click,move,down,up,drag,scroll,key,type,focus,yield,quit",
             getpid(), exe ? exe : "?"];
 }
 
@@ -740,6 +786,9 @@ static NSString *handle(NSString *line) {
     }
     if ([command isEqualToString:@"drag"] && count == 5) {
         return dragCommand(parts[1].doubleValue, parts[2].doubleValue, parts[3].doubleValue, parts[4].doubleValue, options);
+    }
+    if ([command isEqualToString:@"scroll"] && count == 4) {
+        return scrollCommand(parts[1].doubleValue, parts[2].doubleValue, parts[3].intValue, options[@"across"].intValue);
     }
     if ([command isEqualToString:@"key"] && count == 2) return keyCommand(parts[1], options);
     if ([command isEqualToString:@"type"] && count == 2) return typeCommand(parts[1]);
