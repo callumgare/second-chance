@@ -228,11 +228,11 @@ The shipped ones are SkiFree (`freeware/skifree`, a bare exe under Wine),
 Lure of the Temptress (`freeware/lure-of-the-temptress`, a zip ScummVM hosts,
 under ScummVM) and Tyrian 2000 (`freeware/tyrian-2000`, a zip of DOS files,
 under DOSBox, whose `LAUNCH` names the DOS program at its path on DOSBox's
-own C:, `C:/TYRIAN/TYRIAN2K.EXE`). A ScummVM game needs its engine's data file in ScummVM's
-engine: the scummvm module's package names the ones the shipped bundles'
-engines use (`engine-data`, [modules.md](modules.md#engine-packages)), and a
-game whose file is missing stops at ScummVM's "Unable
-to locate the 'lure.dat' engine data file", naming its engine's.
+own C:, `C:/TYRIAN/TYRIAN2K.EXE`). A ScummVM game needs its engine's data file: ScummVM is installed with every
+one, and the Wrappfile keeps those its game uses (`SCUMMVM.KEEP-DATA lure.dat`,
+[modules.md](modules.md#the-scummvm-modules-data)). A game whose file was
+taken out stops at ScummVM's "Unable to locate the 'lure.dat' engine data
+file", naming its engine's.
 
 A download edition is the first of a **program beyond Nancy Drew**, in a
 namespace of its own (`freeware/skifree`). Its catalogue entry carries its

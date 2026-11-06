@@ -76,6 +76,7 @@ struct StageTreesTests {
         try Data("data".utf8).write(to: disc.appendingPathComponent("Game.cif"))
 
         let configuration = RunnerConfiguration(
+            executors: ["scummvm": KeepsData()],
             inputs: GivenInputs(["disc-1": disc]), emitter: PlanRunnerTests.Recorder(),
             fetch: { _, _, _ in throw StepFailure.failed("no downloads") },
             engine: { module, version in EngineStore.Engine(module: module, version: version, hash: "fake", tree: engineTree, prepared: false) })
@@ -88,6 +89,8 @@ struct StageTreesTests {
         #expect(!FileManager.default.fileExists(atPath: layout.prefix.path))
         #expect(!FileManager.default.fileExists(atPath: layout.wine.path))
         #expect(try Plist.read(layout.infoPlist)["CFBundleIconFile"] as? String == "nancy-drew.icns")
+        #expect(FileManager.default.fileExists(atPath: target.appendingPathComponent("Contents/Resources/kept-nancy.dat").path),
+                "SCUMMVM.KEEP-DATA nancy.dat didn't reach the scummvm module's executor")
 
         // The template laid in: its files, and its Info.plist under the tree's.
         let template = scratch.appendingPathComponent("WrappTemplate.app")
@@ -104,5 +107,17 @@ struct StageTreesTests {
         // A step that made one of the launcher's files is refused.
         try Data("other".utf8).write(to: target.appendingPathComponent("Contents/MacOS/WrappTemplate"))
         #expect(throws: WrappAssembler.Problem.self) { try WrappAssembler.layIn(template, into: target) }
+    }
+}
+
+/// A stand-in for the scummvm module's executor (`ScummVMExecutor`, a
+/// package of its own): leaves a mark for what `KEEP-DATA` was given.
+private nonisolated struct KeepsData: ModuleExecutor {
+    static let handles = ["KEEP-DATA"]
+
+    func run(_ step: PlannedStep, in context: any StepContext) async throws {
+        for name in step.arguments {
+            try Data().write(to: context.tree.appendingPathComponent("Contents/Resources/kept-\(name)"))
+        }
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import NancyDrewExecutor
+import ScummVMExecutor
 import WineExecutor
 import WrappBuilder
 
@@ -33,6 +34,7 @@ public nonisolated enum BuildTool {
                 return EngineStore.standardRoot().appendingPathComponent("\(wine.hash)/\(EngineTree.buildTools)")
             }),
             "nancy-drew": NancyDrewExecutor(),
+            "scummvm": ScummVMExecutor(),
         ]
     }
 

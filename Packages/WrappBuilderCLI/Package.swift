@@ -31,6 +31,7 @@ let package = Package(
         // The shipped modules' executors, which it runs as Second Chance does.
         .package(path: "../Modules/wine"),
         .package(path: "../Modules/nancy-drew"),
+        .package(path: "../Modules/scummvm"),
     ],
     targets: [
         .executableTarget(
@@ -45,6 +46,7 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "WineExecutor", package: "wine"),
                 .product(name: "NancyDrewExecutor", package: "nancy-drew"),
+                .product(name: "ScummVMExecutor", package: "scummvm"),
             ],
             swiftSettings: swiftSettings
         ),

@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "scummvm"
-release: 6
-native: "scummvm"                            # its Swift: ScummVMRuntime, ScummVMBuild
+release: 7
+native: "scummvm"                            # its Swift: Packages/Modules/scummvm (KEEP-DATA), ScummVMRuntime, ScummVMBuild
 versions:
   # ScummVM's own Mac build, prepared on the Mac that builds
   # (ScummVMBuild.prepare). The newest is what `USE scummvm` gets; an older
@@ -10,7 +10,7 @@ versions:
   - version: "2026.4.0"
     package:
       # EngineTree's hash of the prepared tree (`sc engine prepare`).
-      prepared: "21db572bf27ae3644c6b9652633631be00a3d2e63ecf75e7e914ffb3f80291e2"
+      prepared: "436c947947e0ed09d65d9f9b3f551b311c0aceeaa52f280e40cd47807606c1f7"
       sources:
         - id: "scummvm"
           sha256: "5614527fa57ffce14773c69923b96eeb7b1b135bcd96bfe74640ca341cad4598"
@@ -18,11 +18,10 @@ versions:
           urls:
             - "https://downloads.scummvm.org/frs/scummvm/2026.4.0/scummvm-2026.4.0-macosx.dmg"
             - "https://web.archive.org/web/20261012185401id_/https://downloads.scummvm.org/frs/scummvm/2026.4.0/scummvm-2026.4.0-macosx.dmg"
-      engine-data: ["nancy.dat", "lure.dat"]
   - version: "2026.3.0"
     package:
       # EngineTree's hash of the prepared tree (`sc engine prepare`).
-      prepared: "279d224c94209ee6896bd54560fcbb131dffc7d626afc94960f305ba757252dd"
+      prepared: "3242dc140df39da9cfab31bb492d086b51a8d361731ad8b640d3a0cd520ab222"
       sources:
         - id: "scummvm"
           sha256: "d483f41a67d389a3bf50832b9a1a054fbeded56fc148216e4f84a06d330d2172"
@@ -30,10 +29,13 @@ versions:
           urls:
             - "https://downloads.scummvm.org/frs/scummvm/2026.3.0/scummvm-2026.3.0-macosx.dmg"
             - "https://web.archive.org/web/20260710213756id_/https://downloads.scummvm.org/frs/scummvm/2026.3.0/scummvm-2026.3.0-macosx.dmg"
-      # The engines the shipped bundles' games use: nancy for Nancy Drew,
-      # lure for Lure of the Temptress.
-      engine-data: ["nancy.dat", "lure.dat"]
 runtime: { save-warning: false }
+build:
+  instructions:
+    # The engine data its game needs (SCUMMVM.KEEP-DATA nancy.dat), out of
+    # every file ScummVM's app has: the rest is taken out of the app. What
+    # ScummVM's own windows need stays whatever it names.
+    KEEP-DATA: { arguments: { count: "1...", roles: [text] } }
 assets:
   - "scenarios/starts-and-quits.yaml"   # WrappPuppeteer's: a game with no menu to quit from, started and quit
   - "needles"                           # WrappPuppeteer's: what its scenario looks for, by tag

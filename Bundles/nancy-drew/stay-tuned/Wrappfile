@@ -11,6 +11,7 @@ FROM --module=wine@10 prefix AS prefix
 # How the game runs, whichever edition it came from
 FROM scratch AS scummvm
 USE scummvm
+SCUMMVM.KEEP-DATA nancy.dat
 COPY module:nancy-drew:/assets/nancy-drew.icns /Resources/nancy-drew.icns
 APP --icon=/Resources/nancy-drew.icns
 LAUNCH --mount=type=store,source=scummvm-saves,target=scummvm:saves/

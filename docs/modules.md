@@ -234,7 +234,37 @@ Swift, its **kit**:
 | Package | Products | Has |
 | --- | --- | --- |
 | `Packages/Modules/wine` (`WineModule`) | `WineKit`, `WineExecutor` | The kit is the Wine library every process that runs a Windows program uses — `Wine`, `WineCommand`, the registry, server, desktop and drives ([wrapp-build.md](wrapp-build.md#running-wine)) — which `SecondChanceKit` links. The executor carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS`, `MOUNT` and `KEEP-THREAD-HANDLES` ([below](#the-wine-modules-patches)), runs `wine:` programs for `RUN`, and has `Winetricks` and the winetricks script as a package resource. It also carries out the `setup` steps `USE wine` plans, `HELPERS` (the in-process helpers laid in the tree's `Frameworks/`) and `PREFIX` (wineboot's). Beside them, `InProcessHelpers/` and `build-in-process-helpers.sh` ([wine-in-process-helpers.md](wine-in-process-helpers.md)). |
+| `Packages/Modules/scummvm` (`ScummVMModule`) | `ScummVMExecutor` | Carries out `SCUMMVM.KEEP-DATA <file>…` ([below](#the-scummvm-modules-data)). ScummVM's engine is prepared by `ScummVMBuild` in `Packages/WrappBuilder` and started in the wrapp by `ScummVMRuntime`, which haven't moved into the package. |
 | `Packages/Modules/nancy-drew` (`NancyDrewModule`) | `NancyDrewExecutor` | Carries out `NANCY-DREW.CONFIGURE-INI <folder>`: every `.ini` in the folder given what the module's `ini.yaml` says, read through `moduleFile`, each file written back in the encoding it came in (`TextFile`, in `WindowsFormats`). |
+
+### The scummvm module's data
+
+ScummVM's engine data comes with it: a `.dat` per engine that needs one
+(`nancy.dat`, `lure.dat`, `ultima.dat` at 16 MB) and what several engines
+share (`classicmacfonts.dat` and `macgui.dat`, the Mac fonts and windows
+Director and other Mac games draw with; `fonts.dat`; `encoding.dat`;
+`fonts-cjk.dat` at 38 MB), about 80 MB in all. The engine package keeps all
+of it, so a game's engine finds what it needs without the module knowing
+which games will be built.
+
+A Wrappfile keeps only what its game needs:
+
+```dockerfile
+FROM scratch AS scummvm
+USE scummvm
+SCUMMVM.KEEP-DATA nancy.dat
+```
+
+`SCUMMVM.KEEP-DATA <file>…` takes out every other file the engine's list
+(`Resources/engines/scummvm.files`) names directly in `Resources/`, keeping
+what ScummVM's own windows (its warnings, its error console) need and its
+licences (`ScummVMExecutor.alwaysKept`), and writes the list again without
+them. Files of the bundle's own there (its icon) aren't the engine's and
+stay. A name the engine doesn't have fails the step, as the game wouldn't
+start. A Wrappfile that doesn't say keeps everything, which is the place to
+start a port from: slim it once the game runs. Which file an engine needs
+is in ScummVM's source (`engines/<engine>/detection.cpp` or its
+`<engine>.dat` loading) or in the error a game stops at.
 
 ### The wine module's patches
 
@@ -343,8 +373,10 @@ builds. Wine's:
   framework's binary seals the hashes of every file in it, so they must be
   signed before it.
 
-ScummVM's copies the program, its frameworks, the data its GUI needs and the
-engine data files `engine-data` names, out of its disk image. DOSBox
+ScummVM's copies the program, its frameworks and every data file in its
+app's Resources (not its docs or icon) out of its disk image: 80 MB of
+them, which a Wrappfile slims to its game's
+([below](#the-scummvm-modules-data)). DOSBox
 Staging's copies its program and the libraries beside it into `MacOS`, and
 what it needs of its Resources (not its 40 MB manual) into the wrapp's,
 where it looks for them, and signs the program and libraries again, ad hoc:

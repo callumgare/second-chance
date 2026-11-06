@@ -227,13 +227,17 @@ nonisolated extension WineBuild {
 }
 
 nonisolated extension ScummVMBuild {
-    /// What ScummVM needs of its app's Resources beyond the engines' data.
-    static let sharedResources = ["shaders.dat", "translations.dat", "gui-icons.dat"]
+    /// What of ScummVM's app's Resources isn't for running it: its docs, and
+    /// its app's icon, as a wrapp has its own.
+    static let notForRunning: Set = ["AUTHORS.rtf", "CONTRIBUTING.md", "NEWS.md", "README.md", "scummvm.icns"]
 
     /// ScummVM's program from its disk image (`scummvm`) in `MacOS`, where
-    /// it runs as the wrapp itself, with its frameworks and the data the
-    /// package's `engine-data` names: a game whose engine's file is missing
-    /// stops at "Unable to locate the '<engine>.dat' engine data file".
+    /// it runs as the wrapp itself, with its frameworks and every data file
+    /// its Resources have: each engine's (a game whose engine's file is
+    /// missing stops at "Unable to locate the '<engine>.dat' engine data
+    /// file"), and what several engines share (`classicmacfonts.dat`,
+    /// `macgui.dat`, `fonts.dat`). A Wrappfile keeps only what its game
+    /// needs with `SCUMMVM.KEEP-DATA` (docs/modules.md#the-scummvm-modules-data).
     public static func prepare(_ job: EngineJob) async throws -> [URL] {
         let mount = job.scratch.appendingPathComponent("mount")
         try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
@@ -245,7 +249,8 @@ nonisolated extension ScummVMBuild {
             try FileManager.default.createDirectory(at: job.tree.appendingPathComponent("MacOS"), withIntermediateDirectories: true)
             try await job.run("/usr/bin/ditto", ["--rsrc", app.appendingPathComponent("MacOS/scummvm").path,
                                                  job.tree.appendingPathComponent("MacOS/scummvm").path])
-            for name in (job.package.engineData ?? []) + sharedResources {
+            let names = try FileManager.default.contentsOfDirectory(atPath: app.appendingPathComponent("Resources").path)
+            for name in names.sorted() where !notForRunning.contains(name) {
                 try await job.run("/usr/bin/ditto", ["--rsrc", app.appendingPathComponent("Resources/\(name)").path,
                                                      resources.appendingPathComponent(name).path])
             }

@@ -102,8 +102,7 @@
                     "urls": { "description": "Where to look, in order; the sha256 decides.", "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^https://" } }
                   }
                 }
-              },
-              "engine-data": { "description": "ScummVM's: the engine data files kept from its app's Resources.", "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+              }
             }
           }
         }

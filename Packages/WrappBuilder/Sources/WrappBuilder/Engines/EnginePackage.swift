@@ -16,9 +16,6 @@ public nonisolated struct EnginePackage: Decodable, Hashable, Sendable {
     /// made, before its hash is known.
     public let prepared: String?
     public let sources: [Source]
-    /// ScummVM's: the engine data files kept from its app's Resources, one
-    /// for each engine a shipped bundle's game uses (`nancy.dat`).
-    public let engineData: [String]?
 
     /// One download, by the id the module's preparing knows it as.
     public struct Source: Decodable, Hashable, Sendable {

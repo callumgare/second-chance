@@ -8,6 +8,7 @@
 import Foundation
 import Logging
 import NancyDrewExecutor
+import ScummVMExecutor
 import SecondChanceKit
 import WineExecutor
 import WrappBuilder
@@ -37,7 +38,7 @@ struct ModuleSteps {
         // The shipped modules' executors, compiled in, and each added module's
         // program (docs/module-programs.md).
         let shipped: [String: any ModuleExecutor] = ["wine": WineExecutor(helpers: helpers, buildTools: wineBuildTools),
-                                                     "nancy-drew": NancyDrewExecutor()]
+                                                     "nancy-drew": NancyDrewExecutor(), "scummvm": ScummVMExecutor()]
         return shipped.merging(AddedModules.executors(addedModules())) { mine, _ in mine }
     }
 

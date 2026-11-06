@@ -114,6 +114,7 @@ Modules' instructions, as each module's `module.yaml` declares them
 | `HER-DOWNLOAD.INSTALL <input> [--into=<folder>] [--creates=<program>] [--answer-file=…] [--automation=<script>]` | Installs Her Interactive's download: a Windows installer as `INSTALLER.RUN` runs one, or a Mac download's game taken out. |
 | `WINE.MOUNT <folder> <drive> [--cdrom]` | Gives a folder in the prefix a drive letter, kept for later steps and at launch; `--cdrom` makes it a CD drive. |
 | `WINE.HELPERS`, `WINE.PREFIX` | The wine module's `setup` steps, which `USE wine` plans: the in-process helpers laid in, and wineboot's prefix ([modules.md](modules.md#what-a-module-declares)). |
+| `SCUMMVM.KEEP-DATA <file>…` | Takes out of the app every one of ScummVM's data files but those named (`nancy.dat`) and what its own windows need, out of the 80 MB it comes with ([modules.md](modules.md#the-scummvm-modules-data)). Without it, the app keeps them all. |
 | `NANCY-DREW.CONFIGURE-INI <folder>` | Gives every `.ini` in the game's folder what the nancy-drew module's `ini.yaml` says (LCD mode, saves in Documents), each written back in the encoding it came in. `DO nancy-drew.configure-ini --into=…` is how a stage says it. |
 
 An input is always written `${input.<name>}` where an instruction takes one.
