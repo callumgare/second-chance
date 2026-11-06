@@ -99,7 +99,8 @@
                     "id": { "description": "What the module's Swift knows it as (wine, wineskin).", "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
                     "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
                     "size": { "type": "integer", "minimum": 1 },
-                    "urls": { "description": "Where to look, in order; the sha256 decides.", "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^https://" } }
+                    "urls": { "description": "Where to look, in order; the sha256 decides.", "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^https://" } },
+                    "headers": { "description": "Headers each request for it sends: a registry's anonymous sign-in (GitHub's package registry's Authorization: Bearer QQ==).", "type": "object", "additionalProperties": { "type": "string" } }
                   }
                 }
               }

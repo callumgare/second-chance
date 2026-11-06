@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "basilisk"
-release: 1
+release: 2
 native: "basilisk"                           # its Swift: Packages/Modules/basilisk (BasiliskExecutor, BasiliskKit), BasiliskRuntime, BasiliskBuild
 versions:
   # Basilisk II, a 68040 Mac (a Quadra 900 to Mac OS), and System 7.5.3, which
@@ -9,7 +9,7 @@ versions:
   # The ROM, which Apple never gave out, is the person's own: module:basilisk:/rom.
   - version: "2026.07.17"
     package:
-      prepared: "649db0aef7adb3b980d9041e4c47bd7a0267b6568aa3a987afc19ff18f4831ef"
+      prepared: "97c202519766c0d23b1cc0ce34d4fec230496169bfa1e0b94afcd22580a93901"
       sources:
         # E-Maculation's notarized universal build (no published hash; checked by ours).
         - id: "basilisk"
@@ -22,6 +22,19 @@ versions:
           sha256: "7a70976e590d464c3476c0b40500ae589f77604a26b1c8bd310cd4922233ec87"
           size: 26214400
           urls: ["https://archive.org/download/AppleMacintoshSystem753/System7_5_3.img"]
+        # hfsutils 3.2.6 (GPL-2.0-or-later, its source at https://ftp.mars.org/hfs/), which the
+        # build changes the Mac's disks with, as Homebrew built it for Apple silicon (macOS 15+)
+        # and Intel (macOS 14+): kept in the engine's build-tools, never in an app.
+        - id: "hfsutils-arm64"
+          sha256: "2a486e1123355f24eb17dd33821edbfa4c9f7f505ffa9009f8380a0000b4f45f"
+          size: 78056
+          urls: ["https://ghcr.io/v2/homebrew/core/hfsutils/blobs/sha256:2a486e1123355f24eb17dd33821edbfa4c9f7f505ffa9009f8380a0000b4f45f"]
+          headers: { Authorization: "Bearer QQ==" }   # the registry's anonymous sign-in
+        - id: "hfsutils-x86-64"
+          sha256: "f0e5cc460ae549e009fa87ccb3da5d0c369cf36f702219d126b395c144f07bb8"
+          size: 79137
+          urls: ["https://ghcr.io/v2/homebrew/core/hfsutils/blobs/sha256:f0e5cc460ae549e009fa87ccb3da5d0c369cf36f702219d126b395c144f07bb8"]
+          headers: { Authorization: "Bearer QQ==" }
 runtime: { save-warning: false }             # the program saves on the Mac's own disk, kept outside the app
 assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a program started and quit
 notes:

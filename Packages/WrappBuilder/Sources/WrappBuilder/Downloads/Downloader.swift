@@ -18,11 +18,15 @@ public nonisolated struct DownloadRequest: Sendable, Equatable {
     public let urls: [URL]
     public let sha256: String
     public let size: Int64?
+    /// Headers every request sends: what a registry asks of anyone, such as
+    /// GitHub's package registry's anonymous `Authorization: Bearer QQ==`.
+    public let headers: [String: String]
 
-    public init(urls: [URL], sha256: String, size: Int64? = nil) {
+    public init(urls: [URL], sha256: String, size: Int64? = nil, headers: [String: String] = [:]) {
         self.urls = urls
         self.sha256 = sha256.lowercased()
         self.size = size
+        self.headers = headers
     }
 
     /// The input's request, from its manifest fields.
@@ -140,6 +144,7 @@ public nonisolated final class Downloader: Sendable {
             var have = Int64((try? files.attributesOfItem(atPath: partial.path)[.size] as? NSNumber)?.int64Value ?? 0)
             var urlRequest = URLRequest(url: url)
             urlRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+            for (name, value) in request.headers { urlRequest.setValue(value, forHTTPHeaderField: name) }
             if have > 0 { urlRequest.setValue("bytes=\(have)-", forHTTPHeaderField: "Range") }
             let (bytes, response) = try await session.bytes(for: urlRequest)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 200

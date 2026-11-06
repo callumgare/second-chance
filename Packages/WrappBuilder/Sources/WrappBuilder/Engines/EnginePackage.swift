@@ -23,9 +23,11 @@ public nonisolated struct EnginePackage: Decodable, Hashable, Sendable {
         public let sha256: String
         public let size: Int64?
         public let urls: [String]
+        /// Headers its URLs need: a registry's anonymous sign-in.
+        public let headers: [String: String]?
 
         public var request: DownloadRequest {
-            DownloadRequest(urls: urls.compactMap(URL.init(string:)), sha256: sha256, size: size)
+            DownloadRequest(urls: urls.compactMap(URL.init(string:)), sha256: sha256, size: size, headers: headers ?? [:])
         }
     }
 

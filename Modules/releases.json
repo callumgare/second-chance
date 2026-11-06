@@ -16,6 +16,22 @@
         "versions" : [
           "2026.07.17"
         ]
+      },
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "module.yaml" : "6b94b837daeafa54bcde56c2fc42190b0c7c6bdc563c7336a9099f182518a1d4",
+          "scenarios/starts-and-quits.yaml" : "6fef45631e8ae0691d5264dc887651058d93285e9e8abb2f1c84418c7ef303a8"
+        },
+        "functions" : [
+
+        ],
+        "release" : 2,
+        "versions" : [
+          "2026.07.17"
+        ]
       }
     ],
     "big-fish" : [

@@ -35,7 +35,37 @@ nonisolated extension BasiliskBuild {
                                              job.tree.appendingPathComponent("Resources/Basilisk II Credits.html").path])
         try await job.run("/usr/bin/ditto", [try job.source("system").path,
                                              job.tree.appendingPathComponent(systemDisk).path])
+        let tools = try await prepareHFSUtils(job)
         return [job.tree.appendingPathComponent("Frameworks/SDL2.framework"),
-                job.tree.appendingPathComponent("MacOS/BasiliskII")]
+                job.tree.appendingPathComponent("MacOS/BasiliskII")] + tools
+    }
+
+    /// The hfsutils commands the build changes the Mac's disks with, in the
+    /// engine's build tools (never in an app): Homebrew's builds for Apple
+    /// silicon and Intel, each command made one universal binary with lipo.
+    static let hfsutils = ["hmount", "humount", "hls", "hcopy", "hmkdir", "hrename", "hdel", "hattrib", "hvol"]
+
+    /// Where they are in a prepared tree.
+    public static let hfsutilsFolder = "\(EngineTree.buildTools)/hfsutils"
+
+    static func prepareHFSUtils(_ job: EngineJob) async throws -> [URL] {
+        let folder = job.tree.appendingPathComponent(hfsutilsFolder)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var unpacked: [String: URL] = [:]
+        for arch in ["arm64", "x86-64"] {
+            let into = job.scratch.appendingPathComponent("hfsutils-\(arch)")
+            try FileManager.default.createDirectory(at: into, withIntermediateDirectories: true)
+            try await job.run("/usr/bin/tar", ["-xzf", try job.source("hfsutils-\(arch)").path, "-C", into.path])
+            unpacked[arch] = into.appendingPathComponent("hfsutils/3.2.6/bin")
+        }
+        guard let arm64 = unpacked["arm64"], let x86 = unpacked["x86-64"] else { return [] }
+        var tools: [URL] = []
+        for tool in hfsutils {
+            let out = folder.appendingPathComponent(tool)
+            try await job.run("/usr/bin/lipo", ["-create", arm64.appendingPathComponent(tool).path,
+                                                x86.appendingPathComponent(tool).path, "-output", out.path])
+            tools.append(out)
+        }
+        return tools
     }
 }
