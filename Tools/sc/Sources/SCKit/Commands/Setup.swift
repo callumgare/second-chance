@@ -113,7 +113,8 @@ struct CleanCommand: AsyncParsableCommand {
         discussion: """
         layers: the layer cache, the Wine prefix among it (start the next build from scratch; \
         wine-prefixes is another name for it). \
-        build: DerivedData. wrapps: the wrapps dir. test-results: reports and result bundles. \
+        build: DerivedData, the main checkout's and every worktree's; one a running process uses (a build, \
+        or something run from it) is left alone. wrapps: the wrapps dir. test-results: reports and result bundles. \
         steam-session: the saved Steam sign-in (signs every Steam wrapp out, like Sign Out of Steam). \
         steam-client: the cached Steam client (the next Steam build downloads Steam's update again). \
         engines: the engine store, the engines builds prepared (the next build that needs one prepares it \
@@ -164,7 +165,7 @@ struct CleanCommand: AsyncParsableCommand {
         let stores = StoreCommand.found(session.repo).filter { $0.retention == retention.rawValue }
         let paths: [Target: [URL]] = [
             .layers: [Repo.layerStore, Repo.formerWinePrefixCache],
-            .build: [session.repo.derivedData],
+            .build: await Self.derivedData(session.repo),
             .wrapps: [wrapps.resolve(session.repo)],
             .testResults: [session.repo.testResults],
             .steamSession: Repo.steamSession,
@@ -179,11 +180,7 @@ struct CleanCommand: AsyncParsableCommand {
         let sizes = await withTaskGroup(of: (Target, Int64).self) { group in
             for target in measured {
                 let urls = paths[target] ?? []
-                group.addTask {
-                    var total: Int64 = 0
-                    for url in urls { total += await Self.size(of: url) }
-                    return (target, total)
-                }
+                group.addTask { (target, await Self.size(of: urls)) }
             }
             var result: [Target: Int64] = [:]
             for await (target, size) in group { result[target] = size }
@@ -227,7 +224,24 @@ struct CleanCommand: AsyncParsableCommand {
                              removing.isEmpty ? "" : ByteCountFormatter.string(fromByteCount: sizes[target] ?? 0, countStyle: .file)])
                 continue
             }
-            let urls = (paths[target] ?? []).filter { FileManager.default.fileExists(atPath: $0.path) }
+            var urls = (paths[target] ?? []).filter { FileManager.default.fileExists(atPath: $0.path) }
+            var freed = sizes[target] ?? 0
+            if target == .build {
+                // A build writing to it, or the app run from it, would fail
+                // or crash halfway; it's the next clean's.
+                var busy: [URL] = []
+                for url in urls {
+                    let users = await FolderUsers.of(url)
+                    guard !users.isEmpty else { continue }
+                    busy.append(url)
+                    let named = users.prefix(3).map { "\($0.name) (pid \($0.pid))" }.joined(separator: ", ")
+                    ui.warning("\(session.repo.display(url)) is in use by \(named)\(users.count > 3 ? " and \(users.count - 3) more" : ""), so it's left alone.")
+                }
+                if !busy.isEmpty {
+                    urls.removeAll { busy.contains($0) }
+                    freed = await Self.size(of: urls)
+                }
+            }
             if urls.isEmpty {
                 rows.append([target.rawValue, "", "(nothing there)"])
                 continue
@@ -235,16 +249,33 @@ struct CleanCommand: AsyncParsableCommand {
             for url in urls {
                 try FileManager.default.removeItem(at: url)
             }
-            let shown = urls.count == 1 ? session.repo.display(urls[0]) : "\(urls.count) items in \(session.repo.display(urls[0].deletingLastPathComponent()))"
-            rows.append([target.rawValue, shown, ByteCountFormatter.string(fromByteCount: sizes[target] ?? 0, countStyle: .file)])
+            let shown = urls.count == 1 ? session.repo.display(urls[0])
+                : target == .build ? "DerivedData in \(urls.count) checkouts"
+                : "\(urls.count) items in \(session.repo.display(urls[0].deletingLastPathComponent()))"
+            rows.append([target.rawValue, shown, ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)])
         }
         await ui.table(headers: ["Deleted", "Path", "Freed"], rows: rows)
     }
 
+    /// Every checkout's DerivedData: the main checkout's and each worktree's.
+    /// Outside a git repo (a runtime copy), just this one's.
+    static func derivedData(_ repo: Repo) async -> [URL] {
+        guard let main = try? await Worktrees.mainCheckout(of: repo.root),
+              let listing = try? await Worktrees.git(["worktree", "list", "--porcelain"], in: main) else {
+            return [repo.derivedData]
+        }
+        let checkouts = WorktreeEntry.parse(listing).map(\.path)
+        let all = checkouts.contains(repo.root.standardizedFileURL) ? checkouts : [repo.root] + checkouts
+        return all.map { $0.appendingPathComponent("DerivedData") }
+    }
+
+    /// What deleting them all would free: APFS clones count once, and not at
+    /// all while a clone outside them still holds the blocks (`DiskUsage`).
+    static func size(of urls: [URL]) async -> Int64 {
+        await Task.detached { DiskUsage.freed(by: urls) }.value
+    }
+
     static func size(of url: URL) async -> Int64 {
-        guard FileManager.default.fileExists(atPath: url.path),
-              let result = try? await Proc.collect("/usr/bin/du", ["-sk", url.path]),
-              let kb = result.output.split(separator: "\t").first.flatMap({ Int64($0) }) else { return 0 }
-        return kb * 1024
+        await size(of: [url])
     }
 }

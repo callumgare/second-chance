@@ -33,6 +33,7 @@ nearest command's help.
 ./sc setup                             # Once per clone: tools, git hooks, completions, Wrappfile highlighting
 ./sc worktree add <name>               # A worktree in .claude/worktrees, sharing .local and cloning caches
 ./sc worktree remove <name>            # Remove one (and its build output) once it's merged
+./sc clean build                       # Delete every checkout's DerivedData, worktrees' too, leaving any in use
 ./sc clean layers                      # Start the next build from scratch: no cached Wine prefix
 ./sc clean engines                     # Prepare engines afresh, from their downloads
 ./sc clean downloads                   # Fetch (and check) AutoIt, the patches, engines' files and Big Fish's installer afresh
@@ -400,7 +401,7 @@ on a worktree made before the hook or after a clean.
   What a build compiles (`DerivedData/Build`, a package's `.build/<arch>`) isn't
   cloned: it records the path throughout, so it's rebuilt anyway, and a clone
   would only keep old blocks alive. `du` counts clones in full; `df` shows
-  what they cost. A worktree on another volume gets no clones, and its first
+  what they cost, and so does `sc clean` (next paragraph). A worktree on another volume gets no clones, and its first
   build fetches as usual.
 - **SourceKit-LSP's background indexing is off in each of its packages**,
   through `.sourcekit-lsp/config.json` (ignored), which otherwise fills each
@@ -417,6 +418,17 @@ whether it has changes. `sc worktree remove <name>` refuses while either would
 be lost, unless `--force`; it removes the links first, so nothing of the main
 checkout's is in reach, then the worktree with all its build output.
 `--delete-branch` deletes its branch too.
+
+`sc clean build` deletes the DerivedData of the main checkout and of every
+worktree, wherever it was run from. One that a running process names on its
+command line is left alone with a warning: an xcodebuild given it as
+`-derivedDataPath` (and the compilers it starts), the app `sc app run`
+launched from it, a GUI-session job's script in its `sc-jobs`. Xcode's own
+window builds elsewhere, in `~/Library/Developer/Xcode/DerivedData`. The
+sizes `sc clean` shows, for every target, are what deleting would free, not
+what `du` says: it reads each file's APFS private size and clone family
+(`DiskUsage`), so a clone counts only once its whole family goes, and not at
+all while a file outside what's deleted still holds its blocks.
 
 ## GUI session and remote Macs
 
