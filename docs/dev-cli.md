@@ -747,6 +747,12 @@ viewer would:
   shown on the console.
 - **It unlocks it** when it's locked: a click on the user's picture, then the
   password typed (`ScreenSharingConnection.unlock`).
+- **It isn't activity.** It sends no input, and a game's posted events aren't
+  the person's, so macOS counts a test session as idle whatever runs there.
+  Left at its default, the screen saver starts after 20 minutes and locks the
+  session, and a launch that lands before the keep-alive unlocks it fails
+  with "the screen is locked". `sc session setup --task screensaver` turns
+  each test user's screen saver off (below).
 - **It asks for an 8x8 corner every 2 seconds** and draws nothing. It costs
   about 23 MB and no measurable CPU; Screen Sharing's server takes about 2% while
   it's connected.
@@ -811,12 +817,6 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
   counterpart. It takes each user out of the pool, clears its lease and
   restarts the keep-alive so it lets the session go, then asks whether to
   delete the account too, with all its files (default no; no terminal means
-- **It isn't activity.** It sends no input, and a game's posted events aren't
-  the person's, so macOS counts a test session as idle whatever runs there.
-  Left at its default, the screen saver starts after 20 minutes and locks the
-  session, and a launch that lands before the keep-alive unlocks it fails
-  with "the screen is locked". `sc session setup --task screensaver` turns
-  each test user's screen saver off (below).
   no, unless `--delete-account`). Deleting logs the user out, runs
   `sudo sysadminctl -deleteUser`, which removes the home, and removes the
   password from the keychain. Kept, the account and its password stay, so

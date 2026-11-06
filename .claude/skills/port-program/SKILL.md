@@ -104,6 +104,15 @@ and nothing more means they've left you to it.
   it as an untrusted input: in its own folder in the workspace, in a test
   account, with a scratch `HOME`, never installed system-wide. Remove it
   when it's done.
+- **Building an engine from source**, to test a fix or a patch against the
+  program before it's in a release (the user's standing permission, given
+  2026-11-06). Xcode's compilers are on the test Macs; the build's own
+  dependencies (SDL2 and the libraries an engine's configure asks for) may
+  come from Homebrew on a test Mac, the one exception to "never
+  system-wide", as they're build tools other ports reuse. Build from the
+  project's own repository, in the porting workspace, and record the
+  commit, the patch and what was installed in the log. A build like this is
+  for experiments only: a wrapp ships an engine from its makers.
 - **Changing what other programs get** (a module's settings or stages, the
   wrapp's template, a runtime helper) when the change is minor, or when
   tests show it harms nothing: the unit tests, plus the integration tests of

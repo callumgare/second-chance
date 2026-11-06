@@ -19,6 +19,26 @@
             "target": "sc",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release sc (Tools/sc)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:second-chance}/Packages/WrappBuilder",
+            "name": "Debug wrapp-module-fixture (Packages/WrappBuilder)",
+            "target": "wrapp-module-fixture",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug wrapp-module-fixture (Packages/WrappBuilder)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:second-chance}/Packages/WrappBuilder",
+            "name": "Release wrapp-module-fixture (Packages/WrappBuilder)",
+            "target": "wrapp-module-fixture",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release wrapp-module-fixture (Packages/WrappBuilder)"
         }
     ]
 }
