@@ -767,7 +767,18 @@ for an image. Three kinds:
   splash screens below are (`SplashScreen`).
 - `region`: an image matched in part of the screen, as the quit button is
   (`region: { search, height-fraction, scales, grayscale }`, for
-  `TemplateMatcher`).
+  `TemplateMatcher`). Each look slides the image over the `search` area, so
+  keep that to around where it shows: the whole screen costs several times
+  as much (2.6 s a look rather than 0.45 s for Icy Tower's logo), and each
+  extra entry in `scales` a whole search again. `height-fraction` sizes the
+  image to the screen, so one scale is usually enough, and the screen's
+  resolution makes no difference (a Retina capture is searched in wider
+  steps). `sc bundle check` warns about a needle that searches more than
+  half the screen or at several sizes (`Needle.searchWarnings`).
+  `TemplateMatcher` is built optimised even in a Debug build (its
+  `Package.swift`): the integration tests run WrappPuppeteer's Debug build,
+  where unoptimised Swift took 14 s for the same narrow look, and 91 s for the
+  whole screen.
 - `text`: strings read off the screen by OCR, the first found winning:
   "Exit Game" or "Quit", and "interactive" for the Her Interactive logo.
 

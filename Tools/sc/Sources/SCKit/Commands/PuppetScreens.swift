@@ -118,6 +118,7 @@ struct PuppetNameCommand: AsyncParsableCommand {
         if let warning = cut.warning { session.ui.warning("\(warning)") }
         // Checked against the frame it was cut from, as `screen` would.
         let needle = try NeedleLibrary.needle(at: yaml)
+        for warning in needle.searchWarnings { session.ui.warning("\(warning) (sc bundle check says so too)") }
         let check = PuppetScreens.identify(frame, needles: [needle])
         session.ui.line("matches this screen: " + (check.results.first.map { ($0.found ? "yes, " : "no, ") + $0.detail } ?? "?"))
         session.ui.line(yaml.path + (cut.image == nil ? "" : "  (and \(png.lastPathComponent))"))
@@ -638,10 +639,13 @@ struct NeedleCut {
             guard pixels.width >= 4, pixels.height >= 4, let image = frame.image.cropping(to: pixels) else {
                 throw SCError("\(PuppetFrame.describe(region)) isn't inside the \(Int(frame.width))x\(Int(frame.height)) window.")
             }
-            // Searched for around where it is now (its own size again on
-            // each side), sized to the window as it is.
-            let search = CGRect(x: region.minX - region.width, y: region.minY - region.height,
-                                width: region.width * 3, height: region.height * 3)
+            // Searched for around where it is now, sized to the window as it
+            // is: its own size again on each side, but no more than a tenth
+            // of the window, as a big region's would be most of the screen,
+            // which costs several times as much to search (Icy Tower's logo).
+            let marginX = min(region.width, frame.width * searchMargin)
+            let marginY = min(region.height, frame.height * searchMargin)
+            let search = region.insetBy(dx: -marginX, dy: -marginY)
                 .intersection(CGRect(x: 0, y: 0, width: frame.width, height: frame.height))
             let yaml = header + """
                 kind: "region"
@@ -672,6 +676,10 @@ struct NeedleCut {
             """
         return NeedleCut(kind: "screen", yaml: yaml, image: content, summary: "the picture, bars trimmed, \(content.width)x\(content.height)")
     }
+
+    /// The most a region needle's search reaches past it on each side, as a
+    /// fraction of the window.
+    static let searchMargin = 0.1
 
     /// Below this spread of brightness (a standard deviation, 0–255) a
     /// region is flat: a dark sky, a plain panel.

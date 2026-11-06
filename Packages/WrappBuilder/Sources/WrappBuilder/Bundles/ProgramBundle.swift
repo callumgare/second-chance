@@ -153,9 +153,16 @@ public nonisolated final class ProgramBundleLoader {
         }
     }
 
-    /// What the checker warns about in the bundle's Wrappfile: nothing that
-    /// stops it loading, but worth saying (`sc bundle check`).
+    /// What the checker warns about in the bundle's Wrappfile, and its
+    /// needles that would be slow to look for (`Needle.searchWarnings`):
+    /// nothing that stops it loading, but worth saying (`sc bundle check`).
     public func warnings(_ folder: URL) -> [String] {
+        let needles = ((try? NeedleLibrary.loadFolder(folder.appendingPathComponent("tests/needles"))) ?? [])
+            .flatMap(\.searchWarnings).map { "tests/needles: \($0)" }
+        return needles + wrappfileWarnings(folder)
+    }
+
+    private func wrappfileWarnings(_ folder: URL) -> [String] {
         guard let modules, case .success(let bundle) = load(folder),
               let text = try? String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8),
               let parsed = try? WrappfileParser.parse(text) else { return [] }

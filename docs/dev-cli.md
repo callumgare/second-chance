@@ -1120,7 +1120,10 @@ adds a folder looked in first.
   a `screen` needle of the whole picture, its bars trimmed (as
   WrappPuppeteer's splash references are); with `--region x,y,w,h` (points,
   as `text` gives them) a `region` needle of that part, searched for around
-  where it is now and sized to the window, with a warning when that part is
+  where it is now (its own size again on each side, but no more than a tenth
+  of the window) and sized to the window, with a warning when it would be
+  slow to look for (as `sc bundle check` gives, [testing.md](testing.md#needles))
+  and when that part is
   nearly one colour (its brightness's spread under 6 of 255), as a flat patch
   matches any patch like it; with `--text`, a `text` needle of
   the lines read there. It goes in the session's `needles/` (or `--out

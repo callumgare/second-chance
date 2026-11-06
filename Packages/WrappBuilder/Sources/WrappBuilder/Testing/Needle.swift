@@ -88,6 +88,32 @@ public nonisolated struct Needle: Sendable, Equatable {
         public let strings: [String]
     }
 
+    /// What makes a `region` needle slow to look for, for `sc bundle check`
+    /// to warn about: each look is a template search over the area it
+    /// names, so the whole screen costs several times a part of it, and each
+    /// extra scale a whole search again. Its test looks many times.
+    public var searchWarnings: [String] {
+        guard spec.kind == .region else { return [] }
+        var warnings: [String] = []
+        let search = spec.region?.search
+        let area = search.map { $0.width * $0.height } ?? 1
+        if area > Self.widestSearch {
+            let share = Int((area * 100).rounded())
+            warnings.append(search == nil
+                ? "needle \(id) searches the whole screen: give it a region.search around where it shows"
+                : "needle \(id) searches \(share)% of the screen: narrow its region.search to around where it shows")
+        }
+        if let scales = spec.region?.scales, scales.count > 1 {
+            warnings.append("needle \(id) is searched for at \(scales.count) sizes, a search each: "
+                + "region.height-fraction sizes it to the screen, so one is usually enough")
+        }
+        return warnings
+    }
+
+    /// The most of the screen a `region` needle searches before it's worth
+    /// a warning.
+    public static let widestSearch = 0.5
+
     /// The point to click in a match `found` (in any units), by `spec.click`.
     public func clickPoint(in found: CGRect) -> CGPoint {
         let fraction = spec.click?.cgPoint ?? CGPoint(x: 0.5, y: 0.5)

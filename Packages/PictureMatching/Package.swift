@@ -34,7 +34,11 @@ let package = Package(
             dependencies: [
                 .product(name: "Logging", package: "swift-log"),
             ],
-            swiftSettings: swiftSettings
+            // Optimised in a Debug build too: matching runs per-pixel loops,
+            // which unoptimised Swift runs some 30x slower (a whole-screen
+            // search took 91 s rather than 2.6 s), and the integration tests
+            // run WrappPuppeteer's Debug build.
+            swiftSettings: swiftSettings + [.unsafeFlags(["-O"], .when(configuration: .debug))]
         ),
         .testTarget(
             name: "PictureMatchingTests",

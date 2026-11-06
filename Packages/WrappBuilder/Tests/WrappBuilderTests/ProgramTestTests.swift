@@ -93,6 +93,28 @@ struct ProgramTestTests {
         try Data().write(to: folder.appendingPathComponent("lonely.png"))
         #expect(throws: NeedleError.self) { try NeedleLibrary.load([folder]) }
     }
+
+    @Test("A region needle searched for over most of the screen, or at several sizes, is warned about; a narrow one isn't")
+    func slowRegionNeedles() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("needles-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let needles = [
+            "whole": "kind: region\ntags: [running]\n",
+            "wide": "kind: region\ntags: [running]\nregion: { search: { x: 0, y: 0, width: 0.8, height: 0.8 } }\n",
+            "sizes": "kind: region\ntags: [running]\nregion: { search: { x: 0.5, y: 0, width: 0.5, height: 0.5 }, scales: [0.9, 1.0, 1.1] }\n",
+            "narrow": "kind: region\ntags: [running]\nregion: { search: { x: 0.5, y: 0, width: 0.5, height: 0.5 }, scales: [1.0] }\n",
+        ]
+        for (name, yaml) in needles {
+            try yaml.write(to: folder.appendingPathComponent(name + ".yaml"), atomically: true, encoding: .utf8)
+            try Data([0]).write(to: folder.appendingPathComponent(name + ".png"))
+        }
+        let warnings = Dictionary(uniqueKeysWithValues: try NeedleLibrary.load([folder]).needles.map { ($0.id, $0.searchWarnings) })
+        #expect(warnings["whole"]?.first?.contains("the whole screen") == true)
+        #expect(warnings["wide"]?.first?.contains("64%") == true)
+        #expect(warnings["sizes"]?.first?.contains("3 sizes") == true)
+        #expect(warnings["narrow"] == [])
+    }
 }
 
 @Suite("Scenario key actions")

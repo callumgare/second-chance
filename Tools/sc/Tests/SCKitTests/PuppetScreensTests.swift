@@ -107,6 +107,14 @@ struct PuppetScreensTests {
         #expect(abs(target.point.x - 265) <= 1 && abs(target.point.y - 208) <= 1)
     }
 
+    @Test("A big region's search reaches no more than a tenth of the window past it")
+    func bigRegionSearch() throws {
+        let frame = try Self.frame(Self.title + Self.button(250, 200))
+        let cut = try NeedleCut.make(tag: "logo", from: frame, region: CGRect(x: 60, y: 40, width: 200, height: 150), text: false, origin: "a test")
+        // 32 and 24 points (a tenth of 320x240) on each side, not 200 and 150.
+        #expect(cut.yaml.contains("search: { x: 0.0875, y: 0.0667, width: 0.825, height: 0.825 }"))
+    }
+
     @Test("A needle cut from outside the window, or from a blank screen, is refused")
     func refusedCuts() throws {
         let frame = try Self.frame(Self.title)
