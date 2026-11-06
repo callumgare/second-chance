@@ -556,8 +556,15 @@ itself, but quits on F12 held down. A launch that says `--wine.quit-key=f12`
 (`RecordedLaunch.quitKey`) sets `QUIT_KEY`, and then the quit watch, once it
 has reported `quit requested`, holds that key down in the game's window for
 3 s instead and cancels the quit; the game quits itself, and its exit counts
-as asked for. The keys it knows are `f1`–`f12`, `escape`, `return`, `q` and
-`x`. A logout the game holds up this way is cancelled, as macOS does whenever
+as asked for. A game that quits through its own menus takes several keys,
+separated by spaces, which are pressed in turn, 2.5 s apart (its menu, back from
+a game, takes over a second to read keys again), rather than held:
+Icy Tower, an Allegro game, reacts to a key going down, not to one held, and
+quits from a game on `--wine.quit-key="escape escape escape escape escape"`
+(the first two leave the game for its menu, the next two choose its Exit; the
+fifth covers a game paused with P, where the first Escape resumes it). The
+keys it knows are `f1`–`f12`, `escape`, `return`, `q` and `x`; one it doesn't
+know leaves the quit to Wine, with a warning. A logout the game holds up this way is cancelled, as macOS does whenever
 an app turns it down. Option-F4 does nothing in Wine's Mac driver, which
 doesn't take Option for Alt unless the prefix says so.
 

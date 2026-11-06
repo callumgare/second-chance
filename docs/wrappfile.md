@@ -462,7 +462,9 @@ app keeps no Wine.
   refused when planning. ScummVM and DOSBox games are always fullscreen.
 - **`--wine.quit-key=<key>`** makes the app's Quit hold that key down in the
   program for 3 s, for one that ignores Wine's quit but quits on a key of its
-  own, as Iji does on F12
+  own, as Iji does on F12. Several keys, separated by spaces
+  (`--wine.quit-key="escape escape return"`), are pressed in turn instead,
+  for one that quits through its own menus, as Icy Tower does
   ([wine-in-process-helpers.md](wine-in-process-helpers.md#a-game-that-ignores-the-apps-quit)).
 - **A Steam launch is `steam://rungameid/<app id>`**, with no arguments, and
   names the program Steam starts, `--steam.exe=<its path in Wine>`, which the

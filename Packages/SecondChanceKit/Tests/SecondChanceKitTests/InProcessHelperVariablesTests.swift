@@ -103,6 +103,8 @@ struct InProcessHelperVariablesTests {
             return Wine.inProcessHelperVariables(gameExe: "iji.exe", graphicsAPI: .direct3D, launch: launch, environment: [:])["QUIT_KEY"]
         }
         #expect(key(["wine.quit-key": "f12"]) == "f12")
+        // Several keys, pressed in turn, go through as they are written
+        #expect(key(["wine.quit-key": "escape escape return"]) == "escape escape return")
         #expect(key([:]) == nil)
     }
 }
