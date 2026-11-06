@@ -60,9 +60,11 @@ struct SessionSetupCommand: AsyncParsableCommand {
             }
             try await Self.waitForLogins(users, on: mac, session: session)
         }
-        // Turning the screen saver off writes a setting and shows nothing, so
-        // it alone goes ahead under someone else's lease.
-        if tasks.contains(where: { $0 != .screensaver }) {
+        // Only Peekaboo and the audio tap open Screen Sharing into a session
+        // and put prompts on its screen; the screen saver's setting and the
+        // certificate in the keychain show nothing there, so they go ahead
+        // under someone else's lease.
+        if tasks.contains(where: Self.disturbsSession) {
             try await Self.checkLeases(users, on: mac, session: session, ignoring: global.ignoreScreenLease)
         }
         var failed: [String] = []
@@ -77,7 +79,8 @@ struct SessionSetupCommand: AsyncParsableCommand {
         if tasks.contains(.signing) {
             if let remote = Invocation.remote {
                 // The certificate is in the console user's keychain on that Mac.
-                let status = try await Remote.run(on: remote, arguments: ["session", "setup", "--task", "signing"] + users)
+                // Leases were checked here, if at all: the sc there mustn't ask again.
+                let status = try await Remote.run(on: remote, arguments: ["session", "setup", "--task", "signing", "--ignore-screen-lease"] + users)
                 if status != 0 { failed.append("signing") }
             } else {
                 // The test users' passwords are in the keychain too, locked over SSH.
@@ -106,6 +109,12 @@ struct SessionSetupCommand: AsyncParsableCommand {
                           hints: ["Run what's left again: sc session setup" + failed.map { " --task \($0)" }.joined()
                                   + users.map { " \($0)" }.joined() + (mac.map { " --on \($0)" } ?? "")])
         }
+    }
+
+    /// Whether a task opens Screen Sharing into a session or puts prompts on
+    /// its screen, so a run there could be disturbed.
+    static func disturbsSession(_ task: Task) -> Bool {
+        task == .peekaboo || task == .audio
     }
 
     /// The users named that aren't in the Mac's pool, in the order named.

@@ -23,4 +23,9 @@ struct ScreenSaverSetupTests {
                 == ["second-chance-testing-4", "second-chance-testing-5"])
         #expect(SessionSetupCommand.notInPool(["a"], pool: []) == ["a"])
     }
+
+    @Test("Only the tasks that open a session's screen ask about someone else's lease")
+    func tasksThatDisturbASession() {
+        #expect(SessionSetupCommand.Task.allCases.filter(SessionSetupCommand.disturbsSession) == [.peekaboo, .audio])
+    }
 }

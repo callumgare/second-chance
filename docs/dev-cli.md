@@ -901,15 +901,18 @@ start (`defaults -currentHost write com.apple.screensaver idleTime -int 0`, as
 that user over SSH), which takes effect in the running session; it shows nothing,
 so it alone goes ahead in a session someone else has leased; `signing` gives each test user the console user's signing
 certificate (above), done on the test Mac, where that certificate is (it asks to unlock the
-keychain there, locked over SSH, which holds the test users' passwords too); `peekaboo` makes the
+keychain there, locked over SSH, which holds the test users' passwords too), only when one of
+them hasn't got it; neither shows anything in the session, so both go ahead in one someone
+else has leased; `peekaboo` makes the
 grants a minute each: with `--on`, for that Mac's test sessions, and without, this
 Mac's. Unlike other commands it doesn't run on the other Mac (`Remote.runsHere`): it
 reaches the test sessions over SSH itself, since the Screen Sharing window has to open
 where you are. Here it needs this Mac's own keys in each test user's authorized keys, which
 `session add` gives them (`--install-keys` for older users); and as Screen Sharing
-won't connect a Mac to itself, it goes through an SSH tunnel into the test user. A
-session someone else has leased (a run going there) is left alone unless you say
-otherwise: at a terminal it asks first, defaulting to no, and from a script it stops
+won't connect a Mac to itself, it goes through an SSH tunnel into the test user. As
+`peekaboo` and `audio` open Screen Sharing into a session and put prompts on its screen,
+with either, a session someone else has leased (a run going there) is left alone unless you say
+otherwise, asked once, here: at a terminal it asks first, defaulting to no, and from a script it stops
 unless given `--ignore-screen-lease`. For each test user (default: the pool) it:
 
 1. installs Peekaboo on the test Mac if it's missing: the app into `/Applications`
