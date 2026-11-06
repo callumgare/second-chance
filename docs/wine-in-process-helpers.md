@@ -558,13 +558,28 @@ has reported `quit requested`, holds that key down in the game's window for
 3 s instead and cancels the quit; the game quits itself, and its exit counts
 as asked for. A game that quits through its own menus takes several keys,
 separated by spaces, which are pressed in turn, 2.5 s apart (its menu, back from
-a game, takes over a second to read keys again), rather than held:
-Icy Tower, an Allegro game, reacts to a key going down, not to one held, and
-quits from a game on `--wine.quit-key="escape escape escape escape escape"`
-(the first two leave the game for its menu, the next two choose its Exit; the
-fifth covers a game paused with P, where the first Escape resumes it). The
-keys it knows are `f1`–`f12`, `escape`, `return`, `q` and `x`; one it doesn't
-know leaves the quit to Wine, with a warning. A logout the game holds up this way is cancelled, as macOS does whenever
+a game, takes over a second to read keys again), rather than held.
+
+A game whose quit key asks the player first takes a second set,
+`--wine.quit-confirm-key` (`QUIT_CONFIRM_KEY`). The first Quit then presses
+the quit key alone, once, and a Quit within 10 s of it presses the confirm
+keys in turn. Icy Tower, an Allegro game, reacts to a key going down, not to
+one held: `--wine.quit-key=escape` shows its question in a game, and the
+confirm keys are Escape ten times, more than any of its screens needs (from a
+game, two leave for its menu and two more choose its Exit; a game paused with
+P takes one more). Extra presses do nothing once the game has gone, as the
+helper pressing them goes with it.
+
+With a quit key, the game window's close button is a Quit too
+(`-[WineWindow windowShouldClose:]`): Wine would pass it to the game as its
+window closing, which these games ignore. Other windows close as Wine closes
+them.
+
+The keys are the ones puppet control presses (`key_names.m`): any letter,
+digit or unshifted punctuation, `escape`, `return`, `space`, `tab`, the
+arrows (`up`, `left`, …), `home`, `end`, `pageup`, `pagedown`, `delete` and
+`f1`–`f12`. One it can't press (an unknown name, or a character that needs
+shift) leaves the quit to Wine, with a warning. A logout the game holds up this way is cancelled, as macOS does whenever
 an app turns it down. Option-F4 does nothing in Wine's Mac driver, which
 doesn't take Option for Alt unless the prefix says so.
 

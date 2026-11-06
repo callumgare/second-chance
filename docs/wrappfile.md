@@ -464,8 +464,14 @@ app keeps no Wine.
   program for 3 s, for one that ignores Wine's quit but quits on a key of its
   own, as Iji does on F12. Several keys, separated by spaces
   (`--wine.quit-key="escape escape return"`), are pressed in turn instead,
-  for one that quits through its own menus, as Icy Tower does
+  for one that quits through its own menus. Either way the program's close
+  button does the same as Quit
   ([wine-in-process-helpers.md](wine-in-process-helpers.md#a-game-that-ignores-the-apps-quit)).
+- **`--wine.quit-confirm-key=<keys>`**, beside a quit key, splits Quit in
+  two, for a program whose quit key asks first: the first Quit presses the
+  quit key alone, once, and a second within 10 s presses these keys in turn,
+  as Icy Tower's (`--wine.quit-key=escape`, and Escape ten times to confirm).
+  Without `--wine.quit-key` it's refused when planning.
 - **A Steam launch is `steam://rungameid/<app id>`**, with no arguments, and
   names the program Steam starts, `--steam.exe=<its path in Wine>`, which the
   app finds the game's process by; as Steam starts a Windows game in the

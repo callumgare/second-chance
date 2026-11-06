@@ -107,4 +107,16 @@ struct InProcessHelperVariablesTests {
         #expect(key(["wine.quit-key": "escape escape return"]) == "escape escape return")
         #expect(key([:]) == nil)
     }
+
+    @Test("--wine.quit-confirm-key gives the quit watch the keys a second Quit presses, only beside a quit key")
+    func theLaunchNamesConfirmKeys() {
+        func variables(_ options: [String: String]) -> [String: String] {
+            let launch = RecordedLaunch(program: "wine:C:/IcyTower/icytower13.exe", options: options, format: RecordedLaunch.currentFormat)
+            return Wine.inProcessHelperVariables(gameExe: "icytower13.exe", graphicsAPI: .directDraw, launch: launch, environment: [:])
+        }
+        let both = variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape escape"])
+        #expect(both["QUIT_KEY"] == "escape")
+        #expect(both["QUIT_CONFIRM_KEY"] == "escape escape")
+        #expect(variables(["wine.quit-confirm-key": "escape"])["QUIT_CONFIRM_KEY"] == nil)
+    }
 }

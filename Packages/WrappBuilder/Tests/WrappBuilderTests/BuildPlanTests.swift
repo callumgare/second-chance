@@ -159,6 +159,22 @@ struct BuildPlanTests {
         #expect(throws: BuildPlanner.PlanError.self) { try plan(creates: "C:/Game/Other.exe") }
     }
 
+    @Test("--wine.quit-confirm-key is recorded beside a quit key, and refused without one")
+    func quitConfirmKey() throws {
+        func plan(_ options: String) throws -> BuildPlan {
+            let (planner, _, bundle) = try planner("""
+            FROM --module=wine@10 prefix AS only
+            LAUNCH --wine.graphics=direct-draw \(options) C:/Game/Game.exe
+            """)
+            return try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
+                                    conditions: BuildConditions(arch: "arm64", macos: 15))
+        }
+        let both = try plan("--wine.quit-key=escape --wine.quit-confirm-key=\"escape escape\"")
+        #expect(both.launch?.quitKey == "escape")
+        #expect(both.launch?.quitConfirmKey == "escape escape")
+        #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.quit-confirm-key=escape") }
+    }
+
     @Test("The wine update: an old app's tree, given this Wine and the prefix's settings, its drives left alone")
     func wineUpdate() throws {
         let modules = try shippedModules()

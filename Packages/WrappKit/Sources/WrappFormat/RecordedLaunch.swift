@@ -171,6 +171,11 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     /// program that ignores Wine's quit but quits on a key of its own.
     public var quitKey: String? { options["wine.quit-key"] }
 
+    /// `--wine.quit-confirm-key=<keys>`: the keys a second Quit soon after
+    /// the first presses, for a program whose quit key asks first (Icy
+    /// Tower's Escape); the first Quit then presses the quit key alone.
+    public var quitConfirmKey: String? { options["wine.quit-confirm-key"] }
+
     /// Whether the wrapp arms cursor lock: when its launch says
     /// `--wine.cursor-lock`, or, recorded before it could, when the program
     /// may draw through cnc-ddraw (`inferred`).

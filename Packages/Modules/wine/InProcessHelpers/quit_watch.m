@@ -64,18 +64,20 @@ static IMP gWineShouldTerminate;
 /// (Iji quits on F12 held for about a second).
 static const double kQuitKeyHoldSeconds = 3;
 
-/// A quit key's virtual keycode (US layout); -1 for a name it doesn't know.
-static int quitKeyCode(const char *name) {
-    static const struct { const char *name; int code; } keys[] = {
-        {"f1", 122}, {"f2", 120}, {"f3", 99}, {"f4", 118}, {"f5", 96}, {"f6", 97}, {"f7", 98},
-        {"f8", 100}, {"f9", 101}, {"f10", 109}, {"f11", 103}, {"f12", 111},
-        {"escape", 53}, {"return", 36}, {"q", 12}, {"x", 7},
-    };
-    for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
-        if (strcasecmp(name, keys[i].name) == 0) return keys[i].code;
-    }
-    return -1;
-}
+/// How long each of several quit keys is down, and how long from one to the
+/// next: long enough for a game that polls its keyboard each frame to see
+/// the press, and to have changed screens before the next. Icy Tower's menu,
+/// back from a game, takes over 1.2 s to read keys again; 2.5 s does.
+static const double kQuitKeyPressSeconds = 0.15;
+static const double kQuitKeyGapSeconds = 2.5;
+
+/// How soon after the quit key a second quit presses the confirm keys
+/// (QUIT_CONFIRM_KEY) rather than the quit key again.
+static const double kQuitConfirmSeconds = 10;
+
+/// When the quit key was last pressed for a launch with confirm keys, in
+/// system uptime; 0 when a quit since has pressed them. Main thread only.
+static double gQuitKeyPressedAt;
 
 /// The game's window: the biggest visible one of Wine's.
 static NSWindow *gameWindowForKeys(void) {
@@ -93,21 +95,10 @@ static NSWindow *gameWindowForKeys(void) {
     return best;
 }
 
-/// The characters a quit key types. Wine reads the keycode for the key's
-/// state, but the characters for what it types: Icy Tower's menus read
-/// Escape as typed, and an Escape with no characters goes unseen there.
-static NSString *quitKeyCharacters(unsigned short code) {
-    switch (code) {
-        case 53: return @"\x1b";
-        case 36: return @"\r";
-        case 12: return @"q";
-        case 7: return @"x";
-        default: return @"";
-    }
-}
-
-static void postQuitKey(NSEventType type, unsigned short code, NSInteger windowNumber) {
-    NSString *characters = quitKeyCharacters(code);
+/// A key's down or up in the game's window, with the characters it types
+/// (key_names.m).
+static void postQuitKey(NSEventType type, NSString *name, unsigned short code, NSInteger windowNumber) {
+    NSString *characters = helperKeyCharacters(name, code);
     NSEvent *event = [NSEvent keyEventWithType:type location:NSZeroPoint modifierFlags:0
                                      timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:windowNumber
                                        context:nil characters:characters charactersIgnoringModifiers:characters
@@ -115,77 +106,110 @@ static void postQuitKey(NSEventType type, unsigned short code, NSInteger windowN
     if (event) [NSApp postEvent:event atStart:NO];
 }
 
-/// How long each of several quit keys is down, and how long from one to the
-/// next: long enough for a game that polls its keyboard each frame to see
-/// the press, and to have changed screens before the next. Icy Tower's menu,
-/// back from a game, takes over 1.2 s to read keys again; 2.5 s does.
-static const double kQuitKeyPressSeconds = 0.15;
-static const double kQuitKeyGapSeconds = 2.5;
-
-/// The launch's quit keys, each one's code; empty when there are none, or
-/// when one isn't a name it knows (reported).
-static NSArray<NSNumber *> *quitKeyCodes(NSString *keys) {
-    NSMutableArray<NSNumber *> *codes = [NSMutableArray array];
-    for (NSString *name in [keys componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceCharacterSet]) {
+/// The names in a launch's quit keys, space-separated; empty when there are
+/// none, or when one isn't a key it can press (reported): a name key_names.m
+/// doesn't know, or a character that needs shift, which it doesn't hold.
+static NSArray<NSString *> *quitKeyNames(const char *variable) {
+    const char *value = getenv(variable);
+    if (!value || !*value) return @[];
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
+    for (NSString *name in [@(value) componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceCharacterSet]) {
         if (name.length == 0) continue;
-        int code = quitKeyCode(name.UTF8String);
-        if (code < 0) {
-            helperReport("QuitWatch", "warning", "quit key %s isn't one it knows; quitting as Wine does", name.UTF8String);
+        BOOL shift = NO;
+        if (helperKeyCode(name, &shift) < 0 || shift) {
+            helperReport("QuitWatch", "warning", "quit key %s isn't one it can press; quitting as Wine does", name.UTF8String);
             return @[];
         }
-        [codes addObject:@(code)];
+        [names addObject:name];
     }
-    return codes;
+    return names;
 }
 
-/// Hold the launch's quit key in the game's window, or press its quit keys
-/// in turn, on the main thread, where applicationShouldTerminate: is called:
-/// each down now or later and up later still, so the run loop goes on
-/// delivering events meanwhile. NO when there is no key or no window to
-/// press it in.
-static BOOL pressQuitKeys(void) {
-    const char *value = getenv("QUIT_KEY");
-    if (!value || !*value) return NO;
-    NSArray<NSNumber *> *codes = quitKeyCodes(@(value));
-    if (codes.count == 0) return NO;
+/// Press keys in turn in the game's window, or with `holdOne`, hold a single
+/// key down (Iji's F12), on the main thread, where applicationShouldTerminate:
+/// is called: each down now or later and up later still, so the run loop
+/// goes on delivering events meanwhile. NO when there's no window to press
+/// them in.
+static BOOL pressQuitKeys(NSArray<NSString *> *names, BOOL holdOne) {
     NSWindow *window = gameWindowForKeys();
+    NSString *keys = [names componentsJoinedByString:@" "];
     if (!window) {
-        helperReport("QuitWatch", "warning", "no game window to press the quit key %s in; quitting as Wine does", value);
+        helperReport("QuitWatch", "warning", "no game window to press the quit key %s in; quitting as Wine does", keys.UTF8String);
         return NO;
     }
     NSInteger windowNumber = window.windowNumber;
     [window makeKeyAndOrderFront:nil];
-    if (codes.count == 1) {
-        unsigned short code = codes[0].unsignedShortValue;
-        postQuitKey(NSEventTypeKeyDown, code, windowNumber);
+    BOOL shift = NO;
+    if (names.count == 1 && holdOne) {
+        NSString *name = names[0];
+        unsigned short code = (unsigned short)helperKeyCode(name, &shift);
+        postQuitKey(NSEventTypeKeyDown, name, code, windowNumber);
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kQuitKeyHoldSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            postQuitKey(NSEventTypeKeyUp, code, windowNumber);
+            postQuitKey(NSEventTypeKeyUp, name, code, windowNumber);
         });
-        helperReport("QuitWatch", "notice", "holding %s for %.0f s, the game's own quit, rather than quitting", value, kQuitKeyHoldSeconds);
+        helperReport("QuitWatch", "notice", "holding %s for %.0f s, the game's own quit, rather than quitting", keys.UTF8String, kQuitKeyHoldSeconds);
         return YES;
     }
-    [codes enumerateObjectsUsingBlock:^(NSNumber *number, NSUInteger index, BOOL *stop) {
-        unsigned short code = number.unsignedShortValue;
+    [names enumerateObjectsUsingBlock:^(NSString *name, NSUInteger index, BOOL *stop) {
+        BOOL unused = NO;
+        unsigned short code = (unsigned short)helperKeyCode(name, &unused);
         double down = index * kQuitKeyGapSeconds;
         // The up is timed from when the down was posted, not from now: the
         // main thread can be held up for seconds (Icy Tower's menu, back
         // from a game), and a down and up let out together are a press a
         // game polling its keyboard never sees.
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(down * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            postQuitKey(NSEventTypeKeyDown, code, windowNumber);
+            postQuitKey(NSEventTypeKeyDown, name, code, windowNumber);
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kQuitKeyPressSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                postQuitKey(NSEventTypeKeyUp, code, windowNumber);
+                postQuitKey(NSEventTypeKeyUp, name, code, windowNumber);
             });
         });
     }];
-    helperReport("QuitWatch", "notice", "pressing %s in turn, the game's own quit, rather than quitting", value);
+    helperReport("QuitWatch", "notice", "pressing %s in turn, the game's own quit, rather than quitting", keys.UTF8String);
+    return YES;
+}
+
+/// A quit request, for a launch with quit keys: press them, and say whether
+/// that's what happened (else the quit goes to Wine). With confirm keys too,
+/// a first request presses the quit key alone, which in a game like Icy
+/// Tower brings up its own question, and one within kQuitConfirmSeconds of it
+/// presses the confirm keys, which see the quit through.
+static BOOL quitThroughKeys(void) {
+    NSArray<NSString *> *quit = quitKeyNames("QUIT_KEY");
+    if (quit.count == 0) return NO;
+    NSArray<NSString *> *confirm = quitKeyNames("QUIT_CONFIRM_KEY");
+    if (confirm.count == 0) return pressQuitKeys(quit, YES);
+    double now = NSProcessInfo.processInfo.systemUptime;
+    if (gQuitKeyPressedAt > 0 && now - gQuitKeyPressedAt <= kQuitConfirmSeconds) {
+        gQuitKeyPressedAt = 0;
+        return pressQuitKeys(confirm, NO);
+    }
+    if (!pressQuitKeys(quit, NO)) return NO;
+    gQuitKeyPressedAt = now;
+    helperReport("QuitWatch", "notice", "a quit within %.0f s presses the confirm keys", kQuitConfirmSeconds);
     return YES;
 }
 
 static NSApplicationTerminateReply reportingShouldTerminate(id self, SEL _cmd, NSApplication *sender) {
     helperReport("QuitWatch", "notice", "quit requested");
-    if (pressQuitKeys()) return NSTerminateCancel;
+    if (quitThroughKeys()) return NSTerminateCancel;
     return ((NSApplicationTerminateReply (*)(id, SEL, NSApplication *))gWineShouldTerminate)(self, _cmd, sender);
+}
+
+// MARK: - WineWindow
+
+static IMP gWineWindowShouldClose;
+
+/// The game's window's close button, for a launch with quit keys: a quit,
+/// as ⌘Q is. Wine would pass it on to the game as its window closing
+/// (SC_CLOSE), which games that need quit keys ignore. Any other window, or
+/// a launch without quit keys, closes as Wine does.
+static BOOL quitKeysShouldClose(id self, SEL _cmd, id sender) {
+    if (quitKeyNames("QUIT_KEY").count > 0 && self == gameWindowForKeys()) {
+        helperReport("QuitWatch", "notice", "quit requested (window closed)");
+        if (quitThroughKeys()) return NO;
+    }
+    return ((BOOL (*)(id, SEL, id))gWineWindowShouldClose)(self, _cmd, sender);
 }
 
 __attribute__((constructor))
@@ -202,5 +226,12 @@ static void quitWatchInit(void) {
     gWineFlushBuffer = replaceOwnMethod(NSClassFromString(@"WineOpenGLContext"), @selector(flushBuffer), (IMP)reportingFlushBuffer);
     gWineShouldTerminate = replaceOwnMethod(NSClassFromString(@"WineApplicationController"),
                                             @selector(applicationShouldTerminate:), (IMP)reportingShouldTerminate);
+    if (getenv("QUIT_KEY") && *getenv("QUIT_KEY")) {
+        gWineWindowShouldClose = replaceOwnMethod(NSClassFromString(@"WineWindow"), @selector(windowShouldClose:),
+                                                  (IMP)quitKeysShouldClose);
+        if (!gWineWindowShouldClose) {
+            helperReport("QuitWatch", "warning", "no -[WineWindow windowShouldClose:]; the game's close button closes its window as Wine does");
+        }
+    }
     helperReport("QuitWatch", "notice", "armed in %s", getenv("QUIT_WATCH_EXE"));
 }

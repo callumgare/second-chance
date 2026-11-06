@@ -1004,6 +1004,9 @@ public nonisolated struct BuildPlanner {
                 if let window = options["wine.window"], !["fullscreen", "windowed"].contains(window) {
                     throw PlanError(description: "\(origin): --wine.window=\(window): it's fullscreen or windowed, or left out for what the program asks for")
                 }
+                if options["wine.quit-confirm-key"] != nil, options["wine.quit-key"] == nil {
+                    throw PlanError(description: "\(origin): --wine.quit-confirm-key is pressed on a second Quit after --wine.quit-key's: name the quit key too")
+                }
                 let launch = RecordedLaunch(program: program, arguments: Array(arguments.dropFirst()), environment: environment,
                                             options: options, fallback: fallback, format: RecordedLaunch.currentFormat)
                 try checkLaunch(launch, origin: origin)

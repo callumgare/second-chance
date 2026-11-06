@@ -116,8 +116,12 @@ nonisolated extension Wine {
         // a player quitting (GameQuitCheck).
         env["QUIT_WATCH_EXE"] = gameExe
         // A launch that says --wine.quit-key has the quit watch hold that key
-        // when the app is asked to quit.
-        if let key = launch?.quitKey, !key.isEmpty { env["QUIT_KEY"] = key }
+        // when the app is asked to quit, and with --wine.quit-confirm-key,
+        // press those keys when it's asked again soon after.
+        if let key = launch?.quitKey, !key.isEmpty {
+            env["QUIT_KEY"] = key
+            if let confirm = launch?.quitConfirmKey, !confirm.isEmpty { env["QUIT_CONFIRM_KEY"] = confirm }
+        }
         // Puppet control arms only when WrappPuppeteer started the wrapp,
         // which it marks by passing the directory for the helper's socket.
         if puppetDirectory(in: environment) != nil {

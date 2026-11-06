@@ -24,7 +24,8 @@ IFS=$'\n\t'
 # in), puppet_control.m (lets the integration tests' WrappPuppeteer see and
 # click the game) and virtual_pointer.m (shows Wine a pointer that moves, for
 # those clicks, in a login where the Mac's can't; it wraps display_below_notch.m's
-# wrappers, so it is linked after it). ScummVM wrapps load the same dylib into scummvm, for
+# wrappers, so it is linked after it), with key_names.m, the keys puppet control and
+# the quit watch press by name. ScummVM wrapps load the same dylib into scummvm, for
 # puppet_control.m alone. ScreenCaptureKit is weak-linked: puppet_control.m
 # needs macOS 14.4 and checks for it.
 # See docs/wine-in-process-helpers.md.
@@ -47,6 +48,7 @@ clang -dynamiclib \
     "${HELPERS_DIR}/cocoa_start_wait.m" \
     "${HELPERS_DIR}/hidden_windows.m" \
     "${HELPERS_DIR}/virtual_pointer.m" \
+    "${HELPERS_DIR}/key_names.m" \
     -framework Cocoa \
     -framework OpenGL \
     -framework ImageIO \

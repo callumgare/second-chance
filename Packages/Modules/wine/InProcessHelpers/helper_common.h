@@ -248,6 +248,18 @@ static inline IMP replaceOwnMethod(Class cls, SEL selector, IMP replacement) {
     }
     return method_setImplementation(method, replacement);
 }
+
+// ## Keys by name (key_names.m)
+
+/// A key's virtual keycode (US layout), and whether shift types it, from its
+/// name (`escape`, `f12`, `left`, `space`, ...) or the character it types;
+/// -1 when it has none.
+int helperKeyCode(NSString *name, BOOL *shift);
+
+/// The characters a key types, for its event: Wine reads the keycode for the
+/// key's state but the characters for what it types, and a game reading
+/// typed keys (Icy Tower's menus) misses a key without them.
+NSString *helperKeyCharacters(NSString *name, int code);
 #endif
 
 #endif

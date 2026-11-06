@@ -595,6 +595,7 @@
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/puppet_control.m",
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/helper_common.h",
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/virtual_pointer.m",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/key_names.m",
 			);
 			name = "Build In-Process Helpers";
 			outputFileListPaths = (
