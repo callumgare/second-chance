@@ -284,6 +284,7 @@ struct PuppetAudioCommand: AsyncParsableCommand {
         return SCError(
             "\(AudioTapApp.name) hasn't been allowed to record system audio for \(user) on \(host) (\(state.isEmpty ? "no answer" : state)).",
             hints: [
+                "For a test session, from the Mac you're at: sc session setup --task audio \(user) --on \(host)",
                 "Logged in as \(user) on \(host) (Screen Sharing for a test session): answer its prompt with Allow, or in System Settings › "
                     + "Privacy & Security › Screen & System Audio Recording, under \"System Audio Recording Only\", turn \(AudioTapApp.name) on "
                     + "(+ adds it: \(AudioTapApp.app.path)).",

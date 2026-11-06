@@ -2,13 +2,13 @@ import ArgumentParser
 import Foundation
 
 /// Everything a test session needs beyond its login, done or put right:
-/// the console user's signing certificate in its keychain, and Peekaboo with
-/// its grants. `session add` runs it last, for the users it made or checked
+/// the console user's signing certificate in its keychain, Peekaboo with
+/// its grants, and SC Audio Tap with its permission. `session add` runs it last, for the users it made or checked
 /// (`--just-added`).
 struct SessionSetupCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "setup",
-        abstract: "Set test sessions up: your signing certificate, and Peekaboo with its grants (or only the --task ones).",
+        abstract: "Set test sessions up: your signing certificate, Peekaboo and SC Audio Tap with their grants (or only the --task ones).",
         discussion: """
         Run it on the Mac you're at. With --on it sets up that Mac's test \
         sessions; without, this Mac's. Each task skips what's done already. \
@@ -17,12 +17,15 @@ struct SessionSetupCommand: AsyncParsableCommand {
         keychain there; macOS may ask on its screen to allow the export). \
         peekaboo: installs Peekaboo if missing, starts it in each session, and \
         for a grant it lacks opens that pane there and Screen Sharing here, for \
-        you to turn it on.
+        you to turn it on. audio: installs SC Audio Tap, which sc puppet audio \
+        listens through, built and signed here, and for its system-audio \
+        permission asks in that session, with Screen Sharing here, for you to \
+        allow it.
         """
     )
 
     enum Task: String, CaseIterable, ExpressibleByArgument {
-        case signing, peekaboo
+        case signing, peekaboo, audio
     }
 
     @OptionGroup var global: GlobalOptions
@@ -33,7 +36,7 @@ struct SessionSetupCommand: AsyncParsableCommand {
     @Flag(help: "Only the users the last session add made or checked, once they've logged in. session add runs setup with it.")
     var justAdded = false
 
-    @Option(name: .customLong("task"), help: "A task to do, signing or peekaboo; give it again for more. Default: every one.")
+    @Option(name: .customLong("task"), help: "A task to do, signing, peekaboo or audio; give it again for more. Default: every one.")
     var only: [Task] = []
 
     func validate() throws {
@@ -69,6 +72,14 @@ struct SessionSetupCommand: AsyncParsableCommand {
             } catch {
                 failed.append("peekaboo")
                 session.ui.warning("Peekaboo's set-up stopped: \(error)")
+            }
+        }
+        if tasks.contains(.audio) {
+            do {
+                try await AudioTapSetup.run(users: users.isEmpty ? nil : users, on: mac, session: session)
+            } catch {
+                failed.append("audio")
+                session.ui.warning("SC Audio Tap's set-up stopped: \(error)")
             }
         }
         if !failed.isEmpty {

@@ -790,7 +790,7 @@ Peekaboo reads and drives Mac windows (system prompts, installers, Finder) where
 puppet helper only sees a game's window. Its Screen Recording and Accessibility grants
 are per user, and no script can give them: they live in the system's TCC database
 behind SIP, and even an MDM profile can't pre-approve Screen Recording. So
-`sc session setup [<user>… | --just-added] [--task signing|peekaboo]… [--on <host>]`, run
+`sc session setup [<user>… | --just-added] [--task signing|peekaboo|audio]… [--on <host>]`, run
 on the Mac you're at, does every set-up task a test session needs, or those each `--task` names, each
 skipping what's done: `signing` gives each test user the console user's signing
 certificate (above), done on the test Mac, where that certificate is (it asks to unlock the
@@ -817,6 +817,21 @@ each test user (default: the pool) it:
 4. waits for you to turn Peekaboo on (macOS asks for an admin's password, as test
    users are standard users), restarts the bridge so the grant takes, opens the next
    pane, and moves on once `peekaboo permissions` shows both.
+
+`audio` does the same for SC Audio Tap, which `sc puppet audio` listens through
+([puppet sessions](#puppet-sessions)), and its one permission, "System Audio
+Recording Only" (`AudioTapSetup`). It builds and signs the tap here, as
+`puppet start --on` does for a runtime copy, copies it with its stamp into each
+test user's `~/Library/Application Support/SecondChance/sc-audio-tap` (unless the
+same build is there), so `puppet audio` keeps it and the permission given to it, and
+asks the tap whether it has the permission, in the user's GUI session, since TCC
+goes by the process responsible for the asker and over SSH that would be SSH's. If
+not, it opens Screen Sharing here and has the tap ask, which puts macOS's prompt on
+that session's screen: Allow gives it. Otherwise it opens Screen & System Audio
+Recording there, where you turn the tap on under "System Audio Recording Only"
+(with an admin's password), and waits up to 15 minutes. Signed with your Apple
+Development identity, which `signing` gives the test users, the permission
+outlasts rebuilds; signed ad hoc, it says so, as a rebuild loses it.
 
 **Watching or using a test session by hand:** `sc session view [<user>] [--on <host>]`
 opens a Screen Sharing window here into that session, logged in with the password from
@@ -902,7 +917,9 @@ Beyond a single picture:
   preflight) and `audio` exits 6 until the permission is given: logged in
   as that user, answer its prompt with Allow, or in System Settings ›
   Privacy & Security › Screen & System Audio Recording, under "System Audio
-  Recording Only", turn SC Audio Tap on (+ adds it from that folder).
+  Recording Only", turn SC Audio Tap on (+ adds it from that folder). For a
+  test session, `sc session setup --task audio <user> --on <host>` does it
+  with you ([below](#peekaboo-in-test-sessions)).
 
 Run it in a [test session](#test-sessions), `sc --on <user>@<mac> puppet …`,
 to leave the Mac's screen free.
