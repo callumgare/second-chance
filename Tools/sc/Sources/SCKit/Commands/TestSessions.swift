@@ -633,12 +633,27 @@ struct SessionAddCommand: AsyncParsableCommand {
         try await Self.sudo(arguments)
     }
 
+    /// Where to run the command that needed sudo again: the same command
+    /// (less the `--logs` sc adds when it forwards one), in a terminal, with
+    /// `--on` if that's how it was run.
+    static var terminalHint: String {
+        var words = ["sc"] + (Invocation.remote.map { ["--on", $0] } ?? [])
+        var skipNext = false
+        for argument in Invocation.arguments {
+            if skipNext { skipNext = false; continue }
+            if argument == "--logs" { skipNext = true; continue }
+            if argument.hasPrefix("--logs=") { continue }
+            words.append(argument)
+        }
+        return "Run it again from a terminal: " + words.joined(separator: " ")
+    }
+
     static func sudo(_ arguments: [String]) async throws {
         // With nobody at a terminal to type the password, sudo would wait for ever.
         let cached = try await Proc.collect("/usr/bin/sudo", ["-n", "true"]).succeeded
         guard isatty(STDIN_FILENO) != 0 || cached else {
             throw SCError("This step needs an admin's password (sudo \(arguments.first ?? "")), and there's no terminal to type it in.",
-                          hints: ["Run it from a terminal: sc session add, or sc --on <host> session add from one."])
+                          hints: [terminalHint])
         }
         let status = try await Proc.inheritingTerminal("/usr/bin/sudo", arguments)
         guard status == 0 else { throw SCError("`sudo \(arguments.first ?? "")` failed (exit \(status)).") }
