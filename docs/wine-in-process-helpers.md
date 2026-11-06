@@ -317,6 +317,13 @@ integration test's — had to wait for.)
 
 It runs again each time the app becomes active.
 
+A game that asks cnc-ddraw for a window of its own (`DDSCL_NORMAL`) rather
+than a display mode, as Icy Tower does with its Fullscreen: No, is never
+locked: cnc-ddraw only locks the cursor for a game it is showing a mode
+for. There the helper gives up after its 15 clicks, and the cursor stays
+free over the picture, which does no harm to a game played with the
+keyboard.
+
 ### Why a middle click
 
 cnc-ddraw locks on any button's release, but while unlocked it drops the click

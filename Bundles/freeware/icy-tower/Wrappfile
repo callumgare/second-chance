@@ -11,6 +11,13 @@ CONST install-dir = "C:/IcyTower"
 
 FROM --module=wine@10 prefix AS download
 DO wine.cnc-ddraw
+# Allegro's windowed driver (its Fullscreen: No, and its first try at every
+# start) checks that its window's client area is the 640x480 it asked for.
+# Asked for a window, cnc-ddraw makes up a display mode the size the window
+# was then (a sliver) and reports that as the client area, so Allegro gave
+# up, and switching to it from the options crashed the game. A made-up mode
+# of 640x480 makes the check pass, for this game only (its exe's section).
+EDIT C:/windows/syswow64/ddraw.ini --ini=icytower13.fake_mode=640x480x16
 # Allegro's timer can hang its exit, waiting on a thread's handle Wine has
 # closed and given out again.
 DO wine.keep-thread-handles
