@@ -800,8 +800,18 @@ static void *answer(void *arg) {
             const char *bytes = [reply stringByAppendingString:@"\n"].UTF8String;
             size_t total = strlen(bytes), sent = 0;
             while (sent < total) {
-                ssize_t n = write(client, bytes + sent, total - sent);
-                if (n <= 0) break;
+                // A reply to a client that has gone (it timed out waiting)
+                // raised SIGPIPE, which kills the process this helper is in:
+                // the game, or an emulator it was inserted into (Basilisk II
+                // was). MSG_NOSIGNAL makes it fail with EPIPE instead.
+                // SO_NOSIGPIPE on the accepted socket didn't stop it.
+                ssize_t n = send(client, bytes + sent, total - sent, MSG_NOSIGNAL);
+                if (n <= 0) {
+                    // The client gave up before the reply: nothing to do but
+                    // say so.
+                    debugLog("reply to %s not sent: %s", line.UTF8String ?: "?", n < 0 ? strerror(errno) : "nothing written");
+                    break;
+                }
                 sent += (size_t)n;
             }
         }

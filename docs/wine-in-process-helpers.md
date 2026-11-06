@@ -928,7 +928,10 @@ to keep working.
 
 One request per connection: a line in, a reply out (one line, but for
 `windows`), starting `ok` or `error`. Connections are served at once, each on a
-thread of its own, so a capture that takes seconds holds up no click. Coordinates
+thread of its own, so a capture that takes seconds holds up no click. A reply to
+a client that has gone (it gave up waiting) is sent with `MSG_NOSIGNAL` and only
+logged as not sent: its `SIGPIPE` would kill the process the helper is in, the
+game or an emulator it was inserted into (Basilisk II, 2026-11-07). Coordinates
 are points in the game window with a top-left origin — a capture's pixels divided
 by `scale` — so no screen geometry is involved. Options are `name=value` words
 after the arguments. `PUPPET_CONTROL_EXE=*` arms it in every process that loads
