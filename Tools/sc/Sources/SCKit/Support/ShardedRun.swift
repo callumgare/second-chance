@@ -7,11 +7,12 @@ import WrappBuilder
 /// into one table naming each row's Mac and session
 /// (docs/testing.md#sharding-a-run-across-macs).
 ///
-/// The sc the person runs is the coordinator. It claims a free test session
-/// on each Mac, hands out the games by which installers each Mac has, runs
-/// each shard as `sc --on <user>@<host>:<path> test integration <its games>`,
-/// and reads back the results each shard writes (`--results-json`).
-/// Sessions are released at the end, on failure and on Ctrl-C too.
+/// The sc the person runs is the coordinator. It claims free test sessions
+/// on each Mac, as many as the Mac takes shards (`shardCount`), hands out
+/// the games by which installers each Mac has, runs each shard as
+/// `sc --on <user>@<host>:<path> test integration <its games>`, and reads
+/// back the results each shard writes (`--results-json`). Sessions are
+/// released at the end, on failure and on Ctrl-C too.
 
 /// What a shard writes for the coordinator to read back: its rows as its own
 /// table shows them, its exit status and its failures.
@@ -38,9 +39,7 @@ enum ShardPlan {
     }
 
     /// Somewhere a shard runs: one test session, and the installers its Mac
-    /// has. One per Mac for now, since launches on one Mac must not overlap
-    /// until it's measured how many a Mac can take at once before Wine slows
-    /// sharply; more sessions on a Mac would be more `Slot`s with its name.
+    /// has. A Mac running several shards is several slots with its name.
     struct Slot: Equatable, Sendable {
         var name: String
         var has: Set<String>
@@ -206,6 +205,28 @@ struct ShardCoordinator: Sendable {
     let forwarded: [String]
     /// `--shard-on`'s Macs, each `<host>[:<path>]` as `--on` takes it.
     let macs: [String]
+    /// `--shards-per-mac`, or nil for each Mac's own (`shardCount`).
+    var shardsPerMac: Int?
+    /// Whether `--build-concurrency` was given, which then holds for every
+    /// shard (`shardOptions`).
+    var buildConcurrencyGiven = false
+
+    /// How many shards a Mac runs at once. A Mac launches about one game
+    /// per two performance cores before Wine slows sharply (measured on an
+    /// M1 Max: docs/historical-plans/2026-11-06-puppet-toolkit.md#outcome),
+    /// and a build loads it like a launch; a shard builds and launches a game
+    /// at a time (`shardOptions`), so one shard per four performance cores.
+    static func shardCount(performanceCores: Int, requested: Int?) -> Int {
+        requested ?? max(1, performanceCores / 4)
+    }
+
+    /// A shard's options: the run's, and, when its Mac runs several shards
+    /// and no `--build-concurrency` was given, one build at a time, as each
+    /// shard's own default (`IntegrationOptions.defaultBuildConcurrency`)
+    /// counts the whole Mac's cores.
+    static func shardOptions(_ forwarded: [String], shardsOnMac: Int, buildConcurrencyGiven: Bool) -> [String] {
+        shardsOnMac > 1 && !buildConcurrencyGiven ? forwarded + ["--build-concurrency", "1"] : forwarded
+    }
 
     var ui: UI { session.ui }
     var repo: Repo { session.repo }
@@ -221,6 +242,8 @@ struct ShardCoordinator: Sendable {
         var user: String?
         var installers: Set<String> = []
         var problem: String?
+        /// How many shards run on this session's Mac, this one among them.
+        var shardsOnMac = 1
 
         var name: String { host }
         /// Where `--on` reaches the console user's checkout (for `session`).
@@ -247,14 +270,15 @@ struct ShardCoordinator: Sendable {
         // Long enough for the run, renewed by nothing: released at the end.
         let minutes = min(480, 60 + 20 * games.count)
 
-        // Each Mac's installers and a session there, side by side.
-        macs = await withTaskGroup(of: (Int, Mac).self) { group in
+        // Each Mac's installers and its sessions, Macs side by side: a Mac
+        // with no session to give is kept, once, to say why.
+        macs = await withTaskGroup(of: (Int, [Mac]).self) { group in
             for (index, mac) in macs.enumerated() {
                 group.addTask { (index, await prepare(mac, purpose: purpose, minutes: minutes)) }
             }
-            var prepared = macs
-            for await (index, mac) in group { prepared[index] = mac }
-            return prepared
+            var prepared = Array(repeating: [Mac](), count: macs.count)
+            for await (index, sessions) in group { prepared[index] = sessions }
+            return prepared.flatMap { $0 }
         }
         let claimed = macs.filter { $0.user != nil }
         do {
@@ -282,21 +306,45 @@ struct ShardCoordinator: Sendable {
 
     // MARK: Before
 
-    /// `--new`: a session of the run's own, never one this agent session (or
+    /// The Mac's sessions for this run, as many as it takes shards, each a
+    /// `Mac` with its user; or the Mac alone, with why, when it gave none.
+    /// `--new`: sessions of the run's own, never one this agent session (or
     /// person) already holds for other work, which its release would end.
-    private func prepare(_ mac: Mac, purpose: String, minutes: Int) async -> Mac {
+    /// One claim at a time, as each takes a session the last left free.
+    private func prepare(_ mac: Mac, purpose: String, minutes: Int) async -> [Mac] {
         var mac = mac
         mac.installers = await installers(on: mac)
-        let (status, lines) = await runSC(["--on", mac.consoleTarget, "session", "claim", "--json", "--new", "--for", "\(minutes)m", "--purpose", purpose],
-                                          log: "shard-claim-\(mac.name)")
-        if let claim = lines.reversed().lazy.compactMap(Claim.parse).first {
-            mac.user = claim.user
-        } else {
-            mac.problem = status == ScreenLease.heldExitCode
-                ? "no test session there is free."
-                : "couldn't claim a test session there (exit \(status)): \(Self.tail(lines))"
+        let wanted = Self.shardCount(performanceCores: await performanceCores(on: mac), requested: shardsPerMac)
+        var sessions: [Mac] = []
+        while sessions.count < wanted {
+            let (status, lines) = await runSC(["--on", mac.consoleTarget, "session", "claim", "--json", "--new", "--for", "\(minutes)m", "--purpose", purpose],
+                                              log: "shard-claim-\(mac.name)-\(sessions.count + 1)")
+            guard let claim = lines.reversed().lazy.compactMap(Claim.parse).first else {
+                if sessions.isEmpty {
+                    mac.problem = status == ScreenLease.heldExitCode
+                        ? "no test session there is free."
+                        : "couldn't claim a test session there (exit \(status)): \(Self.tail(lines))"
+                    return [mac]
+                }
+                ui.warning("\(mac.name) takes \(wanted) shards, but only \(sessions.count) of its test sessions \(sessions.count == 1 ? "was" : "were") free.")
+                break
+            }
+            var session = mac
+            session.user = claim.user
+            sessions.append(session)
         }
-        return mac
+        return sessions.map { var session = $0; session.shardsOnMac = sessions.count; return session }
+    }
+
+    /// The Mac's performance cores (all its cores where there are no
+    /// levels, on Intel), as `SystemLoad` counts them; 4, one shard, when it
+    /// can't be asked.
+    private func performanceCores(on mac: Mac) async -> Int {
+        let host = mac.raw.split(separator: ":", maxSplits: 1).first.map(String.init) ?? mac.host
+        let script = "sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || sysctl -n hw.physicalcpu"
+        guard let result = try? await Proc.collect("ssh", ["-T", host, "/bin/bash -c \(Remote.quote(script))"]), result.succeeded,
+              let cores = Int(result.output.trimmingCharacters(in: .whitespacesAndNewlines)) else { return 4 }
+        return cores
     }
 
     /// The line `session claim --json` prints.
@@ -375,6 +423,9 @@ struct ShardCoordinator: Sendable {
         for (mac, shard) in zip(macs, assignment.shards) where !shard.isEmpty {
             ui.detail("\(mac.name)/\(mac.user ?? "?"): \(shard.map(\.slug).joined(separator: ", "))")
         }
+        for (name, count) in Dictionary(grouping: macs, by: \.name).mapValues(\.count).sorted(by: { $0.key < $1.key }) where count > 1 {
+            ui.detail("\(name) runs \(count) shards at once, building a game at a time each\(buildConcurrencyGiven ? " (or as --build-concurrency says)" : "").")
+        }
         if !assignment.unrunnable.isEmpty {
             ui.warning("No Mac has the installers for \(assignment.unrunnable.map(\.slug).joined(separator: ", ")), so they won't be tested.")
         }
@@ -413,12 +464,13 @@ struct ShardCoordinator: Sendable {
 
     private func runShard(on mac: Mac, user: String, games: [String], planned: [GameBoard.Row],
                           purpose: String, stamp: String) async throws -> ShardOutcome {
-        let resultsFile = "test-results/\(stamp)-shard-\(mac.name).json"
+        let resultsFile = "test-results/\(stamp)-shard-\(mac.name)-\(user).json"
         let label = "\(mac.name)/\(user)"
-        let arguments = ["--on", mac.sessionTarget(user), "test", "integration"] + games + forwarded
+        let options = Self.shardOptions(forwarded, shardsOnMac: mac.shardsOnMac, buildConcurrencyGiven: buildConcurrencyGiven)
+        let arguments = ["--on", mac.sessionTarget(user), "test", "integration"] + games + options
             + ["--results-json", resultsFile, "--open-report", "never", "--purpose", purpose]
         ui.line(ui.format("\(.primary("▸ \(label): sc test integration \(games.joined(separator: " "))"))"))
-        let (status, lines) = await runSC(arguments, log: "shard-\(mac.name)") { line in
+        let (status, lines) = await runSC(arguments, log: "shard-\(mac.name)-\(user)") { line in
             // The run's own story, game by game; the rest is in the log.
             if line.hasPrefix("▸ ") { ui.line("  \(label) \(line)") }
         }
@@ -473,9 +525,9 @@ struct ShardCoordinator: Sendable {
                 guard let user = mac.user else { continue }
                 group.addTask {
                     if stopRuns {
-                        _ = await runSC(["--on", mac.sessionTarget(user), "attach", "--stop"], log: "shard-stop-\(mac.name)")
+                        _ = await runSC(["--on", mac.sessionTarget(user), "attach", "--stop"], log: "shard-stop-\(mac.name)-\(user)")
                     }
-                    let (status, lines) = await runSC(["--on", mac.consoleTarget, "session", "release", user], log: "shard-release-\(mac.name)")
+                    let (status, lines) = await runSC(["--on", mac.consoleTarget, "session", "release", user], log: "shard-release-\(mac.name)-\(user)")
                     if status == 0 {
                         ui.detail("Released \(mac.name)/\(user).")
                     } else {

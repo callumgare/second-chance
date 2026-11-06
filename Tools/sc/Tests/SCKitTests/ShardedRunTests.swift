@@ -162,4 +162,28 @@ struct ShardedRunTests {
         #expect(ToolPath.withHomebrew("/usr/bin:/bin") == "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin")
         #expect(ToolPath.withHomebrew("/opt/homebrew/bin:/usr/bin") == "/opt/homebrew/bin:/usr/bin:/usr/local/bin")
     }
+
+    @Test("A Mac runs a shard per four performance cores, or as many as --shards-per-mac says")
+    func shardsPerMac() {
+        #expect(ShardCoordinator.shardCount(performanceCores: 8, requested: nil) == 2)
+        #expect(ShardCoordinator.shardCount(performanceCores: 6, requested: nil) == 1)
+        #expect(ShardCoordinator.shardCount(performanceCores: 2, requested: nil) == 1)
+        #expect(ShardCoordinator.shardCount(performanceCores: 12, requested: nil) == 3)
+        #expect(ShardCoordinator.shardCount(performanceCores: 8, requested: 4) == 4)
+    }
+
+    @Test("Shards sharing a Mac build a game at a time, unless --build-concurrency was given")
+    func shardOptions() {
+        let forwarded = ["--source", "disk", "--skip-app-build"]
+        #expect(ShardCoordinator.shardOptions(forwarded, shardsOnMac: 1, buildConcurrencyGiven: false) == forwarded)
+        #expect(ShardCoordinator.shardOptions(forwarded, shardsOnMac: 2, buildConcurrencyGiven: false) == forwarded + ["--build-concurrency", "1"])
+        #expect(ShardCoordinator.shardOptions(forwarded, shardsOnMac: 2, buildConcurrencyGiven: true) == forwarded)
+    }
+
+    @Test("--shards-per-mac goes with --shard-on, and is at least 1")
+    func shardsPerMacOption() {
+        #expect((try? SC.parseAsRoot(["test", "integration", "--shard-on", "a,b", "--shards-per-mac", "2"])) != nil)
+        #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["test", "integration", "--shards-per-mac", "2"]) }
+        #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["test", "integration", "--shard-on", "a", "--shards-per-mac", "0"]) }
+    }
 }

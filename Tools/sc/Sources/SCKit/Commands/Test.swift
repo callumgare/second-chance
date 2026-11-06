@@ -266,12 +266,24 @@ struct TestIntegrationCommand: AsyncParsableCommand {
     ))
     var shardOn: String?
 
+    @Option(help: ArgumentHelp(
+        "With --shard-on, how many shards each Mac runs at once. Default: one per four of its performance cores.",
+        discussion: "A shard builds and launches one game at a time when its Mac runs several "
+            + "(docs/testing.md#sharding-a-run-across-macs).",
+        valueName: "n"
+    ))
+    var shardsPerMac: Int?
+
     /// A shard's results, for the coordinator to read back: written here,
     /// relative to the repo, whatever the run's outcome.
     @Option(help: .hidden)
     var resultsJSON: String?
 
     func validate() throws {
+        if let shardsPerMac {
+            guard shardOn != nil else { throw ValidationError("--shards-per-mac goes with --shard-on.") }
+            guard shardsPerMac >= 1 else { throw ValidationError("--shards-per-mac must be at least 1.") }
+        }
         guard let shardOn else { return }
         if ShardCoordinator.parseMacs(shardOn).isEmpty { throw ValidationError("--shard-on needs at least one Mac.") }
         if integration.vm != nil { throw ValidationError("--shard-on and --vm can't be combined.") }
@@ -288,7 +300,8 @@ struct TestIntegrationCommand: AsyncParsableCommand {
             try await TestRunner(session: session).xcode.ensureTestBuild(appBuild)
             let coordinator = ShardCoordinator(session: session, sources: integration.sources,
                                                forwarded: ShardCoordinator.forwardedOptions(integration),
-                                               macs: ShardCoordinator.parseMacs(shardOn))
+                                               macs: ShardCoordinator.parseMacs(shardOn), shardsPerMac: shardsPerMac,
+                                               buildConcurrencyGiven: integration.buildConcurrency != nil)
             try await coordinator.run(games: games, stamp: UI.timestamp())
             return
         }

@@ -312,9 +312,10 @@ needs to allow windows, for the builds, and may be locked.
 [testing.md](testing.md#testing-in-a-vm) has the setup and what a VM can't
 test.
 
-`--shard-on <host>[:<path>][,…]` runs the integration suite in a claimed
-[test session](#test-sessions) on each Mac instead, one shard each, and
-gathers one table naming each row's Mac and session
+`--shard-on <host>[:<path>][,…]` runs the integration suite in claimed
+[test sessions](#test-sessions) on those Macs instead, a shard per four of each
+Mac's performance cores (`--shards-per-mac` to choose), and gathers one table
+naming each row's Mac and session
 ([testing.md](testing.md#sharding-a-run-across-macs)).
 
 `sc installers list` shows which games' installers are in this Mac's

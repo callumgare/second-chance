@@ -81,7 +81,7 @@ build failure. AGENTS.md's *Build, Run, Test* section has the full story.
 # Build here, launch in a tart VM (another macOS version, say)
 ./sc test integration ghost-dogs --vm sc-sequoia
 
-# Split the run between other Macs' test sessions, one shard each
+# Split the run between other Macs' test sessions, as many shards on each as it takes
 ./sc test integration --shard-on <host>:<path>,<host2>:<path>
 ```
 
@@ -390,20 +390,23 @@ succeeds while the test sees nothing.
 
 #### Sharding a run across Macs
 
-`--shard-on <host>[:<path>][,…]` splits a run into shards, one per Mac, each
-run in a [test session](dev-cli.md#test-sessions) there, and gathers their
+`--shard-on <host>[:<path>][,…]` splits a run into shards, as many on each Mac
+as it takes ([below](#how-many-shards-a-mac-runs)), each run in a
+[test session](dev-cli.md#test-sessions) there, and gathers their
 results into one table (`ShardCoordinator`, in `Tools/sc`). Nothing runs on
 the Mac it's typed on, which only coordinates:
 
-1. **It claims a free test session on each Mac**
-   (`sc --on <host>:<path> session claim --new --json`), never one you already
-   hold for other work, and lists the installers
+1. **It claims free test sessions on each Mac**, one per shard it runs
+   there (`sc --on <host>:<path> session claim --new --json`, one claim at a
+   time), never one you already hold for other work, and lists the installers
    in that Mac's [installers store](#the-installers-store). A Mac
-   with no free session is left out, with a warning.
+   with no free session is left out, with a warning; one with fewer than it
+   takes runs what it got, with a warning.
 2. **It hands out the games** (`ShardPlan.assign`): the biggest builds first
    (the sizes this Mac has recorded in `test-results/integration-sizes.json`,
    else a disc's worth per disc), each to the least loaded Mac that can run
-   it, which with sizes alike goes round-robin. A disc game, or a Her
+   it, which with sizes alike goes round-robin. Each session is a slot of
+   its own, so a Mac running two shards gets two shares. A disc game, or a Her
    download, goes to a Mac that has its installers, or else to one this Mac's
    own will be copied to, as every `--on` sync sends them. A game no Mac can
    run is a `no Mac` row, never dropped silently. Steam, Big Fish and download
@@ -414,8 +417,10 @@ the Mac it's typed on, which only coordinates:
    …) and always `--skip-app-build`: the coordinator builds the app for
    testing here first (unless given `--skip-app-build` itself), and each
    session's checkout gets that build by the sync, since a test user has no
-   signing certificate to build it with. Shards on different Macs run side by side; within one,
-   games build side by side and launch one at a time, as ever. The terminal
+   signing certificate to build it with. Every shard runs side by side;
+   within one, games build side by side and launch one at a time, as ever,
+   except that a shard sharing its Mac builds one at a time
+   (`--build-concurrency 1`, unless given here). The terminal
    shows each shard's `▸` lines, prefixed with its Mac and session; each
    shard's full output is kept in `DerivedData/sc-logs/`.
 4. **Each shard writes its rows** (`--results-json`, a `ShardResult`) into
@@ -434,15 +439,23 @@ show as `infra failed`, with the reason and the end of its output. Nothing is
 retried, whether it failed that way or a test failed. The `.xcresult` and
 HTML report stay on the Mac that ran the shard, at the path the hints give.
 
-**One shard per Mac** for now, so launches on one Mac never overlap. A Mac
-could take more: on an M1 Max (8 performance cores), launch-and-quit runs from
-up to four sessions at once each took as long as one alone, and from six on
-each took 1.5–3 times as long, every one still passing
-([measured](historical-plans/2026-11-06-puppet-toolkit.md#outcome)). So about
-one launch per two performance cores is a Mac's useful limit, and a build
-running beside them counts against it too. A `ShardPlan.Slot` is one
-session, so more shards per Mac would be more slots with the Mac's name, up
-to that limit; that isn't built.
+##### How many shards a Mac runs
+
+**One per four performance cores** (`ShardCoordinator.shardCount`, read over
+SSH from `hw.perflevel0.physicalcpu`), or as many as `--shards-per-mac <n>`
+says, as far as the Mac has free test sessions. On an M1 Max (8 performance
+cores), launch-and-quit runs from up to four sessions at once each took as
+long as one alone, and from six on each took 1.5–3 times as long, every one
+still passing ([measured](historical-plans/2026-11-06-puppet-toolkit.md#outcome)):
+about one launch per two performance cores, a build counting as a launch. A
+shard sharing its Mac builds and launches a game at a time, two of that
+budget, so a Mac takes one shard per four cores: two on an 8-core Mac, one
+on a 6-core one. A Mac whose cores can't be read gets one.
+
+Shards on one Mac don't know of each other: each sizes its builds by the
+disk free when it starts, and each run's load check counts the other's Wine
+as load. Keep `--shards-per-mac` within the budget, and watch the disk when
+a Mac has little free.
 
 ## Filtering games
 
