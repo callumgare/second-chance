@@ -217,8 +217,9 @@ The header comment of `native_fullscreen.m` has the details.
 
 ### The player's choice, kept
 
-The green button, and the Window menu's Enter Full Screen (⌃⌥⌘F, Wine's
-key), change the window but not the game's own setting, which it writes as
+The green button, and the Window menu's Enter Full Screen (⌃⌘F, as in
+other Mac apps: Wine puts it on ⌃⌥⌘F, where ⌃⌘F would go to the game as a
+key, so the helper moves it once Wine has built its menu), change the window but not the game's own setting, which it writes as
 it quits: left so, the next start would open in the mode the game last
 chose, not the one the player last chose. So the helper reports each move
 into or out of a Space, and who made it:
@@ -264,7 +265,7 @@ packfile: the int32 at 16, -1 for Yes and 0 for No, and at 96 a sum it
 checks as it loads, 17 × (its eight settings at 0–31 + 28), which a changed
 value without it fails, starting the game with its defaults (found in its
 `.exe`'s config loader, 2026-11-06). Checked on macOS 26 the same day: a
-windowed start taken into fullscreen with ⌃⌥⌘F and quit through its menu
+windowed start taken into fullscreen with Wine's ⌃⌥⌘F (now ⌃⌘F) and quit through its menu
 starts fullscreen; one taken out of its Space that way starts windowed;
 the green button then Fullscreen: Yes and No in the game starts windowed (the
 game's change last); a quit with no change leaves the game's own file.

@@ -597,7 +597,36 @@ static BOOL handleFullscreenWindow(void) {
     return NO;
 }
 
+/// Wine's Window menu has Enter Full Screen on ⌃⌥⌘F; every other Mac app has
+/// it on ⌃⌘F, which in a Wine game would go to the game as a key instead.
+/// Wine builds the menu once the process is a foreground app, which may be
+/// after this helper arms, so this looks each time until it finds the item.
+/// Main thread only.
+static NSMenuItem *menuItemWithAction(NSMenu *menu, SEL action) {
+    for (NSMenuItem *item in menu.itemArray) {
+        if (item.action == action) return item;
+        if (item.submenu) {
+            NSMenuItem *found = menuItemWithAction(item.submenu, action);
+            if (found) return found;
+        }
+    }
+    return nil;
+}
+
+static void useMacFullScreenShortcut(void) {
+    static BOOL done = NO;
+    if (done) return;
+    NSMenuItem *item = menuItemWithAction(NSApp.mainMenu, @selector(toggleFullScreen:));
+    if (!item) return;
+    done = YES;
+    item.keyEquivalent = @"f";
+    item.keyEquivalentModifierMask = NSEventModifierFlagControl | NSEventModifierFlagCommand;
+    debugLog("Enter Full Screen is on ctrl+cmd+F");
+    helperReport("NativeFullscreen", "notice", "Enter Full Screen is on ⌃⌘F, as in other Mac apps");
+}
+
 static void attemptFullscreen(void) {
+    useMacFullScreenShortcut();
     installToggleWatch();
     BOOL overridesInstalled = installOverrides();
     for (NSWindow *window in NSApp.windows) putBackOldSize(window);
