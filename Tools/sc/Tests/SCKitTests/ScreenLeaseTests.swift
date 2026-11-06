@@ -28,6 +28,7 @@ struct ScreenLeaseTests {
             "CLAUDE_CODE_SESSION_ID": "3e6d2128",
             "CLAUDE_PID": "66079",
             "CLAUDE_CODE_MESSAGING_TOKEN": "secret-token",
+            "CLAUDE_CONFIG_DIR": "/nonexistent",
         ]
         let found = ScreenLease.currentHolder(repoRoot: URL(fileURLWithPath: "/r"), branch: "main", environment: environment)
         #expect(found.agentSocket == "/tmp/cc-socks/66079.sock")
@@ -36,6 +37,86 @@ struct ScreenLeaseTests {
         #expect(found.checkout == "/r")
         let json = String(decoding: try JSONEncoder().encode(found), as: UTF8.self)
         #expect(!json.contains("secret-token"))
+    }
+
+    @Test("An agent session's name and title come from Claude Code's files, the title the person gave first")
+    func holderNamedFromClaudeFiles() throws {
+        let config = FileManager.default.temporaryDirectory.appendingPathComponent("sc-agent-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: config) }
+        let sessions = config.appendingPathComponent("sessions")
+        let project = config.appendingPathComponent("projects/-r")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        try Data(#"{"pid":66079,"sessionId":"3e6d2128","name":"second-chance-23"}"#.utf8)
+            .write(to: sessions.appendingPathComponent("66079.json"))
+        let transcript = project.appendingPathComponent("3e6d2128.jsonl")
+        let lines = [
+            #"{"type":"ai-title","aiTitle":"First idea","sessionId":"3e6d2128"}"#,
+            #"{"type":"user","message":{"content":"mentions \"ai-title\" in passing"}}"#,
+            #"{"type":"ai-title","aiTitle":"Testing ./sc session capabilities","sessionId":"3e6d2128"}"#,
+        ]
+        try Data(lines.joined(separator: "\n").utf8).write(to: transcript)
+        var environment = [
+            "CLAUDE_CONFIG_DIR": config.path,
+            "CLAUDE_CODE_MESSAGING_SOCKET": "/tmp/cc-socks/66079.sock",
+            "CLAUDE_CODE_SESSION_ID": "3e6d2128",
+            "CLAUDE_PID": "66079",
+        ]
+        var found = ScreenLease.currentHolder(repoRoot: URL(fileURLWithPath: "/r"), branch: nil, environment: environment)
+        #expect(found.agentName == "second-chance-23")
+        #expect(found.agentTitle == "Testing ./sc session capabilities")
+        var held = lease()
+        held.holder = found
+        #expect(held.who == #"the agent session second-chance-23 ("Testing ./sc session capabilities")"#)
+        #expect(held.hints(onHost: "meeka", askingSession: "other").contains { $0.contains("SendMessage to second-chance-23") })
+
+        try Data((lines + [#"{"type":"custom-title","customTitle":"Iji quits","sessionId":"3e6d2128"}"#,
+                           #"{"type":"ai-title","aiTitle":"Later idea","sessionId":"3e6d2128"}"#])
+            .joined(separator: "\n").utf8).write(to: transcript)
+        found = ScreenLease.currentHolder(repoRoot: URL(fileURLWithPath: "/r"), branch: nil, environment: environment)
+        #expect(found.agentTitle == "Iji quits")
+
+        // A pid another session has since taken gives no name.
+        environment["CLAUDE_CODE_SESSION_ID"] = "other"
+        found = ScreenLease.currentHolder(repoRoot: URL(fileURLWithPath: "/r"), branch: nil, environment: environment)
+        #expect(found.agentName == nil)
+        #expect(found.agentTitle == nil)
+    }
+
+    @Test("A lease shows the session's title now, from the sessions --on sent along, else the one it recorded")
+    func holderRefreshedWhenShown() throws {
+        var held = lease()
+        held.holder.agentName = "second-chance-23"
+        held.holder.agentTitle = "Old title"
+        let snapshot = ["abc": AgentSessionInfo(name: "second-chance-23", title: "New title")]
+        let sent = [AgentSessionInfo.snapshotVariable: AgentSessionInfo.encodeSnapshot(snapshot)]
+        #expect(held.currentAgentSession(thisHost: "meeka", environment: sent).title == "New title")
+        // Sent, but not knowing this session (it ended), or not sent at all: the recorded title stands.
+        let other = [AgentSessionInfo.snapshotVariable: AgentSessionInfo.encodeSnapshot(["zzz": AgentSessionInfo(name: "x")])]
+        #expect(held.currentAgentSession(thisHost: "meeka", environment: other).title == "Old title")
+        #expect(held.currentAgentSession(thisHost: "meeka", environment: [:]).title == "Old title")
+
+        let command = Remote.remoteCommand(path: "~/sc", arguments: ["wrapp", "run", "x"], agentSessions: snapshot)
+        #expect(command.contains("\(AgentSessionInfo.snapshotVariable)=\(AgentSessionInfo.encodeSnapshot(snapshot)) "))
+        #expect(!Remote.remoteCommand(path: "~/sc", arguments: ["lease"]).contains(AgentSessionInfo.snapshotVariable))
+        #expect(AgentSessionInfo.decodeSnapshot(AgentSessionInfo.encodeSnapshot(snapshot)) == snapshot)
+    }
+
+    @Test("A title is found near a long transcript's end, without reading the rest")
+    func titleInLongTranscript() throws {
+        let config = FileManager.default.temporaryDirectory.appendingPathComponent("sc-agent-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: config) }
+        let project = config.appendingPathComponent("projects/-r")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        let filler = String(repeating: #"{"type":"assistant","message":"\#(String(repeating: "x", count: 900))"}"# + "\n", count: 300)
+        // A title only at the start of a long transcript is out of reach; one 200 KB from the end is found.
+        let early = #"{"type":"ai-title","aiTitle":"Too early","sessionId":"s"}"# + "\n"
+        let late = #"{"type":"custom-title","customTitle":"Found","sessionId":"s"}"# + "\n"
+        let text = early + String(repeating: filler, count: 5) + late + filler
+        try Data(text.utf8).write(to: project.appendingPathComponent("s.jsonl"))
+        #expect(AgentSessionInfo.title(sessionID: "s", config: config) == "Found")
+        try Data((early + String(repeating: filler, count: 5)).utf8).write(to: project.appendingPathComponent("s.jsonl"))
+        #expect(AgentSessionInfo.title(sessionID: "s", config: config) == nil)
     }
 
     @Test("A person's run has no agent fields")

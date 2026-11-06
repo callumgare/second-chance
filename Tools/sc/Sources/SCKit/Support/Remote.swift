@@ -67,9 +67,17 @@ enum Remote {
     /// left unquoted so it expands. The holder of any screen lease the
     /// command takes there goes with it through `env` (ssh passes no
     /// environment), as one base64 word.
-    static func remoteCommand(path: String, arguments: [String], leaseHolder: ScreenLease.Holder? = nil) -> String {
+    /// The agent sessions running here go too, so a lease one of them holds
+    /// there is shown by its title now (`AgentSessionInfo.current`).
+    static func remoteCommand(path: String, arguments: [String], leaseHolder: ScreenLease.Holder? = nil,
+                              agentSessions: [String: AgentSessionInfo] = [:]) -> String {
         let dir = path.hasPrefix("~/") ? "~/" + quote(String(path.dropFirst(2))) : quote(path)
-        let env = leaseHolder.map { "env \(ScreenLease.holderVariable)=\(ScreenLease.encodeHolder($0)) " } ?? ""
+        var variables: [String] = []
+        if let leaseHolder { variables.append("\(ScreenLease.holderVariable)=\(ScreenLease.encodeHolder(leaseHolder))") }
+        if !agentSessions.isEmpty {
+            variables.append("\(AgentSessionInfo.snapshotVariable)=\(AgentSessionInfo.encodeSnapshot(agentSessions))")
+        }
+        let env = variables.isEmpty ? "" : "env " + variables.joined(separator: " ") + " "
         return "cd \(dir) && \(env)./sc " + arguments.map(quote).joined(separator: " ")
     }
 
@@ -341,7 +349,8 @@ enum Remote {
 
         ui.line(ui.format("\(.primary("▸ On \(target.host): sc \(arguments.joined(separator: " "))"))"))
         let holder = ScreenLease.currentHolder(repoRoot: repo.root, branch: await ScreenLease.branch(of: repo.root))
-        let command = remoteCommand(path: target.path, arguments: forwarded, leaseHolder: holder)
+        let command = remoteCommand(path: target.path, arguments: forwarded, leaseHolder: holder,
+                                    agentSessions: AgentSessionInfo.snapshot())
         let sshArgs = (terminal.isInteractive ? ["-t"] : ["-T"]) + [target.host, command]
         let status = try await Proc.inheritingTerminal("ssh", sshArgs)
         if status == 255 {

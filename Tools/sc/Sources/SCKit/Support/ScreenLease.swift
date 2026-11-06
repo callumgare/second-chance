@@ -33,6 +33,11 @@ struct ScreenLease: Codable, Equatable, Sendable {
         var sessionID: String?
         /// The agent's process, on the Mac the command was typed on.
         var agentPID: Int32?
+        /// The session's name among its peers (`second-chance-23`) and the
+        /// title a person sees it under, read when the lease was asked for
+        /// (`AgentSessionInfo`), so a lease names the session wherever it's shown.
+        var agentName: String?
+        var agentTitle: String?
         /// The Mac, user and checkout the command was typed in.
         var host: String
         var user: String
@@ -124,10 +129,15 @@ struct ScreenLease: Codable, Equatable, Sendable {
     static func currentHolder(repoRoot: URL, branch: String?,
                               environment: [String: String] = ProcessInfo.processInfo.environment) -> Holder {
         if let encoded = environment[holderVariable], let holder = decodeHolder(encoded) { return holder }
+        let sessionID = environment["CLAUDE_CODE_SESSION_ID"].flatMap { $0.isEmpty ? nil : $0 }
+        let agentPID = environment["CLAUDE_PID"].flatMap { Int32($0) }
+        let agent = AgentSessionInfo.lookUp(pid: agentPID, sessionID: sessionID, environment: environment)
         return Holder(
             agentSocket: environment["CLAUDE_CODE_MESSAGING_SOCKET"].flatMap { $0.isEmpty ? nil : $0 },
-            sessionID: environment["CLAUDE_CODE_SESSION_ID"].flatMap { $0.isEmpty ? nil : $0 },
-            agentPID: environment["CLAUDE_PID"].flatMap { Int32($0) },
+            sessionID: sessionID,
+            agentPID: agentPID,
+            agentName: agent.name,
+            agentTitle: agent.title,
             host: shortHostName(),
             user: NSUserName(),
             checkout: repoRoot.path,
@@ -381,8 +391,26 @@ struct ScreenLease: Codable, Equatable, Sendable {
         return abs(start - pidStarted) < 1
     }
 
-    var who: String {
-        if let socket = holder.agentSocket { return "the agent session at \(socket)" }
+    /// The holder's agent session's name and title as they were when it took the lease.
+    var recordedAgentSession: AgentSessionInfo {
+        AgentSessionInfo(name: holder.agentName, title: holder.agentTitle)
+    }
+
+    /// The same as they are now (`AgentSessionInfo.current`), where that's known.
+    func currentAgentSession(thisHost: String = ScreenLease.shortHostName(),
+                             environment: [String: String] = ProcessInfo.processInfo.environment) -> AgentSessionInfo {
+        let recorded = recordedAgentSession
+        guard let now = AgentSessionInfo.current(of: holder, thisHost: thisHost, environment: environment) else { return recorded }
+        return AgentSessionInfo(name: now.name ?? recorded.name, title: now.title ?? recorded.title)
+    }
+
+    /// Who holds it, an agent session by its name and title now.
+    var who: String { Self.describe(holder, agent: currentAgentSession()) }
+
+    static func describe(_ holder: Holder, agent: AgentSessionInfo) -> String {
+        let title = agent.title.map { " (\"\($0)\")" } ?? ""
+        if let name = agent.name { return "the agent session \(name)\(title)" }
+        if let socket = holder.agentSocket { return "the agent session at \(socket)\(title)" }
         return "\(holder.user) on \(holder.host)"
     }
 
@@ -413,7 +441,8 @@ struct ScreenLease: Codable, Equatable, Sendable {
         if let session = holder.sessionID, session == askingSession {
             hints.append("That's this same agent session: let the other run finish, or stop it, first.")
         } else if let socket = holder.agentSocket {
-            hints.append("Ask that session when it'll be done: SendMessage to uds:\(socket) (ListAgents shows its name).")
+            let to = currentAgentSession().name.map { "\($0) (uds:\(socket))" } ?? "uds:\(socket) (ListAgents shows its name)"
+            hints.append("Ask that session when it'll be done: SendMessage to \(to).")
         }
         // A test session's screen is named <mac>/<user>, reached as <user>@<mac>.
         let target = host.split(separator: "/").reversed().joined(separator: "@")

@@ -582,6 +582,21 @@ details to everything it runs, and `sc` records three of them:
 - `CLAUDE_CODE_SESSION_ID`;
 - `CLAUDE_PID`.
 
+With those it reads two more from Claude Code's own files (`AgentSessionInfo`),
+so a lease names the session as people and agents know it: its name among its
+peers (`second-chance-23`, from `~/.claude/sessions/<pid>.json`) and the title
+a person sees it under (from the session's transcript, the title they gave it
+before the one Claude Code made up). `CLAUDE_CONFIG_DIR` moves both. They're
+recorded when the lease is taken, and looked up again whenever it's shown, so a
+session renamed during a long run shows its new title. Only the session's own
+Mac has its files, so every `--on` command sends that Mac's running sessions'
+names and titles along in `SC_AGENT_SESSIONS` (base64 JSON, beside
+`SC_LEASE_HOLDER`), for `session list`, `lease` and a blocked command's message
+to name the session as it is now. That takes a few milliseconds, as only the end
+of each transcript is read, where Claude Code keeps writing the title again.
+Where neither source knows the session (shown on a test Mac without `--on`, or
+after the session ended), the recorded ones stand.
+
 A person's run records the user and the Mac instead. The session's
 messaging token is never recorded. `--on` carries the holder to the other Mac
 in `SC_LEASE_HOLDER` (base64 JSON, put on the remote command line with `env`),
