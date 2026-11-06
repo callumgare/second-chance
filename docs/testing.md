@@ -397,7 +397,7 @@ results into one table (`ShardCoordinator`, in `Tools/sc`). Nothing runs on
 the Mac it's typed on, which only coordinates:
 
 1. **It claims free test sessions on each Mac**, one per shard it runs
-   there (`sc --on <host>:<path> session claim --new --json`, one claim at a
+   there (`sc --on <host>:<path> session claim --json`, one claim at a
    time), never one you already hold for other work, and lists the installers
    in that Mac's [installers store](#the-installers-store). A Mac
    with no free session is left out, with a warning; one with fewer than it

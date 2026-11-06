@@ -147,6 +147,25 @@ struct TestSessionTests {
     func errorMessage() {
         #expect(SCError("No password for x").localizedDescription == "No password for x")
     }
+
+    @Test("A bare claim takes a free session, never one the asker holds already, and with none free says how to renew theirs")
+    func bareClaimTakesAFreeOne() throws {
+        let me = ScreenLease.Holder(agentSocket: "/tmp/cc-socks/1.sock", sessionID: "me", agentPID: 1, host: "kiya", user: "someone",
+                                    checkout: "/c", branch: "main")
+        var mine = ScreenLease(holder: me, purpose: "a port", command: "sc lease take", runCheckout: "/c", pid: 0, pidStarted: 0,
+                               started: Date())
+        mine.expires = Date().addingTimeInterval(3600)
+        let login = { (user: String) in SessionPool.Login(user: user, uid: 501, onConsole: false, locked: false) }
+        let held = SessionPool.Status(user: "second-chance-testing-1", login: login("second-chance-testing-1"), lease: mine)
+        let free = SessionPool.Status(user: "second-chance-testing-2", login: login("second-chance-testing-2"), lease: nil)
+        #expect(try SessionClaimCommand.firstFree([held, free], for: me).user == "second-chance-testing-2")
+        do {
+            _ = try SessionClaimCommand.firstFree([held], for: me)
+            Issue.record("a session the asker holds was taken by a bare claim")
+        } catch let error as SCError {
+            #expect(error.hints == ["Renew yours by naming it: sc session claim second-chance-testing-1"])
+        }
+    }
 }
 
 @Suite("Peekaboo in test sessions")

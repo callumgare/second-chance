@@ -156,8 +156,15 @@ fills, and the porting log is your memory: keep it current and carry on.
   agents, keeping it clean, leaving nothing running), with this setup's Macs
   in that order in `.local/AGENTS.md`. Most of a port runs in a **test
   account**: claim one and keep it for the port (`sc session claim --for
-  4h`, renewed by claiming again). Only the user's own screen needs asking
-  about; when nobody's there to ask, never use it.
+  4h`, renewed by naming it: `sc session claim <user> --for 4h`). Run
+  everything there through `sc --on <user>@<host>:<path> …`, never a plain
+  `ssh` into the account: `--on` carries who you are, so your claim is
+  recognised as yours, where a plain `ssh` makes `sc` see your own claim as
+  someone else's (and tempts `--ignore-screen-lease`, which runs over
+  whoever does hold it). Give each subagent that takes a screen a session
+  claimed for it, by name: you and your subagents count as one holder. Only
+  the user's own screen needs asking about; when nobody's there to ask,
+  never use it.
   [reference/test-mac-screen.md](reference/test-mac-screen.md) has how to
   clear prompts and notifications from a screen you hold.
 - **ScummVM can run with no window** (`gfx_mode=surfacesdl`,

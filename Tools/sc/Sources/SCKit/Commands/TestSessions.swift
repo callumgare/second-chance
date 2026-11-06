@@ -49,8 +49,10 @@ struct SessionClaimCommand: AsyncParsableCommand {
         abstract: "Lease a free test session (or the one named) for your runs.",
         discussion: """
         Leases its screen to you, as `sc lease take` would, so runs you start \
-        there go ahead and anyone else's stop. Renew it by claiming it again; \
-        `sc --on <user>@<host> lease expiring` warns before it runs out.
+        there go ahead and anyone else's stop. Without a user it takes a free \
+        one, never one you hold already; renew yours by naming it (sc session \
+        claim <user>). `sc --on <user>@<host> lease expiring` warns before it \
+        runs out.
         """
     )
 
@@ -59,14 +61,14 @@ struct SessionClaimCommand: AsyncParsableCommand {
     @Option(name: .customLong("for"), help: ArgumentHelp("How long: 30m, 2h, 90s, or minutes (at most 8h).", valueName: "time"))
     var duration: String = "2h"
 
-    @Argument(help: "A test user to claim. Default: the first free one.")
+    @Argument(help: "A test user to claim, or to renew your claim on. Default: the first free one.")
     var user: String?
 
     @Flag(help: "Also print the claim as one line of JSON (host, user, expires), for scripts such as a sharded run.")
     var json = false
 
-    @Flag(help: "Claim a session you don't hold already, rather than renew one you do: for a run of its own beside your other work.")
-    var new = false
+    /// What a bare claim does now; still taken from scripts that say it.
+    @Flag(help: .hidden) var new = false
 
     func validate() throws {
         if ScreenLease.parseDuration(duration) == nil {
@@ -80,7 +82,7 @@ struct SessionClaimCommand: AsyncParsableCommand {
     func run() async throws {
         let session = try Session.start(global)
         let holder = ScreenLease.currentHolder(repoRoot: session.repo.root, branch: await ScreenLease.branch(of: session.repo.root))
-        let (chosen, lease) = try await Self.claim(user, new: new, seconds: ScreenLease.parseDuration(duration) ?? 7200,
+        let (chosen, lease) = try await Self.claim(user, seconds: ScreenLease.parseDuration(duration) ?? 7200,
                                                    session: session, policy: global.leasePolicy, purpose: global.purpose)
         let host = ScreenLease.shortHostName()
         let checkout = Self.homeRelative(session.repo.root.path)
@@ -99,11 +101,14 @@ struct SessionClaimCommand: AsyncParsableCommand {
         }
     }
 
-    /// Lease one of this Mac's test sessions: `requested`, or the first free
-    /// one (or, unless `new`, one this holder took already, to renew it).
-    /// `session claim` and a sharded run's sessions on this Mac both claim
-    /// through it; on another Mac a sharded run runs `session claim` there.
-    static func claim(_ requested: String?, new: Bool, seconds: TimeInterval, session: Session,
+    /// Lease one of this Mac's test sessions: `requested` (renewing it when
+    /// it's yours), or the first free one. A free one is never one this
+    /// holder took already: agents that share a holder (a session and its
+    /// subagents, which share Claude Code's session id) would otherwise renew
+    /// each other's claims, and one's release would end the other's. `session
+    /// claim` and a sharded run's sessions on this Mac both claim through it;
+    /// on another Mac a sharded run runs `session claim` there.
+    static func claim(_ requested: String?, seconds: TimeInterval, session: Session,
                       policy: ScreenLease.Policy, purpose: String?) async throws -> (user: String, lease: ScreenLease) {
         let statuses = await SessionPool.statuses()
         let holder = ScreenLease.currentHolder(repoRoot: session.repo.root, branch: await ScreenLease.branch(of: session.repo.root))
@@ -118,16 +123,21 @@ struct SessionClaimCommand: AsyncParsableCommand {
             }
             chosen = status
         } else {
-            let renewable = new ? nil : statuses.first { $0.lease.map { $0.isTakenByHand && $0.holder.isSame(as: holder) } ?? false }
-            guard let free = renewable ?? statuses.first(where: \.isFree) else {
-                let lines = statuses.map { "\(SessionPool.screenName(of: $0.user)): \($0.summary)" }
-                throw SCError("No test session on \(ScreenLease.shortHostName()) is free.\n" + lines.joined(separator: "\n"),
-                              exitCode: ScreenLease.heldExitCode)
-            }
-            chosen = free
+            chosen = try firstFree(statuses, for: holder)
         }
         let lease = try await ScreenLease.take(session, policy: policy, purpose: purpose, duration: seconds, user: chosen.user)
         return (chosen.user, lease)
+    }
+
+    /// The first free session, never one leased, even to `holder`; with
+    /// none free, an error that lists them and says how to renew `holder`'s.
+    static func firstFree(_ statuses: [SessionPool.Status], for holder: ScreenLease.Holder) throws -> SessionPool.Status {
+        if let free = statuses.first(where: \.isFree) { return free }
+        let lines = statuses.map { "\(SessionPool.screenName(of: $0.user)): \($0.summary)" }
+        let yours = statuses.filter { $0.lease.map { $0.isTakenByHand && $0.holder.isSame(as: holder) } ?? false }
+        throw SCError("No test session on \(ScreenLease.shortHostName()) is free.\n" + lines.joined(separator: "\n"),
+                      hints: yours.map { "Renew yours by naming it: sc session claim \($0.user)" },
+                      exitCode: ScreenLease.heldExitCode)
     }
 
     static func homeRelative(_ path: String) -> String {

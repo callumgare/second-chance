@@ -848,9 +848,12 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
 - `sc session claim --purpose "<text>" [--for 2h] [<user>]` leases a free test
   session's screen to you, as `sc lease take` would, and says how to reach it;
   `--json` adds the claim as one line of JSON (`host`, `user`, `expires`), for
-  scripts such as a sharded run. Claiming again renews a session you already
-  hold, unless `--new` asks for another: a sharded run claims with it, so its
-  release at the end never ends a session you're using for something else.
+  scripts such as a sharded run. Without a user it takes a free one, never
+  one you hold already: renew yours by naming it (`sc session claim <user>`).
+  A holder is told apart by its Claude Code session, which an agent's
+  subagents share, so a bare claim that renewed would let one agent take
+  over another's session and its release end it; a sharded run's release
+  likewise never ends a session you're using for something else.
   `sc session release [<user>]` gives it back.
 
 **Running in one** is `--on` with the test user: `sc --on <user>@<mac>:<path>

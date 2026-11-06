@@ -346,8 +346,8 @@ struct ShardCoordinator: Sendable {
 
     /// The Mac's sessions for this run, as many as it takes shards, each a
     /// `Mac` with its user; or the Mac alone, with why, when it gave none.
-    /// `--new`: sessions of the run's own, never one this agent session (or
-    /// person) already holds for other work, which its release would end.
+    /// Sessions of the run's own (a bare claim never takes one this agent
+    /// session, or person, holds already), which its release can end.
     /// One claim at a time, as each takes a session the last left free.
     private func prepare(_ mac: Mac, users named: [String]?, purpose: String, minutes: Int) async -> [Mac] {
         var mac = mac
@@ -406,7 +406,7 @@ struct ShardCoordinator: Sendable {
             do {
                 // `new`: a session of the run's own, never one already held
                 // for other work, which its release would end.
-                return .claimed(try await SessionClaimCommand.claim(user, new: true, seconds: TimeInterval(minutes * 60), session: session,
+                return .claimed(try await SessionClaimCommand.claim(user, seconds: TimeInterval(minutes * 60), session: session,
                                                                     policy: session.leasePolicy, purpose: purpose).user)
             } catch let error as SCError where error.exitCode == ScreenLease.heldExitCode {
                 return .noneFree
@@ -415,7 +415,7 @@ struct ShardCoordinator: Sendable {
             }
         }
         let (status, lines) = await runSC(mac.consoleArguments + ["session", "claim"] + (user.map { [$0] } ?? [])
-                                              + ["--json", "--new", "--for", "\(minutes)m", "--purpose", purpose],
+                                              + ["--json", "--for", "\(minutes)m", "--purpose", purpose],
                                           log: "shard-claim-\(mac.name)-\(user ?? "any")")
         if let claimed = lines.reversed().lazy.compactMap(Claim.parse).first { return .claimed(claimed.user) }
         return status == ScreenLease.heldExitCode ? .noneFree : .failed("exit \(status): \(Self.tail(lines))")
