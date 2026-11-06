@@ -27,8 +27,12 @@ How to work:
   `.local/AGENTS.md`): the one the lead named, or claim one with
   `sc --on <host> session claim --purpose "<bundle> integration test"`, run
   `./sc --on <user>@<host>:<path> test integration …` there, and release it.
+- **Work in a worktree**, never the main checkout (the skill's ground rules):
+  the one the lead named, or `./sc worktree add <program>-bundle`. Build,
+  test and commit there.
 - **Commit** with a conventional message once it passes (`.local/AGENTS.md`
-  allows this). Never push.
+  allows this). Then land it on main with a fast-forward and
+  `./sc worktree remove` your worktree. Never push.
 - **If something the build or launch needs is missing** from the builder or a
   module, stop and report it rather than working around it in the bundle.
 

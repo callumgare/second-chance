@@ -8,8 +8,8 @@ struct WorktreeCommand: AsyncParsableCommand {
         abstract: "Make, prepare, list and remove extra checkouts (git worktrees).",
         discussion: """
         A worktree made by sc, or by anything else once sc setup has installed \
-        its post-checkout hook (Claude Code's among them), links .local, .env \
-        and .claude's agents and skills to the main checkout's, starts from \
+        its post-checkout hook (Claude Code's among them), links .local and .env \
+        to the main checkout's, starts from \
         clones of its fetched packages and module cache, and has SourceKit-LSP's \
         background indexing off. See docs/dev-cli.md#worktrees.
         """,

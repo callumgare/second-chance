@@ -162,6 +162,19 @@ fills, and the porting log is your memory: keep it current and carry on.
   Copy inputs there with `rsync` to `~/tmp/porting/<name>/` in that
   account. `stop` ends the job's whole process tree and says if anything
   survived; never trust a stop you haven't checked.
+- **Change Second Chance in a worktree of your own**, never in the main
+  checkout. Other agents edit and build the same files there, so a change
+  of yours left in it gets swept into their commits, breaks their builds
+  half-written, or is built over by them. Before the first change to
+  anything in the repo (the bundle, a module, a helper, `sc`, a test), make
+  one: `./sc worktree add <program>`, which puts it in
+  `.claude/worktrees/<program>` and links `.local` and `.env` into it, so
+  the porting workspace stays where it is (`docs/dev-cli.md#worktrees`).
+  Build, test, run `sc --on` and commit from there. Land it on main with a
+  fast-forward once it passes (`git merge --ff-only` from the main
+  checkout, after rebasing onto main), and finish with `./sc worktree
+  remove <program>`, which refuses to lose unmerged work. `./sc worktree
+  list` shows which worktrees are merged and which still have changes.
 - **Bound every wait on a program you don't know yet.** A program being
   ported hangs in ways nobody has seen: on exit (Icy Tower's did), on a
   dialog nobody can see, in `hdiutil` (which once wedged a test Mac's disk
@@ -522,7 +535,7 @@ stuck.
 won't mount, a copy that fails on an odd file), fix it: the change, a unit
 test beside the existing ones, the doc that describes that code (AGENTS.md's
 table says which), `sc test unit` and `sc lint`, and its own `fix(…)`
-commit. A change to what other programs get (a module's settings, the
+commit, all in your worktree (ground rules). A change to what other programs get (a module's settings, the
 wrapp's templates, a new volume kind) also needs the integration tests of
 the shipped programs it reaches; when it's more than minor and tests can't
 show it's harmless, prototype it, keep porting with it, and propose it in
@@ -582,7 +595,10 @@ is a few lines on an existing one. The steps:
    <source>` in a claimed test account.
 7. Commit, as `.local/AGENTS.md` allows: `feat(bundles): <program> runs`,
    with the bundle, the generated table and any reference changes in
-   separate commits where they're separate changes.
+   separate commits where they're separate changes. Commit in the
+   worktree, land it on main with a fast-forward, then `./sc worktree
+   remove` it (ground rules). A `porting-bundler` gets a worktree of its
+   own, or the lead's when the lead has stopped changing it.
 
 ## Needs a new engine
 
