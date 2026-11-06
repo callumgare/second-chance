@@ -351,18 +351,30 @@ struct PuppetStatusCommand: AsyncParsableCommand {
     @OptionGroup var global: GlobalOptions
 
     @Argument var name: String
+    @Flag(help: "As JSON, the state's fields each a key.") var json = false
 
     func run() async throws {
         let session = try Session.start(global)
         let puppet = try PuppetSession.load(name)
         guard puppet.isRunning else {
-            session.ui.line("\(name) stopped \(puppet.stopped.map(ScreenLease.clock) ?? "?"): \(puppet.stopReason ?? "?")")
+            if json {
+                session.ui.line(PuppetJSON.line(["name": name, "running": false, "stopped": puppet.stopped.map(PuppetJSON.time) as Any,
+                                                 "reason": puppet.stopReason as Any]))
+            } else {
+                session.ui.line("\(name) stopped \(puppet.stopped.map(ScreenLease.clock) ?? "?"): \(puppet.stopReason ?? "?")")
+            }
             return
         }
         puppet.touch()
         let stopsAt = Date().addingTimeInterval(puppet.idleMinutes * 60)
+        let state = try? puppet.ask(.state)
+        if json {
+            session.ui.line(PuppetJSON.line(["name": name, "running": true, "started": PuppetJSON.time(puppet.started),
+                                             "idleStop": PuppetJSON.time(stopsAt), "state": state?.fields as Any]))
+            return
+        }
         session.ui.line("\(name): running since \(ScreenLease.clock(puppet.started)); idle stop at \(ScreenLease.clock(stopsAt))")
-        session.ui.line("state: " + ((try? puppet.ask(.state))?.summary ?? "no answer"))
+        session.ui.line("state: " + (state?.summary ?? "no answer"))
     }
 }
 
@@ -371,14 +383,19 @@ struct PuppetStatusCommand: AsyncParsableCommand {
 struct PuppetActionCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "do",
-        abstract: "Act on the game and say what changed: click, move, drag, down, up, key, type, focus.",
+        abstract: "Act on the game and say what changed: click, move, drag, down, up, scroll, key, type, focus.",
         discussion: """
         sc puppet do <name> click <x> <y> [--button right] [--count 2] · move <x> <y> · \
-        drag <x> <y> <x2> <y2> · down|up <x> <y> · key <key>[+mods] (return, escape, \
+        drag <x> <y> <x2> <y2> · down|up <x> <y> · scroll <x> <y> up|down|left|right [<lines>] \
+        (3 lines unless told) · key <key>[+mods] (return, escape, \
         f5, left, a, cmd+s) · type "<text>" · focus. Points are in the game window \
         from its top left: a shot's pixels divided by its scale. The reply measures \
         the picture before and after (--wait after), so it says whether anything \
-        happened without a picture.
+        happened, and where, without a picture. --then runs more actions after it, \
+        each replied to in turn (sc puppet do lure key escape --then "key return" \
+        --then "click 320 200"), stopping at one that fails or ends the program: \
+        for steps that need no judgement between them. --json replies with every \
+        step as JSON, for scripts.
         """
     )
 
@@ -391,6 +408,10 @@ struct PuppetActionCommand: AsyncParsableCommand {
     @Option(help: "Clicks: 2 for a double click.") var count: Int?
     @Option(help: "How long to hold the key or button, in ms.") var hold: Int?
     @Option(help: "Seconds to wait before measuring what changed.") var wait: Double = 0.8
+    @Option(name: .customLong("then"), help: ArgumentHelp(
+        "Another action to do once this one's done, in quotes; repeat for more. --button, --count and --hold are the first's alone.",
+        valueName: "action")) var then: [String] = []
+    @Flag(help: "Reply with every step as JSON.") var json = false
     @OptionGroup(title: "Locating (in place of x y)") var locator: PuppetLocator
 
     func run() async throws {
@@ -398,50 +419,163 @@ struct PuppetActionCommand: AsyncParsableCommand {
         let puppet = try PuppetSession.load(name)
         guard puppet.isRunning else { throw SCError("\(name) has stopped: \(puppet.stopReason ?? "?").", exitCode: 4) }
         puppet.touch()
-        guard let verb = action.first else { throw ValidationError("Say what to do: click, move, drag, down, up, key, type or focus.") }
-        var arguments = Array(action.dropFirst())
-        let located = try await locator.locate(verb, arguments, puppet: puppet)
-        if let located { arguments = located.arguments }
-        let described = located.map { "\(verb) \($0.description) (\($0.arguments.joined(separator: ",")))" } ?? action.joined(separator: " ")
-        if let reply = try await PuppetControlAction.perform(verb: verb, arguments: arguments, puppet: puppet, wait: wait) {
-            session.ui.line(reply)
-            return
+        guard !action.isEmpty else {
+            throw ValidationError("Say what to do: \(PuppetRequest.actionVerbs.joined(separator: ", ")).")
         }
         let mouseButton = try button.map { name in
             guard let parsed = MouseButton(rawValue: name) else { throw ValidationError("--button is left or right: \(name).") }
             return parsed
         }
+        let actions = [action] + then.map { $0.split(separator: " ").map(String.init) }
+        if let empty = actions.firstIndex(where: \.isEmpty) { throw ValidationError("--then number \(empty) is empty.") }
+        let repo = session.repo.root
+        var steps: [PuppetStep] = []
+        var failure: Error?
+        for (index, words) in actions.enumerated() {
+            do {
+                let step = try await perform(words, first: index == 0, button: mouseButton, puppet: puppet, repo: repo)
+                steps.append(step)
+                if !json { step.lines.forEach(session.ui.line) }
+                if step.ended { break }
+            } catch {
+                failure = error
+                break
+            }
+        }
+        if json {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+            let reply = Reply(steps: steps, error: failure.map { "\($0)" })
+            session.ui.line(String(decoding: try encoder.encode(reply), as: UTF8.self))
+        }
+        if let failure {
+            if !steps.isEmpty, !json { session.ui.line("stopped at \"\(actions[steps.count].joined(separator: " "))\" (step \(steps.count + 1)):") }
+            throw failure
+        }
+    }
+
+    /// `--json`'s reply: each step done, and why the next failed, if one did.
+    struct Reply: Codable {
+        var steps: [PuppetStep]
+        var error: String?
+    }
+
+    /// One action: carried out, measured before and after, and its reply.
+    func perform(_ words: [String], first: Bool, button: MouseButton?, puppet: PuppetSession, repo: URL) async throws -> PuppetStep {
+        let verb = words[0]
+        var arguments = Array(words.dropFirst())
+        let located = first ? try await locator.locate(verb, arguments, puppet: puppet) : nil
+        if let located { arguments = located.arguments }
+        let described = located.map { "\(verb) \($0.description) (\($0.arguments.joined(separator: ",")))" } ?? words.joined(separator: " ")
+        if var step = try await PuppetControlAction.perform(verb: verb, arguments: arguments, puppet: puppet, wait: wait) {
+            step.screen = PuppetScreens.replyName(puppet, repo: repo)
+            return step
+        }
         let request: PuppetRequest
         do {
-            request = try PuppetRequest.action([verb] + arguments, button: mouseButton, count: count, hold: hold)
+            request = try PuppetRequest.action([verb] + arguments, button: first ? button : nil,
+                                               count: first ? count : nil, hold: first ? hold : nil)
         } catch let error as PuppetProtocolError {
             throw ValidationError(error.description)
         }
-
         let before = Probe(puppet)
-        puppet.noteAction(action.joined(separator: " "))
+        puppet.noteAction(words.joined(separator: " "))
         _ = try puppet.ask(request)
         try await Task.sleep(for: .seconds(wait))
         let after = Probe(puppet)
-        let screen = PuppetScreens.replyName(puppet, repo: session.repo.root).map { " → screen: \($0)" } ?? ""
-        session.ui.line(PuppetOutcome.outcome(of: described, before: before, after: after, puppet: puppet) + screen)
+        var step = PuppetOutcome.step(described, before: before, after: after)
+        step.screen = PuppetScreens.replyName(puppet, repo: repo)
+        return step
+    }
+}
+
+/// The `--json` replies' one line of JSON.
+enum PuppetJSON {
+    static func line(_ object: [String: Any]) -> String {
+        let cleaned = object.filter { !($0.value is NSNull) && !isNil($0.value) }
+        guard let data = try? JSONSerialization.data(withJSONObject: cleaned, options: [.sortedKeys, .withoutEscapingSlashes]) else {
+            return "{}"
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    static func time(_ date: Date) -> String { date.formatted(.iso8601) }
+
+    /// An `Optional` put in an `Any` that holds nothing.
+    private static func isNil(_ value: Any) -> Bool {
+        if case Optional<Any>.none = value as Any? { return true }
+        let mirror = Mirror(reflecting: value)
+        return mirror.displayStyle == .optional && mirror.children.isEmpty
     }
 }
 
 /// What's measured either side of an action.
 struct Probe {
+    /// The thumbnail's size: fine enough that a menu's highlight moving
+    /// shows, from a capture at a quarter of a point a pixel.
+    static let width = 128, height = 72
+
     var thumbnail: [UInt8]?
     var windows: [String: String]
     var running: Bool
+    /// The game window, in points.
+    var size: CGSize?
+
+    /// Nothing measured: for tests.
+    static var empty: Probe { Probe(thumbnail: nil, windows: [:], running: false, size: nil) }
+
+    init(thumbnail: [UInt8]?, windows: [String: String], running: Bool, size: CGSize?) {
+        self.thumbnail = thumbnail
+        self.windows = windows
+        self.running = running
+        self.size = size
+    }
 
     init(_ puppet: PuppetSession) {
         let path = puppet.shots.appendingPathComponent(".probe-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: path) }
-        if (try? puppet.ask(.capture(path: path.path, scale: 0.1), timeout: 20)) != nil, let image = Frames.image(at: path) {
-            thumbnail = Frames.thumbnail(image)
+        if (try? puppet.ask(.capture(path: path.path, scale: 0.25), timeout: 20)) != nil, let image = Frames.image(at: path) {
+            thumbnail = Frames.thumbnail(image, width: Probe.width, height: Probe.height)
         }
         windows = PuppetOutcome.windows((try? puppet.ask(.windows, timeout: 10)) ?? PuppetReply(""))
+        size = (try? puppet.ask(.state, timeout: 10)).flatMap(PuppetWindowState.init)?.size
         running = puppet.wrappPID.map { kill($0, 0) == 0 } ?? false
+    }
+}
+
+/// What one action did: what `do` replies, as lines or as JSON.
+struct PuppetStep: Codable, Equatable {
+    var action: String
+    /// Windows that appeared and went, as "title (WxH)".
+    var appeared: [String] = []
+    var gone: [String] = []
+    var ended = false
+    /// The share of the picture that changed, 0–100; nil with no capture.
+    var changed: Double?
+    /// Where it changed, in window points: x, y, w, h.
+    var changedBox: [Int]?
+    var black = false
+    /// The named screen it's on now, when the session has needles.
+    var screen: String?
+    /// The AutoIt lines an action on a Wine control drafted.
+    var autoit: [String]?
+
+    /// The reply's lines.
+    var lines: [String] {
+        var news = appeared.map { "+window \($0)" } + gone.map { "-window \($0)" }
+        if ended { news.append("the program has ended") }
+        var effect = "\(action) → "
+        if let changed {
+            let share = changed == 0 ? "0" : changed < 1 ? "<1" : String(Int(changed.rounded()))
+            effect += "changed \(share)%"
+            if let box = changedBox, box.count == 4 { effect += " at \(box[0]),\(box[1]) \(box[2])x\(box[3])" }
+            if black { effect += ", now black" }
+        } else {
+            effect += "changed ? (no capture)"
+        }
+        if let screen { effect += " → screen: \(screen)" }
+        return ["new: " + (news.isEmpty ? "—" : news.joined(separator: ", ")), effect]
+            + (autoit ?? []).map { "autoit: \($0)" }
     }
 }
 
@@ -457,22 +591,20 @@ enum PuppetOutcome {
         return found
     }
 
-    static func outcome(of action: String, before: Probe, after: Probe, puppet: PuppetSession) -> String {
-        var lines: [String] = []
-        let appeared = after.windows.filter { before.windows[$0.key] == nil }.map { "window \($0.value)" }
-        let gone = before.windows.filter { after.windows[$0.key] == nil }.map { "window \($0.value)" }
-        var news: [String] = appeared.map { "+" + $0 } + gone.map { "-" + $0 }
-        if before.running && !after.running { news.append("the program has ended") }
-        lines.append("new: " + (news.isEmpty ? "—" : news.joined(separator: ", ")))
-        var effect = "\(action) → "
+    static func step(_ action: String, before: Probe, after: Probe) -> PuppetStep {
+        var step = PuppetStep(action: action)
+        step.appeared = after.windows.filter { before.windows[$0.key] == nil }.map(\.value).sorted()
+        step.gone = before.windows.filter { after.windows[$0.key] == nil }.map(\.value).sorted()
+        step.ended = before.running && !after.running
         if let a = before.thumbnail, let b = after.thumbnail {
-            effect += "changed \(Frames.changed(a, b))%"
-            if Frames.black(b) >= 99 { effect += ", now black" }
-        } else {
-            effect += "changed ? (no capture)"
+            step.changed = Frames.changedShare(a, b)
+            step.black = Frames.black(b) >= 99
+            if let box = Frames.changedBox(a, b, width: Probe.width, height: Probe.height), let size = after.size ?? before.size {
+                let x = size.width / Double(Probe.width), y = size.height / Double(Probe.height)
+                step.changedBox = [Int(box.minX * x), Int(box.minY * y), Int((box.width * x).rounded(.up)), Int((box.height * y).rounded(.up))]
+            }
         }
-        lines.append(effect)
-        return lines.joined(separator: "\n")
+        return step
     }
 }
 
@@ -490,6 +622,7 @@ struct PuppetShotCommand: AsyncParsableCommand {
 
     @Option(help: ArgumentHelp("A part of the window, in points: x,y,w,h.", valueName: "x,y,w,h")) var region: String?
     @Option(help: "Pixels a point, at most the window's own. Default: no more than 1280 pixels across.") var scale: Double?
+    @Flag(help: "As JSON: the picture's path, size, scale and cost.") var json = false
 
     func run() async throws {
         let session = try Session.start(global)
@@ -509,6 +642,11 @@ struct PuppetShotCommand: AsyncParsableCommand {
         let reply = try puppet.ask(.capture(path: path.path, region: try region.map(PuppetShotCommand.region), scale: chosen))
         let pixels = reply.size.map { [Int($0.width), Int($0.height)] } ?? []
         let tokens = pixels.count == 2 ? Frames.tokens(width: pixels[0], height: pixels[1]) : 0
+        if json {
+            session.ui.line(PuppetJSON.line(["path": path.path, "pixels": pixels, "scale": chosen, "tokens": tokens,
+                                             "fetch": PuppetShotCommand.fetchLine(path)]))
+            return
+        }
         session.ui.line("\(path.path)  \(pixels.map(String.init).joined(separator: "x")) at \(String(format: "%.2f", chosen)) px/pt, ~\(tokens) tokens to look at")
         session.ui.line("fetch: " + PuppetShotCommand.fetchLine(path))
     }
@@ -581,12 +719,22 @@ struct PuppetWindowsCommand: AsyncParsableCommand {
     @OptionGroup var global: GlobalOptions
 
     @Argument var name: String
+    @Flag(help: "As JSON.") var json = false
 
     func run() async throws {
         let session = try Session.start(global)
         let puppet = try PuppetSession.load(name)
         puppet.touch()
-        session.ui.line(try puppet.ask(.windows).summary)
+        let reply = try puppet.ask(.windows)
+        guard json else {
+            session.ui.line(reply.text.hasPrefix("ok ") ? String(reply.text.dropFirst(3)) : reply.text)
+            return
+        }
+        session.ui.line(PuppetJSON.line(["windows": PuppetWindow.all(in: reply).map { window -> [String: Any] in
+            ["id": window.id, "frame": [window.frame.minX, window.frame.minY, window.frame.width, window.frame.height],
+             "level": window.level, "visible": window.visible, "key": window.key, "main": window.main,
+             "kind": window.kind.rawValue, "title": window.title]
+        }]))
     }
 }
 

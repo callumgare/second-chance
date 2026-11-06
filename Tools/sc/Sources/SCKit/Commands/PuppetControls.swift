@@ -80,7 +80,7 @@ struct PuppetAutoItCommand: AsyncParsableCommand {
 /// `do <name> click|type|check|uncheck c<n> …`: acting on a control by its
 /// handle. nil for any other action, which `do` carries out itself.
 enum PuppetControlAction {
-    static func perform(verb: String, arguments: [String], puppet: PuppetSession, wait: Double) async throws -> String? {
+    static func perform(verb: String, arguments: [String], puppet: PuppetSession, wait: Double) async throws -> PuppetStep? {
         guard ["click", "type", "check", "uncheck"].contains(verb), let ref = arguments.first,
               ref.range(of: #"^c\d+$"#, options: .regularExpression) != nil else { return nil }
         guard let setup = PuppetWineSetup.load(puppet) else {
@@ -107,8 +107,9 @@ enum PuppetControlAction {
         try WineControls.appendDraft(lines, to: puppet)
         try await Task.sleep(for: .seconds(wait))
         let after = Probe(puppet)
-        return PuppetOutcome.outcome(of: "\(verb) \(ref) \(control.summary)", before: before, after: after, puppet: puppet)
-            + "\nautoit: " + lines.joined(separator: "\nautoit: ")
+        var step = PuppetOutcome.step("\(verb) \(ref) \(control.summary)", before: before, after: after)
+        step.autoit = lines
+        return step
     }
 }
 

@@ -142,8 +142,7 @@ enum Frames {
     }
 
     /// Grey levels at 64x36, the size change is judged at.
-    static func thumbnail(_ image: CGImage) -> [UInt8]? {
-        let width = 64, height = 36
+    static func thumbnail(_ image: CGImage, width: Int = 64, height: Int = 36) -> [UInt8]? {
         var pixels = [UInt8](repeating: 0, count: width * height)
         let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
             guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
@@ -173,6 +172,28 @@ enum Frames {
         guard before.count == after.count, !before.isEmpty else { return 100 }
         let moved = zip(before, after).filter { abs(Int($0) - Int($1)) > 24 }.count
         return Int((Double(moved) * 100 / Double(before.count)).rounded())
+    }
+
+    /// The share of the picture that changed, 0–100, to a tenth: an action's
+    /// reply says a change under 1% is there rather than rounding it away.
+    static func changedShare(_ before: [UInt8], _ after: [UInt8]) -> Double {
+        guard before.count == after.count, !before.isEmpty else { return 100 }
+        let moved = zip(before, after).filter { abs(Int($0) - Int($1)) > 24 }.count
+        return (Double(moved) * 1000 / Double(before.count)).rounded() / 10
+    }
+
+    /// Where the picture changed, as a box of a `width` by `height`
+    /// thumbnail's pixels from its top left; nil when nothing did. A menu's
+    /// highlight moving changes little of the picture, but in one place.
+    static func changedBox(_ before: [UInt8], _ after: [UInt8], width: Int, height: Int) -> CGRect? {
+        guard before.count == after.count, before.count == width * height else { return nil }
+        var minX = width, minY = height, maxX = -1, maxY = -1
+        for index in 0..<before.count where abs(Int(before[index]) - Int(after[index])) > 24 {
+            let x = index % width, y = index / width
+            minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+        }
+        guard maxX >= 0 else { return nil }
+        return CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
     }
 
     /// The share that's black, 0–100.

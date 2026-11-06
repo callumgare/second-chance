@@ -869,10 +869,19 @@ a shell on that Mac.
 
 The other verbs are clients, and `--on` doesn't sync for them:
 
-- `do <name> click|move|down|up|drag|key|type|focus …` acts, then says what
-  changed: the share of a 64x36 thumbnail that changed, captured before and
-  after (`--wait`), whether it's now black, which windows came or went, and
-  whether the program ended. So most actions need no picture.
+- `do <name> click|move|down|up|drag|scroll|key|type|focus …` acts, then says what
+  changed: the share of a 128x72 thumbnail (from a capture at a quarter of a
+  point a pixel) that changed, captured before and after (`--wait`), and the
+  box it changed in, in window points, so a menu's highlight moving shows as
+  `changed <1% at 312,240 180x24` rather than nothing; whether it's now
+  black, which windows came or went, and whether the program ended. So most
+  actions need no picture. `scroll <x> <y> up|down|left|right [<lines>]` turns
+  the wheel there, 3 lines unless told. `--then "<action>"`, repeated,
+  does more actions after it, each replied to in turn, and stops at one that
+  fails or ends the program: a turn saved where no judgement is needed between
+  steps (`do lure key escape --then "key return"`). `--json` replies with
+  every step as JSON (`steps`, and `error` if one failed), for scripts;
+  `status`, `windows` and `shot` take `--json` too.
 - `shot` saves a picture, at most 1280 pixels across by default, or a part
   (`--region`, in points) at any `--scale`, and says what it costs to look at
   and how to fetch it.
