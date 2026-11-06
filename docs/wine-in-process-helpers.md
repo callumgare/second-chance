@@ -625,20 +625,26 @@ ignores its window closing (`SC_CLOSE`, which is all Alt+F4 does) and Alt+F4
 itself, but quits on F12 held down. A launch that says `--wine.quit-key=f12`
 (`RecordedLaunch.quitKey`) sets `QUIT_KEY`, and then the quit watch, once it
 has reported `quit requested`, holds that key down in the game's window for
-3 s instead and cancels the quit; the game quits itself, and its exit counts
-as asked for. A game that quits through its own menus takes several keys,
-separated by spaces, which are pressed in turn, 2.5 s apart (its menu, back from
-a game, takes over a second to read keys again), rather than held.
+5 s instead and cancels the quit; the game quits itself, and its exit counts
+as asked for. The hold repeats as a held Mac key does (the first repeat after
+0.25 s, then every 0.05 s): a posted key down doesn't repeat by itself, and a
+game that reads key presses rather than key state would see one press. Keys
+separated by spaces are pressed in turn instead, 2.5 s apart (a menu, back
+from a game, can take over a second to read keys again), for a game that
+needs different keys in a row.
 
 A game whose quit key asks the player first takes a second set,
 `--wine.quit-confirm-key` (`QUIT_CONFIRM_KEY`). The first Quit then presses
-the quit key alone, once, and a Quit within 10 s of it presses the confirm
-keys in turn. Icy Tower, an Allegro game, reacts to a key going down, not to
-one held: `--wine.quit-key=escape` shows its question in a game, and the
-confirm keys are Escape ten times, more than any of its screens needs (from a
-game, two leave for its menu and two more choose its Exit; a game paused with
-P takes one more). Extra presses do nothing once the game has gone, as the
-helper pressing them goes with it. Its integration test quits it the same
+the quit key alone, once, and a Quit within 10 s of it holds the confirm key
+(or presses several in turn). In Icy Tower, an Allegro game,
+`--wine.quit-key=escape` shows its question in a game, and the confirm key is
+Escape, held: Allegro repeats a held key itself, so it steps through every
+screen to Exit as a player holding Escape would (from a game, two leave for
+its menu and two more choose its Exit; a game paused with P takes one more),
+about 3 s after the second Quit, most of it the menu's wait to read keys
+again. The game's high-score name box takes no Escape and stops it there,
+for the player to answer. A hold outlasting the game does nothing, as the
+helper holding it goes with it. Its integration test quits it the same
 way, with two Quits (`quits: 2`, [testing.md](testing.md#scenarios)).
 
 With a quit key, the game window's close button is a Quit too

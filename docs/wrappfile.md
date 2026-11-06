@@ -474,7 +474,9 @@ app keeps no Wine.
 - **`--wine.quit-confirm-key=<keys>`**, beside a quit key, splits Quit in
   two, for a program whose quit key asks first: the first Quit presses the
   quit key alone, once, and a second within 10 s presses these keys in turn,
-  as Icy Tower's (`--wine.quit-key=escape`, and Escape ten times to confirm).
+  as Icy Tower's (`--wine.quit-key=escape`, and Escape held to confirm). One
+  confirm key is held, repeating as a held key does; several are pressed in
+  turn.
   Without `--wine.quit-key` it's refused when planning.
 - **A Steam launch is `steam://rungameid/<app id>`**, with no arguments, and
   names the program Steam starts, `--steam.exe=<its path in Wine>`, which the

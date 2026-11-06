@@ -1049,7 +1049,7 @@ struct NancyDrewQuitScenario {
     /// only asks (`--wine.quit-confirm-key`): each Quit but the last is
     /// checked to have left the program running a second later, then the
     /// last is pressed, and the caller waits for the program to end as
-    /// usually (its bound allows for the ten confirm keys, 2.5 s apart).
+    /// usually (its bound allows for confirm keys pressed in turn, 2.5 s apart).
     /// The failure, if a Quit couldn't be asked or ended the program early.
     private func pressQuit(times: Int, gamePid: Int32, context: Context) -> String? {
         for press in 1...max(1, times) {

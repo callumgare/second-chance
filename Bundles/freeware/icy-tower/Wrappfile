@@ -26,11 +26,13 @@ RUN "C:/icy-tower-setup/icytower13_install.exe" /VERYSILENT /SUPPRESSMSGBOXES /N
 REMOVE C:/icy-tower-setup
 # It ignores Wine's quit and its window's close button, and quits through its
 # own menus. The app's first Quit presses Escape once, which asks the player
-# in the game; a second Quit soon after presses it ten times, more than any
-# of its screens needs to reach Exit (from a game, two leave for the menu and
-# two more choose Exit; a game paused with P takes one more).
+# in the game; a second Quit soon after holds Escape down, and its repeats
+# take it through every screen to Exit in a second or two, as a player
+# holding Escape would (from a game, two leave for the menu and two more
+# choose Exit; a game paused with P takes one more). Not past the high-score
+# name box, which waits for the player.
 LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="tower.cfg" \
     --mount=type=store,source=replays,target=${const.install-dir}/replays/,files="*.itr" \
     --wine.graphics=direct-draw --wine.cursor-lock --wine.quit-key=escape \
-    --wine.quit-confirm-key="escape escape escape escape escape escape escape escape escape escape" \
+    --wine.quit-confirm-key=escape \
     "${const.install-dir}/icytower13.exe"

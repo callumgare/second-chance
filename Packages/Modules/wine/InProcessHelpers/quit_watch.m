@@ -26,9 +26,12 @@
 //  key down in the game's window for kQuitKeyHoldSeconds instead, and the
 //  quit itself is cancelled: for a game that ignores Wine's quit, its window
 //  closing and Alt+F4, but quits on a key held down, as Iji does on F12.
+//  The hold repeats as a held Mac key does, so a game that takes repeats as
+//  presses steps through its own menus, as a player holding the key would.
 //  Several keys, separated by spaces, are pressed in turn instead,
-//  kQuitKeyGapSeconds apart: for a game that quits through its own menus, as
-//  Icy Tower does on Escape pressed four times from a game.
+//  kQuitKeyGapSeconds apart. With QUIT_CONFIRM_KEY, a first quit presses the
+//  quit key once (Icy Tower's Escape asks the player) and a second one soon
+//  after holds the confirm key (or presses the confirm keys in turn).
 //
 //  Armed by QUIT_WATCH_EXE, in the process running that .exe.
 //
@@ -61,8 +64,19 @@ static void reportingFlushBuffer(id self, SEL _cmd) {
 static IMP gWineShouldTerminate;
 
 /// How long the quit key is held: long enough for a game that wants it held
-/// (Iji quits on F12 held for about a second).
-static const double kQuitKeyHoldSeconds = 3;
+/// (Iji quits on F12 held for about a second), and for one that takes the
+/// key's repeats as presses to reach its Exit. Icy Tower's Escape, held from
+/// a game, reaches it in about 3 s, the time its menu takes to read keys
+/// again, and the game is gone before the hold ends (a 1.5 s hold ends too
+/// soon). A hold outlasting the game does nothing: this goes with it.
+static const double kQuitKeyHoldSeconds = 5;
+
+/// A held key repeats as a Mac keyboard's does by default: the first repeat
+/// after this long, then one each kQuitKeyRepeatSeconds. A posted key down
+/// doesn't repeat by itself, and a game that reads key presses rather than
+/// key state sees a posted hold as one press.
+static const double kQuitKeyRepeatDelaySeconds = 0.25;
+static const double kQuitKeyRepeatSeconds = 0.05;
 
 /// How long each of several quit keys is down, and how long from one to the
 /// next: long enough for a game that polls its keyboard each frame to see
@@ -97,13 +111,28 @@ static NSWindow *gameWindowForKeys(void) {
 
 /// A key's down or up in the game's window, with the characters it types
 /// (key_names.m).
-static void postQuitKey(NSEventType type, NSString *name, unsigned short code, NSInteger windowNumber) {
+static void postQuitKey(NSEventType type, NSString *name, unsigned short code, NSInteger windowNumber, BOOL repeat) {
     NSString *characters = helperKeyCharacters(name, code);
     NSEvent *event = [NSEvent keyEventWithType:type location:NSZeroPoint modifierFlags:0
                                      timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:windowNumber
                                        context:nil characters:characters charactersIgnoringModifiers:characters
-                                     isARepeat:NO keyCode:code];
+                                     isARepeat:repeat keyCode:code];
     if (event) [NSApp postEvent:event atStart:NO];
+}
+
+/// Hold a key down for `seconds`, repeating as a held Mac key does, then let
+/// it go: each event from a timer on the main queue, so the run loop goes on
+/// delivering events meanwhile.
+static void holdQuitKey(NSString *name, unsigned short code, NSInteger windowNumber, double seconds) {
+    postQuitKey(NSEventTypeKeyDown, name, code, windowNumber, NO);
+    for (double at = kQuitKeyRepeatDelaySeconds; at < seconds; at += kQuitKeyRepeatSeconds) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(at * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            postQuitKey(NSEventTypeKeyDown, name, code, windowNumber, YES);
+        });
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(seconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        postQuitKey(NSEventTypeKeyUp, name, code, windowNumber, NO);
+    });
 }
 
 /// The names in a launch's quit keys, space-separated; empty when there are
@@ -126,10 +155,10 @@ static NSArray<NSString *> *quitKeyNames(const char *variable) {
 }
 
 /// Press keys in turn in the game's window, or with `holdOne`, hold a single
-/// key down (Iji's F12), on the main thread, where applicationShouldTerminate:
-/// is called: each down now or later and up later still, so the run loop
-/// goes on delivering events meanwhile. NO when there's no window to press
-/// them in.
+/// key down, repeating (Iji's F12, Icy Tower's confirming Escape), on the
+/// main thread, where applicationShouldTerminate: is called: each down now
+/// or later and up later still, so the run loop goes on delivering events
+/// meanwhile. NO when there's no window to press them in.
 static BOOL pressQuitKeys(NSArray<NSString *> *names, BOOL holdOne) {
     NSWindow *window = gameWindowForKeys();
     NSString *keys = [names componentsJoinedByString:@" "];
@@ -143,10 +172,7 @@ static BOOL pressQuitKeys(NSArray<NSString *> *names, BOOL holdOne) {
     if (names.count == 1 && holdOne) {
         NSString *name = names[0];
         unsigned short code = (unsigned short)helperKeyCode(name, &shift);
-        postQuitKey(NSEventTypeKeyDown, name, code, windowNumber);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kQuitKeyHoldSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            postQuitKey(NSEventTypeKeyUp, name, code, windowNumber);
-        });
+        holdQuitKey(name, code, windowNumber, kQuitKeyHoldSeconds);
         helperReport("QuitWatch", "notice", "holding %s for %.0f s, the game's own quit, rather than quitting", keys.UTF8String, kQuitKeyHoldSeconds);
         return YES;
     }
@@ -159,9 +185,9 @@ static BOOL pressQuitKeys(NSArray<NSString *> *names, BOOL holdOne) {
         // from a game), and a down and up let out together are a press a
         // game polling its keyboard never sees.
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(down * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            postQuitKey(NSEventTypeKeyDown, name, code, windowNumber);
+            postQuitKey(NSEventTypeKeyDown, name, code, windowNumber, NO);
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kQuitKeyPressSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                postQuitKey(NSEventTypeKeyUp, name, code, windowNumber);
+                postQuitKey(NSEventTypeKeyUp, name, code, windowNumber, NO);
             });
         });
     }];
@@ -173,7 +199,8 @@ static BOOL pressQuitKeys(NSArray<NSString *> *names, BOOL holdOne) {
 /// that's what happened (else the quit goes to Wine). With confirm keys too,
 /// a first request presses the quit key alone, which in a game like Icy
 /// Tower brings up its own question, and one within kQuitConfirmSeconds of it
-/// presses the confirm keys, which see the quit through.
+/// presses the confirm keys, which see the quit through: one confirm key is
+/// held, repeating (Icy Tower's Escape), several pressed in turn.
 static BOOL quitThroughKeys(void) {
     NSArray<NSString *> *quit = quitKeyNames("QUIT_KEY");
     if (quit.count == 0) return NO;
@@ -182,7 +209,7 @@ static BOOL quitThroughKeys(void) {
     double now = NSProcessInfo.processInfo.systemUptime;
     if (gQuitKeyPressedAt > 0 && now - gQuitKeyPressedAt <= kQuitConfirmSeconds) {
         gQuitKeyPressedAt = 0;
-        return pressQuitKeys(confirm, NO);
+        return pressQuitKeys(confirm, YES);
     }
     if (!pressQuitKeys(quit, NO)) return NO;
     gQuitKeyPressedAt = now;

@@ -867,7 +867,7 @@ handlers:
   the app's Quit that many times, for a launch whose first Quit only asks:
   each Quit but the last must leave the program running a second later (a
   run fails if the first Quit ends it), and after the last it must end
-  within the usual bound, which allows for the ten confirm keys 2.5 s apart. The wine module's `starts-and-quits` takes the
+  within the usual bound, which allows for confirm keys pressed in turn, 2.5 s apart. The wine module's `starts-and-quits` takes the
   count from its `quits` parameter, 1 unless a bundle says otherwise: 2 for
   a launch whose first Quit only asks (`--wine.quit-confirm-key`,
   [wine-in-process-helpers.md](wine-in-process-helpers.md#quit-watch)), as
