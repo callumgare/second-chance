@@ -1025,9 +1025,13 @@ The other verbs are clients, and `--on` doesn't sync for them:
   [key notation](wrappfile.md#key-sequences), as a launch's quit keys do:
   `key cmd+s`, `key up return*2` (steps in turn, 0.3 s apart, and a step's
   presses 0.3 s apart too), `key escape:hold=4s` (held, repeating as a held
-  Mac key does). `--hold <ms>` is how long each press is held (60 ms
-  unless told). A step with `*N` or `:hold` needs a game whose helper speaks
-  puppet protocol 5. `--then "<action>"`, repeated,
+  Mac key does), `key escape wait=1s return` (a second between those two;
+  `wait=0` presses the next at once), `key gap=100ms up up up return` (0.1 s
+  between every two instead of 0.3 s). The whole sequence goes to the game's
+  helper in one request, which presses it and replies once the last key is
+  up, so its timing doesn't depend on `sc`. `--hold <ms>` is how long each
+  press is held (60 ms unless told). Keys need a game whose helper speaks
+  puppet protocol 6. `--then "<action>"`, repeated,
   does more actions after it, each replied to in turn, and stops at one that
   fails or ends the program: a turn saved where no judgement is needed between
   steps (`do lure key escape --then "key return"`). `--json` replies with

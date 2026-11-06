@@ -150,6 +150,13 @@ struct ScenarioKeyActionTests {
         } throws: { error in
             "\(error)".contains("return*0")
         }
+        let timed = try Scenario.load(id: "test", file: file, overrides: ["first-key": "gap=300ms up wait=0 return"])
+        #expect(timed.handlers[0].actions == [.key("gap=300ms up wait=0 return"), .quit(1)])
+        #expect {
+            try Scenario.load(id: "test", file: file, overrides: ["first-key": "wait=1s return"])
+        } throws: { error in
+            "\(error)".contains("wait=1s: a wait goes between two steps")
+        }
     }
 }
 

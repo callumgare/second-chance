@@ -6,12 +6,16 @@
 //  turn; keys pressed together joined with `+`, modifiers first (`cmd+s`);
 //  `*N` to press a step N times (`return*2`), `:hold=<duration>` to hold it
 //  down that long, repeating as a held Mac key does (`escape:hold=5s`): a
-//  hold always says how long, as nothing can end one early. A launch's quit keys
-//  (`--wine.quit-key`), `sc puppet do … key` and a scenario's `{ key: … }`
-//  all read it here (docs/wrappfile.md#key-sequences).
+//  hold always says how long, as nothing can end one early. `wait=<duration>`
+//  between two steps is the time between those two (`escape wait=1s
+//  return`), and `gap=<duration>` first the time between every two
+//  (`gap=300ms up up return`); otherwise whoever presses them leaves its own.
+//  A launch's quit keys (`--wine.quit-key`), `sc puppet do … key` and a
+//  scenario's `{ key: … }` all read it here (docs/wrappfile.md#key-sequences).
 //
-//  The in-process helpers read the `canonical` form, every step explicit,
-//  with one small parser of their own (key_names.m's helperKeySteps):
+//  The in-process helpers read the `canonical` form, every press and every
+//  wait between them explicit, with one small parser of their own
+//  (key_names.m's helperKeySteps):
 //  docs/wine-in-process-helpers.md#the-canonical-key-sequence.
 
 import Foundation
@@ -19,9 +23,14 @@ import Foundation
 /// A sequence of keys to press, parsed from the notation.
 nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConvertible {
     public var steps: [Step]
+    /// `gap=<duration>`, written first: the time between every two steps
+    /// (and between the presses of a step pressed several times) in place
+    /// of the presser's usual gap. Nil when the sequence gives none.
+    public var gapMilliseconds: Int?
 
-    public init(steps: [Step]) {
+    public init(steps: [Step], gapMilliseconds: Int? = nil) {
         self.steps = steps
+        self.gapMilliseconds = gapMilliseconds
     }
 
     /// A modifier held while a step's key is pressed, in the order the
@@ -46,25 +55,31 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
     public enum Action: Sendable, Equatable {
         /// Down and up once, nothing written after the key.
         case press
-        /// `*N`: down and up N times, the sequence's usual gap between.
+        /// `*N`: down and up N times, the sequence's gap between.
         case presses(Int)
         /// `:hold=<duration>`: held down that long, repeating as a held Mac
         /// key does.
         case hold(milliseconds: Int)
     }
 
-    /// One step: keys pressed together, and what's done with them.
+    /// One step: keys pressed together, what's done with them, and any
+    /// `wait=` written before it.
     public struct Step: Sendable, Equatable, CustomStringConvertible {
         public var modifiers: [Modifier]
         /// The key's name, as key_names.m knows it: a named key in its
         /// canonical spelling (`escape`, not `esc`), or the character it types.
         public var key: String
         public var action: Action
+        /// `wait=<duration>` before it: the time from the step before's
+        /// release to this one's press, in place of the sequence's gap. Nil
+        /// when none is written; never on the first step.
+        public var waitMilliseconds: Int?
 
-        public init(modifiers: [Modifier] = [], key: String, action: Action = .press) {
+        public init(modifiers: [Modifier] = [], key: String, action: Action = .press, waitMilliseconds: Int? = nil) {
             self.modifiers = modifiers
             self.key = key
             self.action = action
+            self.waitMilliseconds = waitMilliseconds
         }
 
         /// How many times it's pressed: 1 for a hold.
@@ -84,8 +99,9 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
             (modifiers.map(\.rawValue) + [key]).joined(separator: "+")
         }
 
-        /// The step in canonical form: `cmd+s`, `return*2`, `escape:hold=5000ms`.
-        public var canonical: String {
+        /// The step as the notation writes it, its wait aside: `cmd+s`,
+        /// `return*2`, `escape:hold=5000ms`.
+        public var notation: String {
             switch action {
             case .press: chord
             case .presses(let count): count == 1 ? chord : "\(chord)*\(count)"
@@ -93,19 +109,65 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
             }
         }
 
-        public var description: String { canonical }
+        public var description: String { notation }
     }
 
-    /// The longest hold it takes.
+    /// One press or hold, as it's done: a step pressed several times is
+    /// that many of these.
+    public struct Press: Sendable, Equatable {
+        /// What's pressed: its action `.press` or `.hold`, and no wait.
+        public var step: Step
+        /// From the press before's release to this one's press, in ms. Nil
+        /// for the first, and for one at the presser's usual gap when it
+        /// has none to give (a scenario, which waits for the screen).
+        public var gapMilliseconds: Int?
+    }
+
+    /// The longest hold, wait or gap it takes.
     public static let longestHoldMilliseconds = 30000
     /// The most presses `*N` takes.
     public static let mostPresses = 100
 
-    /// Every step in canonical form, separated by spaces: what the helpers
-    /// read. Every hold says how long; a press count is written when over 1.
-    public var canonical: String { steps.map(\.canonical).joined(separator: " ") }
+    /// Each press in turn, and the time before it: a `wait=` where one is
+    /// written, else the sequence's `gap=`, else the presser's
+    /// `defaultGapMilliseconds`.
+    public func presses(defaultGapMilliseconds: Int? = nil) -> [Press] {
+        let gap = gapMilliseconds ?? defaultGapMilliseconds
+        var presses: [Press] = []
+        for step in steps {
+            let pressed = Step(modifiers: step.modifiers, key: step.key,
+                               action: step.holdMilliseconds.map { .hold(milliseconds: $0) } ?? .press)
+            for press in 0..<step.pressCount {
+                let before = presses.isEmpty ? nil : press == 0 ? (step.waitMilliseconds ?? gap) : gap
+                presses.append(Press(step: pressed, gapMilliseconds: before))
+            }
+        }
+        return presses
+    }
 
-    public var description: String { canonical }
+    /// What the helpers read: every press in turn, separated by a
+    /// `wait=<n>ms` saying exactly how long from one's release to the next's
+    /// press, which is `defaultGapMilliseconds` unless the sequence says
+    /// otherwise (`gap=`, `wait=`). Every hold says how long, a step pressed
+    /// several times is written out press by press, and there's no `gap=`, so
+    /// the helpers need no defaults of their own. It is notation, and reads
+    /// back as the same presses: `escape wait=2500ms escape:hold=5000ms`.
+    public func canonical(defaultGapMilliseconds: Int) -> String {
+        presses(defaultGapMilliseconds: defaultGapMilliseconds).map { press in
+            press.gapMilliseconds.map { "wait=\($0)ms \(press.step.notation)" } ?? press.step.notation
+        }.joined(separator: " ")
+    }
+
+    /// The sequence as the notation writes it, tidied: `gap=` first if it's
+    /// given, the long names short, durations in ms, `return*1` as `return`.
+    public var notation: String {
+        let words = steps.flatMap { step in
+            (step.waitMilliseconds.map { ["wait=\($0)ms"] } ?? []) + [step.notation]
+        }
+        return ((gapMilliseconds.map { ["gap=\($0)ms"] } ?? []) + words).joined(separator: " ")
+    }
+
+    public var description: String { notation }
 
     // MARK: - Parsing
 
@@ -115,13 +177,67 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
         public init(_ description: String) { self.description = description }
     }
 
-    /// Parse the notation: `up return*2`, `cmd+q`, `f12:hold=2s`, `escape:hold=5s`.
+    /// Parse the notation: `up return*2`, `cmd+q`, `f12:hold=2s`,
+    /// `escape wait=1s return`, `gap=300ms up up return`.
     public init(parsing text: String) throws(ParseError) {
         let words = text.split(whereSeparator: \.isWhitespace).map(String.init)
-        guard !words.isEmpty else { throw ParseError("no keys: write at least one, such as escape or cmd+q") }
+        guard words.contains(where: { Self.timing($0) == nil }) else {
+            throw ParseError(words.isEmpty ? "no keys: write at least one, such as escape or cmd+q"
+                : "\(words.joined(separator: " ")): no keys, only time between them; write at least one, such as escape")
+        }
         var steps: [Step] = []
-        for word in words { steps.append(try Self.step(word)) }
+        var gap: Int?
+        var wait: (word: String, milliseconds: Int)?
+        for (index, word) in words.enumerated() {
+            switch Self.timing(word) {
+            case "gap":
+                guard index == 0 else {
+                    throw ParseError(gap == nil ? "\(word): gap= comes first, before the keys"
+                        : "\(word): the gap is given once, first")
+                }
+                gap = try Self.duration(of: word, named: "gap")
+            case "wait":
+                if let wait { throw ParseError("\(wait.word) \(word): two waits in a row; write one") }
+                guard !steps.isEmpty else { throw ParseError("\(word): a wait goes between two steps, not before the first") }
+                wait = (word, try Self.duration(of: word, named: "wait"))
+            default:
+                var step = try Self.step(word)
+                step.waitMilliseconds = wait?.milliseconds
+                wait = nil
+                steps.append(step)
+            }
+        }
+        if let wait { throw ParseError("\(wait.word): a wait goes between two steps, not after the last") }
         self.steps = steps
+        self.gapMilliseconds = gap
+    }
+
+    /// `gap` or `wait` for a word that's one of them, or tries to be one
+    /// (`cmd+wait=1s`, `wait`); nil for a step.
+    static func timing(_ word: String) -> String? {
+        for name in ["gap", "wait"] where word == name || word.hasPrefix("\(name)=") || word.contains("+\(name)=") {
+            return name
+        }
+        return nil
+    }
+
+    /// The duration of a `gap=` or `wait=` word, 0 to 30 s.
+    static func duration(of word: String, named name: String) throws(ParseError) -> Int {
+        guard word.hasPrefix("\(name)=") else {
+            throw ParseError(word == name ? "\(word): a \(name) says how long, such as \(name)=1s"
+                : "\(word): a \(name) takes no modifier; it's \(name)=<duration> alone")
+        }
+        let duration = String(word.dropFirst(name.count + 1))
+        if duration.contains("*") || duration.contains(":") {
+            throw ParseError("\(word): a \(name) is only how long; *N and :hold are for keys")
+        }
+        guard let milliseconds = duration == "0" ? 0 : Self.milliseconds(duration, allowingNone: true) else {
+            throw ParseError("\(word): \(duration.isEmpty ? "\(name)= needs" : "\(duration) isn't") a duration, such as 0, 300ms or 1.5s")
+        }
+        guard milliseconds <= longestHoldMilliseconds else {
+            throw ParseError("\(word): a \(name) is at most \(longestHoldMilliseconds / 1000)s")
+        }
+        return milliseconds
     }
 
     /// One step: its chord, then any suffix.
@@ -163,7 +279,7 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
             if chord.hasSuffix(":hold") || chord.contains(":hold=") {
                 throw ParseError("\(word): a step is pressed several times (*N) or held (:hold), not both")
             }
-            action = .presses(count)
+            action = count == 1 ? .press : .presses(count)
         } else if let colon = word.lastIndex(of: ":"), colon > word.startIndex, word.index(after: colon) < word.endIndex {
             throw ParseError("\(word): a hold is written :hold=<duration>, such as :hold=2s")
         }
@@ -218,14 +334,14 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
     }
 
     /// A duration as written, `500ms`, `2s` or `1.5s`, in whole ms; nil
-    /// unless it's one and more than none.
-    static func milliseconds(_ text: String) -> Int? {
+    /// unless it's one and more than none (or none, `allowingNone`).
+    static func milliseconds(_ text: String, allowingNone: Bool = false) -> Int? {
         let (number, scale): (Substring, Double) = text.hasSuffix("ms") ? (text.dropLast(2), 1)
             : text.hasSuffix("s") ? (text.dropLast(1), 1000) : ("", 0)
         guard !number.isEmpty, number.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }),
               let value = Double(number) else { return nil }
         let milliseconds = Int((value * scale).rounded())
-        return milliseconds >= 1 ? milliseconds : nil
+        return milliseconds >= (allowingNone ? 0 : 1) ? milliseconds : nil
     }
 
     // MARK: - Key names

@@ -178,6 +178,14 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     /// (Icy Tower's Escape); the first Quit then presses the quit key alone.
     public var quitConfirmKey: String? { options["wine.quit-confirm-key"] }
 
+    /// How long the quit watch leaves from one quit key's release to the
+    /// next's press, unless the keys say (`gap=`, `wait=`): long enough for
+    /// a game to have changed screens before the next. Icy Tower's menu,
+    /// back from a game, takes over 1.2 s to read keys again; 2.5 s does.
+    /// The canonical form the helper is handed spells it out
+    /// (`KeySequence.canonical(defaultGapMilliseconds:)`).
+    public static let quitKeyGapMilliseconds = 2500
+
     /// The quit keys, as the quit watch is to press them; nil without any.
     /// Throws for keys planning would have refused.
     public func quitKeySequence() throws(KeySequence.ParseError) -> KeySequence? {

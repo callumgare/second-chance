@@ -222,6 +222,12 @@ struct BuildPlanTests {
             "\(error)".contains("--wine.quit-key=f12:hold=40s") && "\(error)".contains("at most 30s")
         }
         #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.quit-key=escape --wine.quit-confirm-key=enter*0") }
+        #expect(try plan("--wine.quit-key=\"gap=300ms up wait=0 return\"").launch?.quitKey == "gap=300ms up wait=0 return")
+        #expect {
+            try plan("--wine.quit-key=\"escape wait=1s\"")
+        } throws: { error in
+            "\(error)".contains("wait=1s: a wait goes between two steps, not after the last")
+        }
     }
 
     @Test("--wine.fullscreen-setting is recorded with ${…} filled in, and a bad one refused saying why")

@@ -36,19 +36,33 @@ struct PuppetRequestTests {
         #expect(throws: PuppetProtocolError.self) { try PuppetRequest.action(["jump"]) }
     }
 
-    @Test("Keys as people write them become a key request a step, in canonical form")
+    @Test("Keys as people write them become one key request, in canonical form, 0.3 s between presses unless they say")
     func keys() throws {
-        #expect(try PuppetRequest.keys("up return*2") == [.key("up"), .key("return*2")])
-        #expect(try PuppetRequest.keys("command+S", hold: 80) == [.key("cmd+S", hold: 80)])
-        #expect(try PuppetRequest.keys("escape:hold=4s") == [.key("escape:hold=4000ms")])
-        #expect(PuppetRequest.key("escape:hold=4000ms").line == "key escape:hold=4000ms")
-        #expect(PuppetRequest.key("return*2", gap: 500).line == "key return*2 gap=500")
+        #expect(try PuppetRequest.keys("up return*2") == .key("up wait=300ms return wait=300ms return"))
+        #expect(try PuppetRequest.keys("command+S", hold: 80) == .key("cmd+S", hold: 80))
+        #expect(try PuppetRequest.keys("escape:hold=4s") == .key("escape:hold=4000ms"))
+        #expect(try PuppetRequest.keys("gap=100ms up up wait=1s return")
+            == .key("up wait=100ms up wait=1000ms return"))
+        #expect(try PuppetRequest.keys("escape wait=0 escape") == .key("escape wait=0ms escape"))
         #expect(try PuppetRequest.action(["key", "f12:hold=5s"]) == .key("f12:hold=5000ms"))
+        #expect(try PuppetRequest.action(["key", "up", "down"]) == .key("up wait=300ms down"))
         #expect(throws: PuppetProtocolError.self) { try PuppetRequest.keys("escape:hold=40s") }
-        #expect(throws: PuppetProtocolError.self) { try PuppetRequest.action(["key", "up", "down"]) }
-        // A held key's reply comes once it's let go.
-        #expect(PuppetRequest.key("escape:hold=25000ms").timeout > 25)
-        #expect(PuppetRequest.key("escape").timeout < 30)
+        #expect(throws: PuppetProtocolError.self) { try PuppetRequest.keys("escape wait=1s") }
+        #expect(throws: PuppetProtocolError.self) { try PuppetRequest.action(["key", "gap=1s"]) }
+    }
+
+    @Test("A key request is sent as one line, its waits words, not options")
+    func keyLine() {
+        #expect(PuppetRequest.key("escape:hold=4000ms").line == "key escape:hold=4000ms")
+        #expect(PuppetRequest.key("up wait=300ms return", hold: 150).line == "key up wait=300ms return hold=150")
+    }
+
+    @Test("A key request's reply is waited for as long as its presses, holds and waits take")
+    func keyTimeout() {
+        #expect(PuppetRequest.key("escape:hold=25000ms").timeout == 45)
+        #expect(PuppetRequest.key("escape").timeout < 21)
+        #expect(PuppetRequest.key("up wait=30000ms up wait=30000ms up").timeout > 80)
+        #expect(PuppetRequest.key("up wait=1000ms up", hold: 500).timeout == 22)
     }
 
     @Test("Every action has its usage")

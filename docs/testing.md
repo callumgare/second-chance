@@ -855,7 +855,11 @@ handlers:
   loaded: each press held 150 ms, the steps in turn and a `*N` step's presses
   one at a time, each waiting until the picture changes, up to 10 s, so a
   key isn't lost while a screen it opened is still coming up; a `:hold` step
-  is held by the helper, repeating), `quit` (ask
+  is held by the helper, repeating; a `wait=` between two presses, or a
+  `gap=` first, waits that long there instead of for the picture, so
+  `{ key: "escape wait=0 escape" }` is two Escapes back to back and
+  `{ key: "gap=300ms down down return" }` walks a menu without stopping
+  to look), `quit` (ask
   the program to quit as its app's Quit does, and expect it to end) and
   `expect-sound` (listen, 3 s at a time, until the program is heard, a 0.1 s
   window above -60 dBFS, and fail the run if it isn't within 15 s; each

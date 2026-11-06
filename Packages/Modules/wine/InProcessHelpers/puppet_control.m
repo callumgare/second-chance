@@ -22,7 +22,7 @@
 //  window, top-left origin -- a capture's pixels divided by its `scale`.
 //  Options are `name=value` words after the arguments.
 //
-//    hello            -> ok version=5 pid=<n> exe=<name> commands=<list>   (version 1 helpers say error;
+//    hello            -> ok version=6 pid=<n> exe=<name> commands=<list>   (version 1 helpers say error;
 //                                       2 has no scroll, 3 no audio, 4 no key sequences' steps)
 //    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 native=0|1 key=0|1 active=0|1 onspace=0|1
 //                           cursor=held|free cursorlock=off|waiting|locked|not-locked
@@ -40,12 +40,13 @@
 //    drag <x> <y> <x2> <y2> [steps=<n>] [hold=<ms>] -> ok   press, moves along the line, release
 //    scroll <x> <y> <lines> [across=<n>] -> ok   a move there, then the wheel turned <lines> lines
 //                                       down (negative: up), and <n> right (negative: left)
-//    key <step> [hold=<ms>] [gap=<ms>] -> ok   one step of a key sequence in canonical form
-//                                       (key_names.m's helperKeySteps): [<mod>+...]<key>, then
-//                                       *<n> or :hold=<ms>ms. A press is down, held (60 ms, or
-//                                       hold=), up; *<n> presses n times, gap= (300) ms from each
-//                                       release to the next press; :hold= holds it down that long,
-//                                       repeating as a held Mac key does. Keys: a-z, 0-9, return,
+//    key <keys> [hold=<ms>] -> ok       a key sequence in canonical form (key_names.m's
+//                                       helperKeySteps): presses, each [<mod>+...]<key> or
+//                                       [<mod>+...]<key>:hold=<ms>ms, with wait=<ms>ms between
+//                                       every two, from one's release to the next's press. A press
+//                                       is down, held (60 ms, or hold=), up; :hold= holds it down
+//                                       that long, repeating as a held Mac key does; the reply
+//                                       comes once the last is up. Keys: a-z, 0-9, return,
 //                                       escape, tab, space, delete, left, right, up, down, f1-f12,
 //                                       home, end, pageup, pagedown, or a punctuation character;
 //                                       mods ctrl, alt, shift, cmd
@@ -558,9 +559,6 @@ static NSString *scrollCommand(double x, double y, int lines, int across) {
 /// kKeyRepeatMicroseconds.
 static const useconds_t kKeyRepeatDelayMicroseconds = 250 * 1000;
 static const useconds_t kKeyRepeatMicroseconds = 50 * 1000;
-/// From one press's release to the next's, for a step pressed several times
-/// (`return*2`), unless the request says (`gap=`).
-static const int kBetweenPressesMilliseconds = 300;
 
 /// Post a key's events on the game window: modifiers down (as flag changes,
 /// which is how Wine learns of them), the key down, held, up, the modifiers
@@ -610,23 +608,25 @@ static NSString *postKey(int code, NSString *characters, NSEventModifierFlags fl
     return nil;
 }
 
-/// One step of a key sequence in canonical form (helperKeySteps,
-/// key_names.m): `cmd+s`, `return*2`, `escape:hold=4000ms`. A press is held
-/// `hold=` ms (kKeyHoldMilliseconds), and presses of a step pressed several
-/// times are `gap=` ms apart; a `:hold=` holds the key that long, repeating.
-static NSString *keyCommand(NSString *spec, NSDictionary<NSString *, NSString *> *options) {
+/// A key sequence in canonical form (helperKeySteps, key_names.m), done in
+/// turn: `up wait=300ms return`, `escape:hold=4000ms`. A press is held
+/// `hold=` ms (kKeyHoldMilliseconds), and a `:hold=` holds the key that
+/// long, repeating; each `wait=` is the time from the press before's
+/// release to the next one's press. Answered once the last is up.
+static NSString *keyCommand(NSString *keys, NSDictionary<NSString *, NSString *> *options) {
     NSString *problem = nil;
-    NSData *steps = helperKeySteps(spec, &problem);
+    NSData *steps = helperKeySteps(keys, &problem);
     if (!steps) return [@"error " stringByAppendingString:problem];
-    if (steps.length != sizeof(HelperKeyStep)) return @"error key takes one step";
-    HelperKeyStep step = *(const HelperKeyStep *)steps.bytes;
-    NSString *characters = helperKeyCharacters(@(step.name), step.code);
-    if (step.holdMilliseconds > 0) {
-        return postKey(step.code, characters, step.flags, (useconds_t)step.holdMilliseconds * 1000, YES) ?: @"ok";
-    }
-    for (int press = 0; press < step.presses; press++) {
-        if (press > 0) usleep(milliseconds(options[@"gap"], kBetweenPressesMilliseconds));
-        NSString *error = postKey(step.code, characters, step.flags, milliseconds(options[@"hold"], kKeyHoldMilliseconds), NO);
+    NSUInteger count = steps.length / sizeof(HelperKeyStep);
+    for (NSUInteger index = 0; index < count; index++) {
+        HelperKeyStep step = ((const HelperKeyStep *)steps.bytes)[index];
+        if (step.waitMilliseconds > 0) usleep((useconds_t)step.waitMilliseconds * 1000);
+        NSString *characters = helperKeyCharacters(@(step.name), step.code);
+        BOOL held = step.holdMilliseconds > 0;
+        useconds_t down = held ? (useconds_t)step.holdMilliseconds * 1000 : milliseconds(options[@"hold"], kKeyHoldMilliseconds);
+        debugLog("key %s%s down %u ms, %d ms after the last (t=%.3f)", step.name, held ? " held" : "", down / 1000,
+                 step.waitMilliseconds, NSProcessInfo.processInfo.systemUptime);
+        NSString *error = postKey(step.code, characters, step.flags, down, held);
         if (error) return error;
     }
     return @"ok";
@@ -691,7 +691,7 @@ static NSString *focusCommand(void) {
 
 static NSString *helloCommand(void) {
     const char *exe = getprogname();
-    return [NSString stringWithFormat:@"ok version=5 pid=%d exe=%s commands=hello,state,windows,capture,click,move,down,up,drag,scroll,key,type,focus,yield,quit,audio",
+    return [NSString stringWithFormat:@"ok version=6 pid=%d exe=%s commands=hello,state,windows,capture,click,move,down,up,drag,scroll,key,type,focus,yield,quit,audio",
             getpid(), exe ? exe : "?"];
 }
 
@@ -729,13 +729,14 @@ static NSString *quitCommand(void) {
 
 #pragma mark - Serving
 
-/// The words before the first `name=value` option, and the options.
+/// The words before the first `name=value` option, and the options. A
+/// key sequence's `wait=` is one of its words, never an option.
 static NSArray<NSString *> *splitRequest(NSString *line, NSMutableDictionary<NSString *, NSString *> *options) {
     NSMutableArray<NSString *> *words = [NSMutableArray array];
     for (NSString *word in [line componentsSeparatedByString:@" "]) {
         if (word.length == 0) continue;
         NSRange equals = [word rangeOfString:@"="];
-        BOOL option = words.count > 0 && equals.location != NSNotFound && equals.location > 0
+        BOOL option = words.count > 0 && equals.location != NSNotFound && equals.location > 0 && ![word hasPrefix:@"wait="]
             && [[word substringToIndex:equals.location] rangeOfCharacterFromSet:NSCharacterSet.letterCharacterSet.invertedSet].location == NSNotFound;
         if (option) {
             options[[word substringToIndex:equals.location]] = [word substringFromIndex:equals.location + 1];
@@ -767,7 +768,9 @@ static NSString *handle(NSString *line) {
     if ([command isEqualToString:@"scroll"] && count == 4) {
         return scrollCommand(parts[1].doubleValue, parts[2].doubleValue, parts[3].intValue, options[@"across"].intValue);
     }
-    if ([command isEqualToString:@"key"] && count == 2) return keyCommand(parts[1], options);
+    if ([command isEqualToString:@"key"] && count >= 2) {
+        return keyCommand([[parts subarrayWithRange:NSMakeRange(1, count - 1)] componentsJoinedByString:@" "], options);
+    }
     if ([command isEqualToString:@"type"] && count == 2) return typeCommand(parts[1]);
     if ([command isEqualToString:@"focus"] && count == 1) return focusCommand();
     if ([command isEqualToString:@"yield"] && count == 2) return yieldCommand((pid_t)parts[1].intValue);
@@ -779,8 +782,15 @@ static NSString *handle(NSString *line) {
 /// Answer one connection's request, then close it.
 static void *answer(void *arg) {
     int client = (int)(intptr_t)arg;
-    char buffer[4096] = {0};
-    ssize_t length = read(client, buffer, sizeof(buffer) - 1);
+    // A request is one line, which a long key sequence can take more than
+    // one read to deliver.
+    char buffer[16384] = {0};
+    ssize_t length = 0;
+    while ((size_t)length < sizeof(buffer) - 1 && !memchr(buffer, '\n', (size_t)length)) {
+        ssize_t n = read(client, buffer + length, sizeof(buffer) - 1 - (size_t)length);
+        if (n <= 0) break;
+        length += n;
+    }
     if (length > 0) {
         @autoreleasepool {
             NSString *line = [[NSString stringWithUTF8String:buffer]

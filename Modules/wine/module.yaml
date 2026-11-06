@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 24
+release: 25
 native: "wine"                               # its Swift: Packages/Modules/wine (WineKit, WineExecutor), WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -80,7 +80,8 @@ build:
     # a game played with the keyboard), window (fullscreen or windowed),
     # overriding what the program asks for when the wrapp gets it wrong,
     # quit-key, the keys the app's Quit presses (key notation: f12:hold=5s, up
-    # return*2) in a program that ignores Wine's quit, and quit-confirm-key,
+    # return*2, escape wait=1s return; 2.5 s between keys unless a gap= or
+    # wait= says) in a program that ignores Wine's quit, and quit-confirm-key,
     # the keys a second Quit soon after presses, for a program whose quit key
     # first asks, and
     # fullscreen-setting, where the program keeps its own fullscreen

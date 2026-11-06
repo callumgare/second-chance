@@ -108,9 +108,13 @@ struct InProcessHelperVariablesTests {
         #expect(key(["wine.quit-key": "f12"]) == "f12")
         #expect(key(["wine.quit-key": "f12:hold=5s"]) == "f12:hold=5000ms")
         #expect(key(["wine.quit-key": "f12:hold=1.5s"]) == "f12:hold=1500ms")
-        // Several keys are pressed in turn, as written
-        #expect(key(["wine.quit-key": "escape esc return"]) == "escape escape return")
-        #expect(key(["wine.quit-key": "up return*2"]) == "up return*2")
+        // Several keys are pressed in turn, as written, the quit keys' 2.5 s
+        // between each two spelled out unless the keys say otherwise.
+        #expect(key(["wine.quit-key": "escape esc return"]) == "escape wait=2500ms escape wait=2500ms return")
+        #expect(key(["wine.quit-key": "up return*2"]) == "up wait=2500ms return wait=2500ms return")
+        #expect(key(["wine.quit-key": "escape wait=0 escape"]) == "escape wait=0ms escape")
+        #expect(key(["wine.quit-key": "gap=300ms up up wait=1s return"]) == "up wait=300ms up wait=1000ms return")
+        #expect(key(["wine.quit-key": "escape wait=1s"]) == nil)
         #expect(key(["wine.quit-key": "f13"]) == nil)
         #expect(key([:]) == nil)
     }
@@ -123,7 +127,7 @@ struct InProcessHelperVariablesTests {
         }
         let both = variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape escape"])
         #expect(both["QUIT_KEY"] == "escape")
-        #expect(both["QUIT_CONFIRM_KEY"] == "escape escape")
+        #expect(both["QUIT_CONFIRM_KEY"] == "escape wait=2500ms escape")
         // Icy Tower's: the quit key pressed once, the confirm key held.
         let icy = variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape:hold=5s"])
         #expect(icy["QUIT_KEY"] == "escape")

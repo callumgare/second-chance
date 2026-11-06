@@ -67,7 +67,9 @@ public nonisolated struct Scenario: Sendable, Equatable {
         case quit(Int)
         /// Press keys, as a program waiting at a keyboard prompt needs, in
         /// the key notation (docs/wrappfile.md#key-sequences): `escape`,
-        /// `cmd+q`, `up return*2`, `f12:hold=2s`.
+        /// `cmd+q`, `up return*2`, `f12:hold=2s`, `escape wait=1s return`.
+        /// Between two presses, the test runner waits for the screen to
+        /// change, unless the keys give a `wait=` or `gap=`.
         case key(String)
         /// Listen to the program until it is heard (a 0.1 s window above
         /// -60 dBFS), and fail if it isn't within the test runner's bound:

@@ -28,11 +28,12 @@
 //  Alt+F4, but quits on a key of its own, as Iji does on F12 held down. The
 //  keys come in a key sequence's canonical form (helperKeySteps,
 //  key_names.m), which the wrapp makes from the launch's own (KeySequence),
-//  and are done exactly as it says: steps in turn, kQuitKeyGapSeconds from
-//  one's release to the next's press, `*N` pressed N times so, and `:hold=`
-//  held that long, repeating as a held Mac key does, so a game that takes
-//  repeats as presses steps through its own menus, as a player holding the
-//  key would. With QUIT_CONFIRM_KEY, a first quit presses the quit keys
+//  and are done exactly as it says: presses in turn, each `wait=` from one's
+//  release to the next's press (the quit keys' usual 2.5 s spelled out by
+//  the wrapp, RecordedLaunch.quitKeyGapMilliseconds, unless the keys say
+//  otherwise), and `:hold=` held that long, repeating as a held Mac key
+//  does, so a game that takes repeats as presses steps through its own
+//  menus, as a player holding the key would. With QUIT_CONFIRM_KEY, a first quit presses the quit keys
 //  (Icy Tower's Escape asks the player) and a second one soon after the
 //  confirm keys (Icy Tower's Escape held).
 //
@@ -73,13 +74,10 @@ static IMP gWineShouldTerminate;
 static const double kQuitKeyRepeatDelaySeconds = 0.25;
 static const double kQuitKeyRepeatSeconds = 0.05;
 
-/// How long a pressed quit key is down, and how long from its release to
-/// the next press: long enough for a game that polls its keyboard each frame
-/// to see the press, and to have changed screens before the next. Icy
-/// Tower's menu, back from a game, takes over 1.2 s to read keys again;
-/// 2.5 s does.
+/// How long a pressed quit key is down: long enough for a game that polls
+/// its keyboard each frame to see the press. The time from its release to
+/// the next press is the keys' own `wait=`.
 static const double kQuitKeyPressSeconds = 0.15;
-static const double kQuitKeyGapSeconds = 2.5;
 
 /// How soon after the quit keys a second quit presses the confirm keys
 /// (QUIT_CONFIRM_KEY) rather than the quit keys again.
@@ -134,15 +132,15 @@ static void postQuitModifiers(HelperKeyStep step, BOOL down, NSInteger windowNum
     }
 }
 
-/// Do the steps from `index` on, `press` presses into that one: each down
-/// now, its up later, and the next press kQuitKeyGapSeconds after the up,
+/// Do the steps from `index` on: each down now, its up later, and the next
+/// press its `wait=` after the up,
 /// each from a timer on the main queue, so the run loop goes on delivering
 /// events meanwhile. A held step repeats as a held Mac key does. Each up is
 /// timed from when its down was posted, not from the start: the main thread
 /// can be held up for seconds (Icy Tower's menu, back from a game), and a
 /// down and up let out together are a press a game polling its keyboard
 /// never sees.
-static void runQuitSteps(NSData *steps, NSUInteger index, int press, NSInteger windowNumber) {
+static void runQuitSteps(NSData *steps, NSUInteger index, NSInteger windowNumber) {
     NSUInteger count = steps.length / sizeof(HelperKeyStep);
     if (index >= count) return;
     HelperKeyStep step = ((const HelperKeyStep *)steps.bytes)[index];
@@ -158,11 +156,9 @@ static void runQuitSteps(NSData *steps, NSUInteger index, int press, NSInteger w
     afterSeconds(seconds, ^{
         postQuitKey(NSEventTypeKeyUp, step, step.flags, windowNumber, NO);
         postQuitModifiers(step, NO, windowNumber);
-        BOOL again = press + 1 < step.presses;
-        if (!again && index + 1 >= count) return;
-        afterSeconds(kQuitKeyGapSeconds, ^{
-            runQuitSteps(steps, again ? index : index + 1, again ? press + 1 : 0, windowNumber);
-        });
+        if (index + 1 >= count) return;
+        HelperKeyStep next = ((const HelperKeyStep *)steps.bytes)[index + 1];
+        afterSeconds(next.waitMilliseconds / 1000.0, ^{ runQuitSteps(steps, index + 1, windowNumber); });
     });
 }
 
@@ -189,7 +185,7 @@ static BOOL pressQuitKeys(NSData *steps, const char *variable) {
         return NO;
     }
     [window makeKeyAndOrderFront:nil];
-    runQuitSteps(steps, 0, 0, window.windowNumber);
+    runQuitSteps(steps, 0, window.windowNumber);
     helperReport("QuitWatch", "notice", "pressing %s, the game's own quit, rather than quitting", keys);
     return YES;
 }

@@ -603,22 +603,38 @@ read by one parser, `KeySequence` (WrappKit's `KeyNotation`):
   digit or punctuation (an upper-case letter or a shifted character holds
   shift). Names are read in any case.
 - **`*N` presses a step N times** (`return*2`, at most 100), each press down
-  and up, with the sequence's usual gap between presses.
+  and up, with the sequence's gap between presses.
 - **`:hold=<duration>` holds a step down** that long (`500ms`, `2s`,
   `1.5s`, at most 30 s), repeating as a held Mac key does (the first repeat
   after 0.25 s, then one each 0.05 s), so a program that takes repeats as
   presses sees what a player holding the key would. A hold always says how
   long, as nothing ends one early (one that outlasts the program ends with
   it). A step is pressed several times or held, not both.
+- **`wait=<duration>` between two steps is the time between those two**,
+  from the first's release to the second's press, in place of the usual
+  gap there, not added to it: `escape wait=1s return` leaves one second
+  between them, and `up up wait=0 return` presses Return at once after the
+  second Up. It takes the durations `:hold=` does, at most 30 s, or `0`.
+- **`gap=<duration>` first sets the gap between every two presses** of the
+  sequence, a `*N` step's included, in place of whoever presses its usual
+  one: `gap=300ms up up up return`. A `wait=` still has its say where one is
+  written: `gap=1s up wait=0 down return` waits a second only before Return.
 
-`f12:hold=5s`, `escape:hold=2s`, `up return*2` and `cmd+q` are all sequences.
-An unknown key or modifier, `*0`, `:hold` without a duration, a bad
-duration, a hold over 30 s, `*N` with `:hold`, or nothing at all is
-refused, saying which part is wrong.
-What the sequence's usual gap is depends on who presses: 2.5 s from one
-release to the next press for quit keys, which a program changing screens
-needs, and 0.3 s for `sc puppet`. The in-process helpers are handed the
-sequence's canonical form, every step explicit
+`f12:hold=5s`, `escape:hold=2s`, `up return*2`, `cmd+q`, `escape wait=1s
+return` and `gap=100ms down down return` are all sequences. An unknown key
+or modifier, `*0`, `:hold` without a duration, a bad duration, a hold, wait
+or gap over 30 s, `*N` with `:hold`, a `wait=` before the first step or after
+the last, two waits in a row, a `gap=` anywhere but first or given twice, a
+modifier, `*N` or `:hold` on a wait or gap, or no key at all is refused,
+saying which part is wrong.
+
+The usual gap, when a sequence gives no `gap=`, depends on who presses: 2.5
+s from one release to the next press for quit keys, which a program
+changing screens needs; 0.3 s for `sc puppet`; and for a test scenario's
+`key` action, until the program's picture changes
+([testing.md](testing.md#scenarios)). The in-process helpers are handed the
+sequence's canonical form, every press and every wait between them
+explicit, the presser's gap spelled out
 ([wine-in-process-helpers.md](wine-in-process-helpers.md#the-canonical-key-sequence)).
 
 ## What modules add

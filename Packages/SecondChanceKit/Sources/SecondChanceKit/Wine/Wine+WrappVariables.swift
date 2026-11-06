@@ -122,13 +122,17 @@ nonisolated extension Wine {
         // A launch that says --wine.quit-key has the quit watch press those
         // keys when the app is asked to quit, and with --wine.quit-confirm-key,
         // press those when it's asked again soon after: in canonical form,
-        // every hold explicit (RecordedLaunch.quitKeySequence), which the
-        // helper does exactly (docs/wine-in-process-helpers.md#quit-keys).
+        // every hold and every wait between presses explicit, the quit keys'
+        // usual gap among them (RecordedLaunch.quitKeyGapMilliseconds), which
+        // the helper does exactly (docs/wine-in-process-helpers.md#quit-keys).
         if let launch {
             do {
+                let gap = RecordedLaunch.quitKeyGapMilliseconds
                 if let keys = try launch.quitKeySequence() {
-                    env["QUIT_KEY"] = keys.canonical
-                    if let confirm = try launch.quitConfirmKeySequence() { env["QUIT_CONFIRM_KEY"] = confirm.canonical }
+                    env["QUIT_KEY"] = keys.canonical(defaultGapMilliseconds: gap)
+                    if let confirm = try launch.quitConfirmKeySequence() {
+                        env["QUIT_CONFIRM_KEY"] = confirm.canonical(defaultGapMilliseconds: gap)
+                    }
                 }
             } catch {
                 // Planning refuses keys it can't read, so only a wrapp built

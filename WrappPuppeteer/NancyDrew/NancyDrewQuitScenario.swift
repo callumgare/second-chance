@@ -940,9 +940,9 @@ struct NancyDrewQuitScenario {
                     case .key(let keys):
                         // Keys in the notation (docs/wrappfile.md#key-sequences),
                         // done in turn (a program's own menu, for one that
-                        // ignores ⌘Q): each press of a step pressed several
-                        // times waits, as each step does, for the screen to
-                        // change; a held step is held by the helper.
+                        // ignores ⌘Q), a press at a time: between two, the
+                        // `wait=` or `gap=` the keys give, or else until the
+                        // screen changes; a held step is held by the helper.
                         let sequence: KeySequence
                         do {
                             sequence = try KeySequence(parsing: keys)
@@ -950,20 +950,26 @@ struct NancyDrewQuitScenario {
                             forceQuit(app)
                             return "The scenario's keys \(keys) can't be pressed: \(error)"
                         }
-                        for step in sequence.steps {
-                            let presses = step.holdMilliseconds == nil
-                                ? Array(repeating: KeySequence.Step(modifiers: step.modifiers, key: step.key), count: step.pressCount)
-                                : [step]
-                            for press in presses {
-                                logger.notice("  ✓ \(handler.id): found its \(handler.when), pressing \(press.canonical)...")
-                                let before = keyProbe(context)
-                                guard context.game.press(press.canonical) else {
-                                    forceQuit(app)
-                                    return "Couldn't press \(press.canonical) in the program (its helper may predate keys)"
+                        var before: ImageFingerprint?
+                        var last: String?
+                        for press in sequence.presses() {
+                            let pressing = press.step.notation
+                            if let last {
+                                if let gap = press.gapMilliseconds {
+                                    Thread.sleep(forTimeInterval: Double(gap) / 1000)
+                                } else {
+                                    waitForChange(from: before, after: last, context: context)
                                 }
-                                waitForChange(from: before, after: press.canonical, context: context)
                             }
+                            logger.notice("  ✓ \(handler.id): found its \(handler.when), pressing \(pressing)...")
+                            before = keyProbe(context)
+                            guard context.game.press(pressing) else {
+                                forceQuit(app)
+                                return "Couldn't press \(pressing) in the program (its helper may predate keys)"
+                            }
+                            last = pressing
                         }
+                        if let last { waitForChange(from: before, after: last, context: context) }
                         remembered.acted = true
                         remembered.actedAt = Date()
                     case .expectSound:

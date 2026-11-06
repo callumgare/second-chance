@@ -85,14 +85,15 @@ nonisolated public struct WindowControl: Sendable {
         send(.click(point))
     }
 
-    /// Do one step of a key sequence (`escape`, `cmd+q`, `return*2`,
-    /// `f12:hold=1000ms`: docs/wrappfile.md#key-sequences), in canonical
-    /// form. A helper from before keys (protocol 1) answers with an error,
-    /// and one from before key sequences (4) for a step with `*N` or `:hold`.
+    /// Press keys in a key sequence's canonical form
+    /// (`KeySequence.canonical(defaultGapMilliseconds:)`, or one press as
+    /// `KeySequence.Step.notation` writes it: `escape`, `cmd+q`,
+    /// `f12:hold=1000ms`: docs/wrappfile.md#key-sequences). A helper from
+    /// before keys (protocol 1) answers with an error.
     @discardableResult
-    public func press(_ step: String) -> Bool {
+    public func press(_ keys: String) -> Bool {
         // Held long enough for a game that polls the keyboard each frame.
-        let request = PuppetRequest.key(step, hold: 150)
+        let request = PuppetRequest.key(keys, hold: 150)
         return send(request, timeout: request.timeout)
     }
 

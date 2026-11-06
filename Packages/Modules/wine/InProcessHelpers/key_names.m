@@ -91,22 +91,23 @@ static long wholeNumber(NSString *text) {
     return text.integerValue;
 }
 
-/// One canonical step, `[<mod>+...]<key>[*<n>|:hold=<ms>ms]`, or why not.
+/// A canonical duration, `<n>ms`, in ms; -1 when it isn't one. `allowNone`
+/// takes 0ms, as a wait does.
+static long canonicalMilliseconds(NSString *value, BOOL allowNone) {
+    long milliseconds = [value hasSuffix:@"ms"] ? wholeNumber([value substringToIndex:value.length - 2]) : -1;
+    return milliseconds >= (allowNone ? 0 : 1) ? milliseconds : -1;
+}
+
+/// One canonical press, `[<mod>+...]<key>[:hold=<ms>ms]`, or why not.
 static NSString *readKeyStep(NSString *word, HelperKeyStep *step) {
     memset(step, 0, sizeof(*step));
-    step->presses = 1;
     NSString *chord = word;
     NSRange hold = [word rangeOfString:@":hold=" options:NSBackwardsSearch];
-    NSRange star = [word rangeOfString:@"*" options:NSBackwardsSearch];
     if (hold.location != NSNotFound && hold.location > 0) {
-        NSString *value = [word substringFromIndex:NSMaxRange(hold)];
-        long milliseconds = [value hasSuffix:@"ms"] ? wholeNumber([value substringToIndex:value.length - 2]) : -1;
+        long milliseconds = canonicalMilliseconds([word substringFromIndex:NSMaxRange(hold)], NO);
         if (milliseconds < 1) return [NSString stringWithFormat:@"%@: a hold is :hold=<n>ms", word];
         step->holdMilliseconds = (int)milliseconds;
         chord = [word substringToIndex:hold.location];
-    } else if (star.location != NSNotFound && star.location > 0 && wholeNumber([word substringFromIndex:star.location + 1]) >= 1) {
-        step->presses = (int)wholeNumber([word substringFromIndex:star.location + 1]);
-        chord = [word substringToIndex:star.location];
     }
     // The last part is the key, `+` itself when the chord ends `++` or is `+`.
     NSString *key = chord;
@@ -141,18 +142,38 @@ static NSString *readKeyStep(NSString *word, HelperKeyStep *step) {
 
 NSData *helperKeySteps(NSString *canonical, NSString **error) {
     NSMutableData *steps = [NSMutableData data];
+    long wait = -1;  // the wait read since the last press; -1 for none
+    NSString *problem = nil;
     for (NSString *word in [canonical componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceCharacterSet]) {
         if (word.length == 0) continue;
-        HelperKeyStep step;
-        NSString *problem = readKeyStep(word, &step);
-        if (problem) {
-            if (error) *error = problem;
-            return nil;
+        if ([word hasPrefix:@"wait="]) {
+            if (steps.length == 0 || wait >= 0) {
+                problem = [NSString stringWithFormat:@"%@: a wait goes between two presses", word];
+                break;
+            }
+            wait = canonicalMilliseconds([word substringFromIndex:5], YES);
+            if (wait < 0) {
+                problem = [NSString stringWithFormat:@"%@: a wait is wait=<n>ms", word];
+                break;
+            }
+            continue;
         }
+        if (steps.length > 0 && wait < 0) {
+            // The canonical form says every wait, so the helpers have no
+            // default of their own.
+            problem = [NSString stringWithFormat:@"%@: no wait= before it", word];
+            break;
+        }
+        HelperKeyStep step;
+        if ((problem = readKeyStep(word, &step))) break;
+        step.waitMilliseconds = (int)MAX(wait, 0);
+        wait = -1;
         [steps appendBytes:&step length:sizeof(step)];
     }
-    if (steps.length == 0) {
-        if (error) *error = @"no keys";
+    if (!problem && wait >= 0) problem = @"a wait at the end";
+    if (!problem && steps.length == 0) problem = @"no keys";
+    if (problem) {
+        if (error) *error = problem;
         return nil;
     }
     return steps;

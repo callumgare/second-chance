@@ -290,21 +290,25 @@ typedef struct {
 extern const HelperModifierKey helperModifierKeys[4];
 
 /// One step of a key sequence: a key, the modifiers held with it (shift
-/// included when the key's character needs it), and either how many times
-/// it's pressed or how long it's held, repeating as a held Mac key does.
+/// included when the key's character needs it), whether it's pressed or
+/// held, repeating as a held Mac key does, and how long from the step
+/// before's release to its press.
 typedef struct {
     char name[16];            // the key's name, for its characters (helperKeyCharacters)
     unsigned short code;      // its keycode
     NSEventModifierFlags flags;
-    int presses;              // 1 or more; 1 for a hold
     int holdMilliseconds;     // 0: pressed; otherwise held this long
+    int waitMilliseconds;     // from the step before's release (0 for the first)
 } HelperKeyStep;
 
-/// A key sequence's canonical form -- steps separated by spaces, each
-/// `[<mod>+...]<key>[*<n>|:hold=<ms>ms]` (docs/wine-in-process-helpers.md#the-canonical-key-sequence)
-/// -- read into HelperKeySteps, packed in the data; nil, saying why in
-/// `error`, for anything else. People's notation is checked and made
-/// canonical in Swift (KeySequence) before a helper sees it.
+/// A key sequence's canonical form -- presses separated by waits, `<press>
+/// wait=<ms>ms <press> ...`, each press `[<mod>+...]<key>[:hold=<ms>ms]`
+/// (docs/wine-in-process-helpers.md#the-canonical-key-sequence) -- read into
+/// HelperKeySteps, packed in the data, each with the wait before it; nil,
+/// saying why in `error`, for anything else, a press without a wait before
+/// it included. People's notation is checked and made canonical, with each
+/// presser's usual gap spelled out, in Swift (KeySequence) before a helper
+/// sees it.
 NSData *helperKeySteps(NSString *canonical, NSString **error);
 #endif
 
