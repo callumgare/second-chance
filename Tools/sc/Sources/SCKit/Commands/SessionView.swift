@@ -39,6 +39,15 @@ struct SessionViewCommand: AsyncParsableCommand {
             }
             chosen = only
         }
+        // Watching disturbs nothing, so it goes ahead; but what's done by hand
+        // there could disturb whoever has it, so say who.
+        let holder = ScreenLease.currentHolder(repoRoot: session.repo.root, branch: await ScreenLease.branch(of: session.repo.root))
+        if let lease = try? await SessionSetupCommand.othersLeases([chosen], on: mac, holder: holder).first?.lease {
+            let purpose: String = lease.purpose.map { " for \"\($0)\"" } ?? ""
+            let until: String = lease.expires.map { " until \(ScreenLease.clock($0))" } ?? ""
+            let message: String = "\(host)/\(chosen) is leased to \(lease.who)\(purpose)\(until): watch, but leave what runs there alone."
+            session.ui.warning("\(message)")
+        }
         defer {
             TestSessionAccess.tunnels.forEach { $0.terminate() }
             TestSessionAccess.tunnels.removeAll()

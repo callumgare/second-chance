@@ -950,7 +950,8 @@ opens a Screen Sharing window here into that session, logged in with the passwor
 that Mac's keychain, handed over as `session setup` does (never saved). Like it, it
 keeps `--on` for itself. For this Mac's own test sessions it goes through an SSH tunnel,
 which it keeps open until you press Return. If Screen Sharing asks, choose "Log in as
-yourself".
+yourself". A session someone else has leased opens all the same, with a warning naming
+who has it and for what: watching disturbs nothing, but what you do there could.
 
 **Picturing a whole screen:** `sc session screenshot [<user>] [--on <host>] [--out <png>]`
 takes a Mac's screen (its logged-in user's, or a test user's session) with that user's
