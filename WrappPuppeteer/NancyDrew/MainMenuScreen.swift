@@ -84,11 +84,7 @@ enum MainMenuScreen {
     /// A `region` needle's search, as the template matcher takes it.
     nonisolated static func matchOptions(_ needle: Needle) -> TemplateMatchOptions {
         let region = needle.spec.region
-        return TemplateMatchOptions(
-            searchRegion: region?.search?.cgRect ?? CGRect(x: 0, y: 0, width: 1, height: 1),
-            templateHeightFraction: region?.heightFraction.map { CGFloat($0) },
-            scaleVariations: region?.scales.map { $0.map { CGFloat($0) } } ?? [1.0],
-            grayscale: region?.grayscale == "red-emphasis" ? .redEmphasis : .luminance
-        )
+        return TemplateMatchOptions(regionSearch: region?.search?.cgRect, heightFraction: region?.heightFraction,
+                                    scales: region?.scales, grayscale: region?.grayscale)
     }
 }

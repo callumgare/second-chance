@@ -3,7 +3,7 @@ import Foundation
 import ImageIO
 import Testing
 import UniformTypeIdentifiers
-import PictureMatching
+@testable import PictureMatching
 
 /// What a caller that reports for itself gets from the template search:
 /// the best place with its confidence, and every match, so a target can be
@@ -60,5 +60,59 @@ struct TemplateMatchesTests {
         // debug build: so few of them.)
         let none = try Self.save(Self.picture(width: 320, height: 240, backdrop), as: "none.png", in: directory)
         if let nearest = TemplateMatcher.best(template, in: none) { #expect(!nearest.isMatch) }
+    }
+}
+
+@Suite("A needle region's search options")
+struct RegionSearchOptionsTests {
+    @Test("Nothing said is the whole screenshot at the template's own size, in luminance")
+    func defaults() {
+        let options = TemplateMatchOptions(regionSearch: nil, heightFraction: nil, scales: nil, grayscale: nil)
+        #expect(options.searchRegion == CGRect(x: 0, y: 0, width: 1, height: 1))
+        #expect(options.templateHeightFraction == nil)
+        #expect(options.scaleVariations == [1.0])
+        #expect(options.grayscale == .luminance)
+    }
+
+    @Test("What a region says is what's searched")
+    func given() {
+        let options = TemplateMatchOptions(regionSearch: CGRect(x: 0.5, y: 0, width: 0.5, height: 0.25), heightFraction: 0.1,
+                                           scales: [0.9, 1.1], grayscale: "red-emphasis")
+        #expect(options.searchRegion == CGRect(x: 0.5, y: 0, width: 0.5, height: 0.25))
+        #expect(options.templateHeightFraction == 0.1)
+        #expect(options.scaleVariations == [0.9, 1.1])
+        #expect(options.grayscale == .redEmphasis)
+        #expect(TemplateMatchOptions(regionSearch: nil, heightFraction: nil, scales: nil, grayscale: "luminance").grayscale == .luminance)
+    }
+}
+
+/// `matches` stops at a match that is mostly over an earlier one: what's
+/// left of the first around the paint isn't a second copy (a region needle
+/// read as ambiguous before, 0.53 beside a 1.00). `overlap` is that measure.
+@Suite("Matches over an earlier one")
+struct MatchOverlapTests {
+    private let first = CGRect(x: 100, y: 100, width: 40, height: 20)
+
+    @Test("The share of the new match the earlier one covers")
+    func share() {
+        #expect(TemplateMatcher.overlap(first, first) == 1)
+        #expect(TemplateMatcher.overlap(first, first.offsetBy(dx: 20, dy: 0)) == 0.5)
+        #expect(TemplateMatcher.overlap(first, first.offsetBy(dx: 20, dy: 10)) == 0.25)
+        #expect(TemplateMatcher.overlap(first, first.offsetBy(dx: 40, dy: 0)) == 0)
+        #expect(TemplateMatcher.overlap(first, CGRect(x: 0, y: 0, width: 10, height: 10)) == 0)
+    }
+
+    @Test("It's measured on the new match: a small one inside a big one is all covered")
+    func measuredOnTheNewOne() {
+        let small = CGRect(x: 110, y: 105, width: 10, height: 5)
+        #expect(TemplateMatcher.overlap(first, small) == 1)
+        #expect(TemplateMatcher.overlap(small, first) == 0.0625)
+        #expect(TemplateMatcher.overlap(first, .zero) == 0)
+    }
+
+    @Test("More than a quarter covered is the same place; a quarter is a second copy")
+    func threshold() {
+        #expect(TemplateMatcher.overlap(first, first.offsetBy(dx: 19, dy: 9)) > 0.25)
+        #expect(!(TemplateMatcher.overlap(first, first.offsetBy(dx: 20, dy: 10)) > 0.25))
     }
 }

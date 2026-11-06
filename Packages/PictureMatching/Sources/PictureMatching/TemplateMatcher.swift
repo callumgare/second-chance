@@ -66,6 +66,17 @@ nonisolated public struct TemplateMatchOptions: Sendable {
         self.minConfidence = minConfidence
         self.candidateThreshold = candidateThreshold
     }
+
+    /// A needle's `region` search (WrappBuilder's `Needle.Region`), from its
+    /// plain values, so WrappPuppeteer and `sc puppet` read one the same way:
+    /// no search area is the whole screenshot, no scales the template's own
+    /// size, and `red-emphasis` the one grayscale besides luminance.
+    public init(regionSearch search: CGRect?, heightFraction: Double?, scales: [Double]?, grayscale: String?) {
+        self.init(searchRegion: search ?? CGRect(x: 0, y: 0, width: 1, height: 1),
+                  templateHeightFraction: heightFraction.map { CGFloat($0) },
+                  scaleVariations: scales.map { $0.map { CGFloat($0) } } ?? [1.0],
+                  grayscale: grayscale == "red-emphasis" ? .redEmphasis : .luminance)
+    }
 }
 
 /// Where a template was found, and how well it matched there.
