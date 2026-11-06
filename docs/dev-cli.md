@@ -895,7 +895,8 @@ behind SIP, and even an MDM profile can't pre-approve Screen Recording. So
 `sc session setup [<user>…] [--task screensaver|signing|peekaboo|audio]… [--on <host>]`, run
 on the Mac you're at, does every set-up task a test session needs, or those each `--task` names, each
 skipping what's done. A user named who isn't logged in yet is waited for first, up
-to five minutes, as the keep-alive logs a new one in. `screensaver` sets each test user's screen saver to never
+to five minutes, as the keep-alive logs a new one in; one who isn't in that Mac's pool
+fails at once, naming the pool (a test user of another Mac wants `--on`). `screensaver` sets each test user's screen saver to never
 start (`defaults -currentHost write com.apple.screensaver idleTime -int 0`, as
 that user over SSH), which takes effect in the running session; it shows nothing,
 so it alone goes ahead in a session someone else has leased; `signing` gives each test user the console user's signing

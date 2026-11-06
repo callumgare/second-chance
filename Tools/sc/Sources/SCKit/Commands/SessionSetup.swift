@@ -46,7 +46,20 @@ struct SessionSetupCommand: AsyncParsableCommand {
         let mac = Invocation.remote.map { Remote.parse($0, localRoot: session.repo.root).host }
         // Nothing can be set up in a session before its login, and a user
         // session add has just made waits for the keep-alive's.
-        if !users.isEmpty { try await Self.waitForLogins(users, on: mac, session: session) }
+        if !users.isEmpty {
+            // A user that isn't a test user here never logs in: say so now,
+            // not after waiting for one.
+            let pool = SessionPool.users(fromPool: try await TestSessionAccess.asConsoleUser(mac, "cat \(SessionPool.file.path) 2>/dev/null").output)
+            let unknown = Self.notInPool(users, pool: pool)
+            if !unknown.isEmpty {
+                let host = mac ?? ScreenLease.shortHostName()
+                throw SCError("\(unknown.joined(separator: ", ")) \(unknown.count == 1 ? "isn't a test user" : "aren't test users") on \(host).",
+                              hints: [pool.isEmpty ? "\(host) has none: sc session add" + (mac.map { " --on \($0)" } ?? "")
+                                                   : "\(host)'s are \(pool.joined(separator: ", "))",
+                                      "On another Mac: sc session setup \(users.joined(separator: " ")) --on <host>"])
+            }
+            try await Self.waitForLogins(users, on: mac, session: session)
+        }
         // Turning the screen saver off writes a setting and shows nothing, so
         // it alone goes ahead under someone else's lease.
         if tasks.contains(where: { $0 != .screensaver }) {
@@ -93,6 +106,11 @@ struct SessionSetupCommand: AsyncParsableCommand {
                           hints: ["Run what's left again: sc session setup" + failed.map { " --task \($0)" }.joined()
                                   + users.map { " \($0)" }.joined() + (mac.map { " --on \($0)" } ?? "")])
         }
+    }
+
+    /// The users named that aren't in the Mac's pool, in the order named.
+    static func notInPool(_ users: [String], pool: [String]) -> [String] {
+        users.filter { !pool.contains($0) }
     }
 
     /// Set-up opens Screen Sharing into a session, restarts what runs there

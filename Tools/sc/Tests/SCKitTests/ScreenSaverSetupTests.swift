@@ -14,4 +14,13 @@ struct ScreenSaverSetupTests {
         #expect(SessionSetupCommand.Task.allCases.first == .screensaver)
         #expect(SessionSetupCommand.Task(rawValue: "screensaver") == .screensaver)
     }
+
+    @Test("Users named that aren't the Mac's test users are found before any waiting")
+    func namedUsersOutsideThePool() {
+        let pool = ["second-chance-testing-1", "second-chance-testing-2"]
+        #expect(SessionSetupCommand.notInPool(["second-chance-testing-2"], pool: pool).isEmpty)
+        #expect(SessionSetupCommand.notInPool(["second-chance-testing-4", "second-chance-testing-1", "second-chance-testing-5"], pool: pool)
+                == ["second-chance-testing-4", "second-chance-testing-5"])
+        #expect(SessionSetupCommand.notInPool(["a"], pool: []) == ["a"])
+    }
 }
