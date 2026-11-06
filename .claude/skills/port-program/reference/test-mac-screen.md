@@ -52,10 +52,11 @@ Two conditions:
 
 Without a lease (it's only looking):
 
-- **A screenshot:** `./sc session screenshot [<user>] --on <host> --out <png>` (Peekaboo; a test account needs `sc session setup-peekaboo` once).
-  Shrink it before reading (`sips -Z 1200`). It needs `screencapture` granted Screen
-  Recording in that account, which test accounts don't have yet (`.local/AGENTS.md`);
-  there, `sc puppet`'s captures see the program's windows without it.
+- **A screenshot:** `./sc session screenshot [<user>] --on <host> --out <png>`, through
+  that account's Peekaboo, which needs its Screen Recording grant: `sc session setup
+  --task peekaboo <user> --on <host>` gives it, the person flipping the switch, once per
+  account. Shrink it before reading (`sips -Z 1200`). A program's own windows need no
+  grant: `sc puppet`'s captures see them.
 - **Every window, with its owner and layer.** `peekaboo window list --json` through
   the bridge host, in an account where Peekaboo.app runs and is granted (which one, on this
   setup: `.local/AGENTS.md`):
