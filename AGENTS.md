@@ -247,8 +247,8 @@ build, and its **kit**, what other processes use of it. The wine module's
 depends on and re-exports, and `WineExecutor`, with winetricks, the
 in-process helpers' source and their build script; the nancy-drew module's
 has `NancyDrewExecutor`, the scummvm module's `ScummVMExecutor` and
-`ScummVMKit`, and the dosbox and big-fish modules' `DOSBoxKit` and
-`BigFishKit`. Each kit answers where its module's path types' paths are
+`ScummVMKit`, the dosbox and big-fish modules' `DOSBoxKit` and
+`BigFishKit`, and the basilisk module's `BasiliskExecutor` and `BasiliskKit`. Each kit answers where its module's path types' paths are
 (`ModulePaths`, [docs/wrappfile.md](docs/wrappfile.md#path-types)), which
 `SecondChanceKit` gathers as `PathPlaces.shipped`. An executor needs nothing of Second Chance's: it
 is written against `WrappKit`'s `WrappModuleKit` ([docs/modules.md](docs/modules.md#executors)).
@@ -331,7 +331,7 @@ The rules that keep it working:
   ([docs/wrapp-build.md](docs/wrapp-build.md#the-runner)).
 - **`Composition`** (`WrappModules`, in `Packages/WrappKit`): the modules a
   wrapp runs — the one that starts the game (`launcher`: `wine`, `scummvm`,
-  `dosbox`, `steam` or `big-fish`; nil when the core starts a program the app
+  `dosbox`, `basilisk`, `steam` or `big-fish`; nil when the core starts a program the app
   carries) and the services started before it — read from a wrapp's
   settings or a game's `GameInfo.GameEngine`, which it replaces as the
   question every process asks: `composition.has(.wine)`, `launcher ==

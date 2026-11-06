@@ -5,6 +5,7 @@
 //  The steps a builder that carries out its plan itself hands to the
 //  modules' executors: until every source builds through the runner.
 
+import BasiliskExecutor
 import Foundation
 import Logging
 import NancyDrewExecutor
@@ -38,7 +39,8 @@ struct ModuleSteps {
         // The shipped modules' executors, compiled in, and each added module's
         // program (docs/module-programs.md).
         let shipped: [String: any ModuleExecutor] = ["wine": WineExecutor(helpers: helpers, buildTools: wineBuildTools),
-                                                     "nancy-drew": NancyDrewExecutor(), "scummvm": ScummVMExecutor()]
+                                                     "nancy-drew": NancyDrewExecutor(), "scummvm": ScummVMExecutor(),
+                                                     "basilisk": BasiliskExecutor()]
         return shipped.merging(AddedModules.executors(addedModules())) { mine, _ in mine }
     }
 

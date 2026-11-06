@@ -25,6 +25,7 @@
 		E25C10102F01000000000001 /* WineExecutor in Frameworks */ = {isa = PBXBuildFile; productRef = E25C10012F01000000000001 /* WineExecutor */; };
 		E25C11102F01000000000001 /* NancyDrewExecutor in Frameworks */ = {isa = PBXBuildFile; productRef = E25C11012F01000000000001 /* NancyDrewExecutor */; };
 		E25C12102F01000000000001 /* ScummVMExecutor in Frameworks */ = {isa = PBXBuildFile; productRef = E25C12012F01000000000001 /* ScummVMExecutor */; };
+		E25C13102F01000000000001 /* BasiliskExecutor in Frameworks */ = {isa = PBXBuildFile; productRef = E25C13012F01000000000001 /* BasiliskExecutor */; };
 		E25C0E102F01000000000001 /* Modules in Resources */ = {isa = PBXBuildFile; fileRef = E25C0E032F01000000000001 /* Modules */; };
 		E25C0E112F01000000000001 /* Modules in Resources */ = {isa = PBXBuildFile; fileRef = E25C0E032F01000000000001 /* Modules */; };
 		E25C0F102F01000000000001 /* Bundles in Resources */ = {isa = PBXBuildFile; fileRef = E25C0F032F01000000000001 /* Bundles */; };
@@ -106,6 +107,7 @@
 				LastSession.swift,
 				main.swift,
 				MainLogger.swift,
+				Modules/BasiliskRuntime.swift,
 				Modules/BigFishRuntime.swift,
 				Modules/DOSBoxRuntime.swift,
 				Modules/ProgramRuntime.swift,
@@ -189,6 +191,7 @@
 				E25C10102F01000000000001 /* WineExecutor in Frameworks */,
 				E25C11102F01000000000001 /* NancyDrewExecutor in Frameworks */,
 				E25C12102F01000000000001 /* ScummVMExecutor in Frameworks */,
+				E25C13102F01000000000001 /* BasiliskExecutor in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -302,6 +305,7 @@
 				E25C10012F01000000000001 /* WineExecutor */,
 				E25C11012F01000000000001 /* NancyDrewExecutor */,
 				E25C12012F01000000000001 /* ScummVMExecutor */,
+				E25C13012F01000000000001 /* BasiliskExecutor */,
 			);
 			productName = SecondChance;
 			productReference = E21733912F04AA580058E8E9 /* Second Chance.app */;
@@ -406,6 +410,7 @@
 				E25C10002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/wine" */,
 				E25C11002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/nancy-drew" */,
 				E25C12002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/scummvm" */,
+				E25C13002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/basilisk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E21733922F04AA580058E8E9 /* Products */;
@@ -1139,6 +1144,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/Modules/scummvm;
 		};
+		E25C13002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/basilisk" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Modules/basilisk;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -1223,6 +1232,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E25C12002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/scummvm" */;
 			productName = ScummVMExecutor;
+		};
+		E25C13012F01000000000001 /* BasiliskExecutor */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E25C13002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/basilisk" */;
+			productName = BasiliskExecutor;
 		};
 		E25C0D052F01000000000001 /* WrappBuilder */ = {
 			isa = XCSwiftPackageProductDependency;

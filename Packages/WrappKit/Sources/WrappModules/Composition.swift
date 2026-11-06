@@ -34,6 +34,7 @@ nonisolated public struct ModuleID: RawRepresentable, Hashable, Codable, Sendabl
     public static let steam: ModuleID = "steam"
     public static let bigFish: ModuleID = "big-fish"
     public static let dosbox: ModuleID = "dosbox"
+    public static let basilisk: ModuleID = "basilisk"
 }
 
 /// What a wrapp runs: the one module that starts the program (its

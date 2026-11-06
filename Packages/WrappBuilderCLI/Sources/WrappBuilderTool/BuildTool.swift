@@ -1,3 +1,4 @@
+import BasiliskExecutor
 import Foundation
 import NancyDrewExecutor
 import ScummVMExecutor
@@ -36,6 +37,7 @@ public nonisolated enum BuildTool {
             }),
             "nancy-drew": NancyDrewExecutor(),
             "scummvm": ScummVMExecutor(),
+            "basilisk": BasiliskExecutor(),
         ]
     }
 
@@ -69,6 +71,8 @@ public nonisolated enum BuildTool {
             fetch: { url, sha256, progress in
                 try await downloader.fetch(DownloadRequest(urls: [url], sha256: sha256), progress: progress).file
             },
+            // A Mac ROM the engine store keeps (MacROMs), for the basilisk module.
+            providedFile: { fullForm in fullForm == MacROMs.providedFile ? MacROMs.kept(in: EngineStore.standardRoot()) : nil },
             engine: { id, version in
                 guard let module = modules.first(where: { $0.manifest.id == id }) else { throw ToolError("there's no \(id) module") }
                 return try await store.engine(module, version: version) { step in output.line(step) }

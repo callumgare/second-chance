@@ -678,6 +678,7 @@ from the modules it loads. The shipped modules declare:
 | `dosbox:` | dosbox | location, program | `dosbox:C:/TYRIAN/TYRIAN2K.EXE` | a drive-letter path, `C:/…` |
 | `scummvm:` | scummvm | program, location | `scummvm:/SharedSupport/game/`, `scummvm:saves/` | none |
 | `big-fish:` | big-fish | program | `big-fish:C:/…/LaunchGame.bfg` | none |
+| `basilisk:` | basilisk | location, program | `basilisk:Ingenious CD:Ingenious` | none |
 | `steam:` | steam | program | `steam://rungameid/572740` | none |
 
 - **A type is named after the engine that handles it**, never with one

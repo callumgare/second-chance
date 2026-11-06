@@ -1,5 +1,23 @@
 {
   "modules" : {
+    "basilisk" : [
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "module.yaml" : "db7056281df05132cefeaa51dfc591cd8823f4cebcae72e2f9f7e6aa785f199a",
+          "scenarios/starts-and-quits.yaml" : "6fef45631e8ae0691d5264dc887651058d93285e9e8abb2f1c84418c7ef303a8"
+        },
+        "functions" : [
+
+        ],
+        "release" : 1,
+        "versions" : [
+          "2026.07.17"
+        ]
+      }
+    ],
     "big-fish" : [
       {
         "data" : [

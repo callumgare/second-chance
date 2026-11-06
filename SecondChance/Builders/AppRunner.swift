@@ -40,7 +40,13 @@ enum AppRunner {
                 if let shipped = DownloadCache.shipped(sha256: sha256) { return shipped }
                 return try await downloader.fetch(DownloadRequest(urls: [url], sha256: sha256), progress: progress).file
             },
-            providedFile: { fullForm in fullForm == "module:installer:/autoit" ? autoIt : nil },
+            providedFile: { [roms = helper.engineRoot] fullForm in
+                switch fullForm {
+                case "module:installer:/autoit": autoIt
+                case MacROMs.providedFile: MacROMs.kept(in: roms)
+                default: nil
+                }
+            },
             engine: { module, version in try await helper.engine(module, version: version) },
             pathTypes: ModuleSteps.pathTypes(), places: helper.places,
             moduleFolders: ModuleSteps.moduleFolders())

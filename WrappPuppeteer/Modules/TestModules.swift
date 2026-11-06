@@ -165,6 +165,35 @@ struct DOSBoxTestModule: TestModule {
     }
 }
 
+/// Basilisk II is a single native process too, its window the emulated
+/// Mac's screen, activated for focus, and ended by its path as DOSBox is.
+struct BasiliskTestModule: TestModule {
+    static let id = ModuleID.basilisk
+    let program: URL
+
+    init(layout: WrappLayout, prefix: URL) {
+        program = layout.app.appendingPathComponent("Contents/MacOS/BasiliskII")
+    }
+
+    var gameProcessName: String? { "BasiliskII" }
+
+    var cleanupCommands: [[String]] {
+        Wrapp.pkillCommand(matchingFrom: program.path)
+    }
+
+    /// SIGTERM, before the caller's SIGKILL.
+    func endLeftovers() -> String? {
+        guard Wrapp.isSafeToKill(from: program.path) else { return nil }
+        let leftovers = "^" + Wrapp.extendedRegexEscaped(program.path)
+        if ProcessControl.anyRunning(matching: leftovers),
+           ProcessControl.end(matching: leftovers, signal: SIGTERM, timeout: 5) {
+            logger.notice("   Basilisk II ended when asked")
+            return nil
+        }
+        return leftovers
+    }
+}
+
 /// A program the core starts (`LAUNCH /MacOS/tool`): a single native
 /// process, named by its file, activated for focus, and ended by its path.
 /// No module: a composition with no launcher has it.
@@ -205,6 +234,7 @@ struct TestModules {
 
     static let known: [any TestModule.Type] = [
         WineTestModule.self, SteamTestModule.self, BigFishTestModule.self, ScummVMTestModule.self, DOSBoxTestModule.self,
+        BasiliskTestModule.self,
     ]
 
     init(composition: Composition?, layout: WrappLayout, prefix: URL) {

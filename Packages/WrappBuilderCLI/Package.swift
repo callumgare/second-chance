@@ -36,6 +36,7 @@ let package = Package(
         // The modules' kits, for where their path types' paths are.
         .package(path: "../Modules/dosbox"),
         .package(path: "../Modules/big-fish"),
+        .package(path: "../Modules/basilisk"),
     ],
     targets: [
         .executableTarget(
@@ -55,6 +56,8 @@ let package = Package(
                 .product(name: "DOSBoxKit", package: "dosbox"),
                 .product(name: "ScummVMKit", package: "scummvm"),
                 .product(name: "BigFishKit", package: "big-fish"),
+                .product(name: "BasiliskKit", package: "basilisk"),
+                .product(name: "BasiliskExecutor", package: "basilisk"),
                 .product(name: "WrappModules", package: "WrappKit"),
             ],
             swiftSettings: swiftSettings

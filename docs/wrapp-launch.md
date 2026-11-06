@@ -94,6 +94,10 @@ is what the game sees. The saves volume is laid over that C:
 never written to. `--exit` ends DOSBox
 when the game does.
 
+**Basilisk II** (`BasiliskRuntime`) runs a classic Mac program on an emulated
+68k Mac: [modules.md](modules.md#the-basilisk-modules-mac) has its prefs and disks.
+It doesn't end on SIGTERM, so a quit ends it after three seconds if asking hasn't.
+
 **The core** (`ProgramRuntime`) starts a program the app carries, when no
 module does: `LAUNCH /MacOS/tool`, a composition with no launcher. It runs the
 file at its place under `Contents/` with the launch's arguments and `--env`,

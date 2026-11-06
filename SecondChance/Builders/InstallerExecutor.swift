@@ -78,14 +78,18 @@ nonisolated final class InstallerExecutor: ModuleExecutor, @unchecked Sendable {
 /// known.
 nonisolated final class DiscInputs: InputProvider, @unchecked Sendable {
     let disc1: URL
+    /// Disc 1's image file when it was given as one (`disc-1.image`), for an
+    /// emulator whose CD has to be an image (`BASILISK.CDROM`).
+    let disc1Image: URL?
     let diskCount: Int
     let resolveDisc2: @Sendable () async throws -> URL?
     private let lock = NSLock()
     private var disc2: Task<URL?, Error>?
     private var disc2Resolved: URL?
 
-    init(disc1: URL, diskCount: Int, resolveDisc2: @escaping @Sendable () async throws -> URL?) {
+    init(disc1: URL, disc1Image: URL? = nil, diskCount: Int, resolveDisc2: @escaping @Sendable () async throws -> URL?) {
         self.disc1 = disc1
+        self.disc1Image = disc1Image
         self.diskCount = diskCount
         self.resolveDisc2 = resolveDisc2
     }
@@ -103,6 +107,8 @@ nonisolated final class DiscInputs: InputProvider, @unchecked Sendable {
             return disc1
         case "disc-2":
             return try await secondDisc()
+        case "disc-1.image":
+            return disc1Image
         default:
             return nil
         }

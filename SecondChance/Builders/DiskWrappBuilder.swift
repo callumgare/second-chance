@@ -79,7 +79,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
         // ── Resolve disk 1 and detect the game ONCE ──────────────────────
         // GameInfo threads through from here.
-        let (disk1Root, _, gameInfo, installerName) = try await resolveGame(disk1: chosen, input: input)
+        let (disk1Root, disk1Image, gameInfo, installerName) = try await resolveGame(disk1: chosen, input: input)
 
         // ── Build ──────────────────────────────────────────────────────
         // Each stage in a tree of its own in a working folder the builder
@@ -103,7 +103,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
             // The plan, carried out by the runner: the discs through the disc
             // module's inputs, disc 2 asked for when a step needs it.
-            let inputs = DiscInputs(disc1: disk1Root, diskCount: gameInfo.diskCount) { [self] in
+            let inputs = DiscInputs(disc1: disk1Root, disc1Image: disk1Image, diskCount: gameInfo.diskCount) { [self] in
                 try await self.resolveDisk2(gameInfo: gameInfo, disk1: disk1Root, input: input)
             }
             let installer = InstallerExecutor(runner: installerRunner, gameInfo: gameInfo, source: .disk,
@@ -189,7 +189,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     /// itself, like a failure in the build.
     private func resolveGame(
         disk1 chosen: URL, input: WrappBuildInput
-    ) async throws -> (disk1Root: URL, gameSlug: String, gameInfo: GameInfo, installerName: String?) {
+    ) async throws -> (disk1Root: URL, disk1Image: URL?, gameInfo: GameInfo, installerName: String?) {
         // A link followed: an installed game's folder is one when Steam or
         // Big Fish installed it (`--into`), and listing a folder through a
         // link fails as not a folder.
@@ -240,7 +240,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 }
                 await bus.publishWrappBuild(.gameDetected(gameInfo))
                 try await input.onGameDetected(gameInfo)
-                return (disk1Root, gameSlug, gameInfo, installerName)
+                // The image itself too, for an emulator whose CD is an image.
+                return (disk1Root, disk1Mounted == nil ? nil : disk1, gameInfo, installerName)
             }
         } catch {
             await isoMounter.unmountAll()

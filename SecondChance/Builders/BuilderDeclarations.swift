@@ -30,6 +30,8 @@ nonisolated enum BuilderDeclarations {
         "nancy-drew": ["CONFIGURE-INI": []],
         // The scummvm module's executor.
         "scummvm": ["KEEP-DATA": []],
+        // The basilisk module's executor.
+        "basilisk": ["SETUP": [], "CDROM": []],
         // GameInstallerRunner, and its patch steps.
         "installer": ["RUN": ["from", "into", "answer-file", "automation", "creates", "patch", "mount"]],
         // HerDownloadWrappBuilder.

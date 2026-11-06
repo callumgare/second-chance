@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=../module.schema.json
+format: 1
+id: "basilisk"
+release: 1
+native: "basilisk"                           # its Swift: Packages/Modules/basilisk (BasiliskExecutor, BasiliskKit), BasiliskRuntime, BasiliskBuild
+versions:
+  # Basilisk II, a 68040 Mac (a Quadra 900 to Mac OS), and System 7.5.3, which
+  # Apple gave away, prepared on the Mac that builds (BasiliskBuild.prepare).
+  # The ROM, which Apple never gave out, is the person's own: module:basilisk:/rom.
+  - version: "2026.07.17"
+    package:
+      prepared: "649db0aef7adb3b980d9041e4c47bd7a0267b6568aa3a987afc19ff18f4831ef"
+      sources:
+        # E-Maculation's notarized universal build (no published hash; checked by ours).
+        - id: "basilisk"
+          sha256: "6a715834e40240cdd16eb12870f443e45e25fee390922d6c6161c08454bc3cc5"
+          size: 4899727
+          urls: ["https://www.emaculation.com/basilisk/BasiliskII_universal_20260717.zip"]
+        # Apple's System 7.5.3, installed on a 25 MB disk image: one file, rather
+        # than Apple's 19-part download, which needs Apple's Installer run.
+        - id: "system"
+          sha256: "7a70976e590d464c3476c0b40500ae589f77604a26b1c8bd310cd4922233ec87"
+          size: 26214400
+          urls: ["https://archive.org/download/AppleMacintoshSystem753/System7_5_3.img"]
+runtime: { save-warning: false }             # the program saves on the Mac's own disk, kept outside the app
+assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a program started and quit
+notes:
+  about: "Runs a classic 68k Mac program in Basilisk II, on System 7.5.3, with the ROM the person gives."
+build:
+  # basilisk:<disk>:<folder>:<file> — a path on the emulated Mac's disks
+  # (basilisk:Ingenious CD:Ingenious), in Mac OS's own form; no short form.
+  path-types:
+    basilisk: { roles: [location, program] }
+  instructions:
+    # The Mac's startup disk, as the engine's System 7.5.3, copied to the app's
+    # SharedSupport/basilisk/boot.hfv for the build to change, and the person's
+    # ROM (module:basilisk:/rom) beside it: what USE plans.
+    SETUP: { layer: suggested }
+    # BASILISK.CDROM ${input.disc-1}: the disc's image, kept in the app as the
+    # Mac's CD (SharedSupport/basilisk/cdrom-<n>.iso, in the order given).
+    CDROM: { arguments: { count: 1, roles: [input] }, layer: suggested }
+  core-options:
+    # The Mac's screen, <width>x<height>x<colour depth>: 640x480x8 unless said.
+    LAUNCH: { screen: value }
+  setup: [SETUP]
+  # The ROM the person gives once, kept for later builds: module:basilisk:/rom.
+  provided-files: [rom]

@@ -48,6 +48,12 @@ public nonisolated enum DOSBoxBuild: BuildModule {
     public static let id = ModuleID.dosbox
 }
 
+/// Basilisk II, which runs a classic 68k Mac, and the program on it, with
+/// no Wine: System 7.5.3 from Apple's download, and the ROM the person gives.
+public nonisolated enum BasiliskBuild: BuildModule {
+    public static let id = ModuleID.basilisk
+}
+
 /// Steam is installed into a wrapp's Wine by its build, so the template
 /// holds nothing of its.
 public nonisolated enum SteamBuild: BuildModule {
@@ -83,7 +89,7 @@ public nonisolated enum BigFishBuild: BuildModule {
 public nonisolated enum BuildModules {
     /// Every module a build knows.
     public static let known: [any BuildModule.Type] = [
-        WineBuild.self, ScummVMBuild.self, DOSBoxBuild.self, SteamBuild.self, BigFishBuild.self, InstallerBuild.self,
+        WineBuild.self, ScummVMBuild.self, DOSBoxBuild.self, BasiliskBuild.self, SteamBuild.self, BigFishBuild.self, InstallerBuild.self,
         DiscBuild.self,
         HerDownloadBuild.self,
     ]

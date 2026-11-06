@@ -1,0 +1,10 @@
+# The simplest test of a classic Mac program: the Mac boots into it, it shows
+# what its bundle's `running` needles say it shows, and the app quits when
+# asked to, as ⌘Q asks. The dosbox and scummvm modules' scenario of the same
+# name, for Basilisk II's programs (docs/testing.md#scenarios).
+goal: "program-ends"
+timeout: 180
+handlers:
+  - id: "running"
+    when: "running"
+    do: ["quit"]

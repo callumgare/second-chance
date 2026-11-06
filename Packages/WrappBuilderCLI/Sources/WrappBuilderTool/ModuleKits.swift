@@ -1,3 +1,4 @@
+import BasiliskKit
 import BigFishKit
 import DOSBoxKit
 import ScummVMKit
@@ -9,5 +10,5 @@ import WrappModules
 /// paths are, and how they're described (`ModulePaths`). `sc` uses the same
 /// table.
 public nonisolated enum ModuleKits {
-    public static let places = PathPlaces([WinePaths.self, DOSBoxPaths.self, ScummVMPaths.self, BigFishPaths.self])
+    public static let places = PathPlaces([WinePaths.self, DOSBoxPaths.self, ScummVMPaths.self, BigFishPaths.self, BasiliskPaths.self])
 }

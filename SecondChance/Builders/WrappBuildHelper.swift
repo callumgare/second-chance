@@ -51,6 +51,9 @@ class WrappBuildHelper {
         self.places = places
     }
 
+    /// Where the engine store keeps what it keeps (Mac ROMs included).
+    var engineRoot: URL { engines.root }
+
     /// The engine store every build shares: this Mac's, fetched with the
     /// download source's downloader.
     nonisolated static let standardEngines = EngineStore(
@@ -654,12 +657,41 @@ class WrappBuildHelper {
         do {
             let engine = try await engines.engine(module, version: version) { step in logger.notice("[Engine] \(step)") }
             logger.notice("[Engine] \(engine.prepared ? "Prepared" : "Using the stored") \(id) \(engine.version) (\(engine.hash.prefix(12))…)")
+            if id == ModuleID.basilisk.rawValue { try await ensureMacROM() }
             return engine
         } catch let error as DownloadError {
             logger.error("[Engine] Couldn't fetch \(id): \(error.description)")
             for failure in error.failures { logger.error("[Engine]   \(failure)") }
             throw WrappBuildError.engineUnavailable
         }
+    }
+
+    /// The ROM the basilisk module's Mac boots, kept in the engine store
+    /// (`MacROMs`), where the build finds it (`module:basilisk:/rom`). A
+    /// Debug build downloads one when there's none, as it would an engine,
+    /// so development and test Macs need nothing by hand; a Release build
+    /// never does: the ROM is the person's own (docs/modules.md).
+    func ensureMacROM() async throws {
+        let root = engines.root
+        if MacROMs.kept(in: root) != nil { return }
+        #if DEBUG
+        // archive.org's "Macintosh Quadra 800 ROM", an F1ACAD13 ROM; only
+        // in a Debug build, so a released Second Chance never names it.
+        guard let url = URL(string: "https://archive.org/download/800_20250604/800.ROM") else { throw WrappBuildError.macROMNeeded }
+        logger.notice("[Engine] No Mac ROM kept: a Debug build downloads the development copy")
+        do {
+            let download = try await DownloadWrappBuilder.standardDownloader()
+                .fetch(DownloadRequest(urls: [url], sha256: "05ad753fb594e656cf078023ec189e09e2a7655a780de993b75b8c51ed6b09ca"))
+            let kept = try await Blocking.run { try MacROMs.keep(download.file, in: root) }
+            logger.notice("[Engine] Kept the Mac ROM: \(kept.lastPathComponent)")
+        } catch let error as DownloadError {
+            logger.error("[Engine] Couldn't fetch the development Mac ROM: \(error.description)")
+            throw WrappBuildError.engineUnavailable
+        }
+        #else
+        logger.error("[Engine] No Mac ROM is kept in \(MacROMs.folder(in: root).path)")
+        throw WrappBuildError.macROMNeeded
+        #endif
     }
 
     /// The template, checked: what the assembler lays into a tree at the end.

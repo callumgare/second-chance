@@ -82,6 +82,8 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// What the game runs in (Wine, ScummVM) couldn't be fetched from any
     /// of the places its module names (each is in the log).
     case engineUnavailable
+    /// A classic Mac program needs an old Mac's ROM, and there's none kept.
+    case macROMNeeded
     case gameExecutableNotFound
     case userCancelled
     case userCancelledBeforeStart
@@ -305,6 +307,11 @@ enum WrappBuildError: LocalizedError, Equatable {
             return String(localized: """
                 \(title) can't be downloaded right now. The places that had it don't have it any more, \
                 or aren't answering. Try again later.
+                """)
+        case .macROMNeeded:
+            return String(localized: """
+                To run Mac games, Second Chance needs the ROM chip's contents from an old Mac \
+                (a Quadra 650 or 800 works best).
                 """)
         case .engineUnavailable:
             return String(localized: """

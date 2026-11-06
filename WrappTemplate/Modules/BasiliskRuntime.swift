@@ -1,0 +1,194 @@
+//
+//  BasiliskRuntime.swift
+//  WrappTemplate
+//
+//  The basilisk module in the wrapp: the game is Basilisk II's own process,
+//  an emulated 68k Mac booting System 7.5.3 and running the program.
+
+import Foundation
+import Logging
+import SecondChanceKit
+import Synchronization
+
+/// Basilisk II, which runs a classic Mac program on an emulated 68040 Mac.
+/// Its settings are a prefs file written at each launch, in the program's
+/// folder of the person's files: the ROM and the Mac's CD from the app, and
+/// the startup disk, the Mac's own, kept with the person's files so what the
+/// program saves there (its Preferences) survives, and the app is never
+/// written to.
+final class BasiliskRuntime: GameStarting {
+    nonisolated static let id = ModuleID.basilisk
+
+    private let config: GameConfig
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
+    /// What Basilisk II prints: a category of its own.
+    private nonisolated let outputLogger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.Basilisk")
+
+    /// Basilisk II's process, once started, for ending it on quit.
+    private let emulator = Mutex<pid_t?>(nil)
+
+    required init(config: GameConfig) {
+        self.config = config
+    }
+
+    var stopsOnQuit: Bool { true }
+
+    /// The wrapp is quitting while the Mac still runs: Basilisk II doesn't
+    /// end on SIGTERM, so it's asked, then made to after a few seconds, never
+    /// left running behind the app. (Shutting the Mac down from inside, so
+    /// its disk is left clean, is the module's to do: docs/wrapp-launch.md.)
+    nonisolated func finishForQuit(onQuitStep: (@Sendable (InfoWindowViewModel.QuitStep) -> Void)?) {
+        guard let pid = emulator.withLock({ $0 }), kill(pid, 0) == 0 else { return }
+        kill(pid, SIGTERM)
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline, kill(pid, 0) == 0 { usleep(100_000) }
+        if kill(pid, 0) == 0 {
+            logger.warning("[Basilisk] Basilisk II didn't end when asked: ending it")
+            kill(pid, SIGKILL)
+        }
+    }
+
+    /// Where the build left the Mac's files in the app (`BASILISK.SETUP`, `CDROM`).
+    nonisolated static func folder(_ config: GameConfig) -> URL {
+        config.appPath.appendingPathComponent("Contents/SharedSupport/basilisk")
+    }
+
+    /// The Mac's startup disk as the person's: a copy of the app's, made on
+    /// the first launch, in the program's folder of the person's files.
+    nonisolated static func bootDisk(_ config: GameConfig) -> URL {
+        config.appSupportPath.appendingPathComponent("boot.hfv")
+    }
+
+    /// The prefs file Basilisk II is started with.
+    nonisolated static func prefsFile(_ config: GameConfig) -> URL {
+        config.appSupportPath.appendingPathComponent("basilisk.prefs")
+    }
+
+    /// The Mac's screen, as the launch asks (`--basilisk.screen=640x480x8`):
+    /// width, height and colour depth.
+    nonisolated static func screen(_ config: GameConfig) -> (width: Int, height: Int, depth: Int) {
+        let parts = (config.launch.options["basilisk.screen"] ?? "").split(separator: "x").compactMap { Int($0) }
+        guard parts.count == 3 else { return (640, 480, 8) }
+        return (parts[0], parts[1], parts[2])
+    }
+
+    /// Basilisk II's prefs: a 68040 Mac (`modelid 14`, a Quadra 900 to Mac
+    /// OS) with 64 MB, in a window of the program's screen, its own GUI off.
+    /// `delay` gives the emulated CPU's thread a pause every 64k
+    /// instructions: without it, it starves the sound callback and the 60 Hz
+    /// tick QuickTime's clock runs on, and a movie stops on its first frame.
+    /// No JIT: it crashes under Rosetta, and Apple silicon has none.
+    nonisolated static func prefs(_ config: GameConfig) -> String {
+        let folder = folder(config)
+        let screen = screen(config)
+        let discs = ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [])
+            .filter { $0.hasPrefix("cdrom-") && $0.hasSuffix(".iso") }.sorted()
+        var lines = [
+            "rom \(folder.appendingPathComponent("mac.rom").path)",
+            "disk \(bootDisk(config).path)",
+        ]
+        lines += discs.map { "cdrom \(folder.appendingPathComponent($0).path)" }
+        lines += [
+            "screen win/\(screen.width)/\(screen.height)",
+            "displaycolordepth \(screen.depth)",
+            "ramsize \(64 << 20)",
+            "modelid 14",
+            "cpu 4",
+            "fpu true",
+            "jit false",
+            "nogui true",
+            "nosound false",
+            "frameskip 0",
+            "ignoresegv true",
+            "idlewait true",
+            "delay 500",
+        ]
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// When WrappPuppeteer started the wrapp, what loads the in-process
+    /// helpers' puppet control into Basilisk II, as into dosbox: signed ad
+    /// hoc when it was prepared, so dyld inserts the dylib. Empty for every
+    /// player's launch.
+    private var puppetVariables: [String: String] {
+        guard Wine.puppetDirectory() != nil else { return [:] }
+        let dylib = config.appPath.appendingPathComponent("Contents/Frameworks/in_process_helpers.dylib").path
+        guard FileManager.default.fileExists(atPath: dylib) else {
+            logger.error("[Helpers] Puppet control can't be loaded into Basilisk II: \(dylib) is missing")
+            return [:]
+        }
+        return ["DYLD_INSERT_LIBRARIES": dylib, "PUPPET_CONTROL_EXE": "BasiliskII"]
+    }
+
+    func armWatchers(_ watchers: LaunchWatchers, gameExe: URL?) {
+        let variables = puppetVariables
+        guard !variables.isEmpty else { return }
+        watchers.helperReport = InProcessHelperReport(armingVariables: variables, logger: logger)
+    }
+
+    nonisolated static func launchInfo(_ config: GameConfig) -> GameLaunchInfo {
+        GameLaunchInfo(
+            executable: config.appPath.appendingPathComponent("Contents/MacOS/BasiliskII").path,
+            arguments: ["--config", prefsFile(config).path],
+            workingDirectory: config.appSupportPath.path,
+            gameExeName: nil,  // Basilisk II runs the program in its own process
+            gameExePath: nil
+        )
+    }
+
+    var findsGame: GameDiscovery { .ownProcess }
+
+    /// The person's folder, their copy of the startup disk (the app's, the
+    /// first time), and this launch's prefs.
+    private func prepareFiles() throws {
+        let files = FileManager.default
+        try files.createDirectory(at: config.appSupportPath, withIntermediateDirectories: true)
+        let disk = Self.bootDisk(config)
+        if !files.fileExists(atPath: disk.path) {
+            try files.copyItem(at: Self.folder(config).appendingPathComponent("boot.hfv"), to: disk)
+            logger.notice("[Basilisk] The Mac's startup disk is now the person's: \(disk.path)")
+        }
+        try Self.prefs(config).write(to: Self.prefsFile(config), atomically: true, encoding: .utf8)
+    }
+
+    func startGame(_ launch: LaunchContext) async -> LaunchResult {
+        let launchInfo = Self.launchInfo(config)
+        logger.notice("Launching Basilisk II: \(launchInfo.formatLaunchCommand())")
+        do {
+            try prepareFiles()
+        } catch {
+            logger.critical("ERROR: Can't set up the Mac's files in \(config.appSupportPath.path): \(error.localizedDescription)")
+            return .failed
+        }
+
+        let task = TaggedProcess(logger: outputLogger)
+        task.executableURL = URL(fileURLWithPath: launchInfo.executable)
+        task.arguments = launchInfo.arguments
+        task.currentDirectoryURL = config.appSupportPath
+        let puppetVariables = puppetVariables
+        if !puppetVariables.isEmpty {
+            task.environment = ProcessInfo.processInfo.environment.merging(puppetVariables) { $1 }
+        }
+        let helperReport = launch.watchers.helperReport
+        let activity = launch.watchers.activity
+        task.onLine = { line in
+            helperReport?.observe(line: line)
+            activity?.noteOutput()
+        }
+
+        do {
+            try task.run()
+            logger.notice("[Basilisk] Started with PID \(task.processIdentifier)")
+            let pid = task.processIdentifier
+            emulator.withLock { $0 = pid }
+            return LaunchResult(process: task.process, gamePid: task.processIdentifier, gameExeName: nil)
+        } catch {
+            logger.critical("ERROR: Failed to launch Basilisk II: \(error.localizedDescription)")
+            return .failed
+        }
+    }
+
+    func launchShell() {
+        logger.notice("A classic Mac game has no shell to open")
+    }
+}

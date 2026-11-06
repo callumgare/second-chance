@@ -44,6 +44,7 @@ let package = Package(
         .package(path: "../Modules/dosbox"),
         .package(path: "../Modules/scummvm"),
         .package(path: "../Modules/big-fish"),
+        .package(path: "../Modules/basilisk"),
     ],
     targets: [
         // Second Chance's own shared code: the loading and log windows,
@@ -66,6 +67,7 @@ let package = Package(
                 .product(name: "DOSBoxKit", package: "dosbox"),
                 .product(name: "ScummVMKit", package: "scummvm"),
                 .product(name: "BigFishKit", package: "big-fish"),
+                .product(name: "BasiliskKit", package: "basilisk"),
             ],
             swiftSettings: swiftSettings
         ),

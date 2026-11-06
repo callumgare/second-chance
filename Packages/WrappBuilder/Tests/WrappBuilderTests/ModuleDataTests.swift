@@ -9,7 +9,7 @@ struct ModuleDataTests {
         let loader = try ModuleLoader(root: modulesRoot)
         let modules = try loader.loadAll().get()
         #expect(modules.map(\.manifest.id).sorted() == [
-            "big-fish", "disc", "dosbox", "her-download", "installer", "nancy-drew", "scummvm", "steam", "wine",
+            "basilisk", "big-fish", "disc", "dosbox", "her-download", "installer", "nancy-drew", "scummvm", "steam", "wine",
         ])
         let releases = try ModuleReleases.read(from: modulesRoot.appendingPathComponent("releases.json"))
         for module in modules {

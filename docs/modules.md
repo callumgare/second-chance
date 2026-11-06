@@ -23,7 +23,7 @@ Modules/
     functions/prefix-settings  the prefix's settings, which both stages give it (DO wine.prefix-settings)
     functions/keep-thread-handles  msvcrt keeping _beginthread's handles, for an Allegro 4 game's exit (DO wine.keep-thread-handles)
     routine-errors.yaml     Wine's err: lines that say nothing is wrong
-  scummvm/  dosbox/  steam/  big-fish/  nancy-drew/  installer/  disc/  her-download/
+  scummvm/  dosbox/  basilisk/  steam/  big-fish/  nancy-drew/  installer/  disc/  her-download/
 ```
 
 `installer`, `disc`, `her-download` and `big-fish` are, so far, a `module.yaml`
@@ -418,6 +418,32 @@ A new version is added without `prepared`, prepared, and given the hash
 `sc release` refuses to release while a source's first URL doesn't answer
 with its size (`sc engine check`). Changing a package changes the module's folder,
 so it needs a new release, as any change does.
+
+### The basilisk module's Mac
+
+The basilisk module runs a classic 68k Mac program in Basilisk II. Its package is
+E-Maculation's universal Basilisk II and System 7.5.3, which Apple gave away, on a
+disk image (`BasiliskBuild.prepare`: the program and SDL2 re-signed ad hoc, so the
+in-process helpers load into it, and the system disk as `SharedSupport/basilisk/system.hfv`).
+
+- **The ROM**, which Apple never gave out, is no source of the package: it's the
+  person's own, kept in the engine store as `roms/<sha256>.rom` (`MacROMs`, known
+  by the checksum it starts with) and given to a build as the provided file
+  `module:basilisk:/rom`. A Debug build of Second Chance downloads one when none is
+  kept, once per Mac, as it would an engine (`WrappBuildHelper.ensureMacROM`); a
+  Release build never does, and fails a build that needs one with a plain message.
+- **`USE basilisk`** plans `BASILISK.SETUP`: the system disk copied to the app's
+  `SharedSupport/basilisk/boot.hfv` and the ROM to `mac.rom` beside it.
+  `BASILISK.CDROM ${input.disc-1}` keeps a disc's image in the app as the Mac's CD
+  (`cdrom-<n>.iso`): a disc input built from an image gives it as `disc-1.image`.
+- **Its path type**, `basilisk:`, is a path on the emulated Mac in Mac OS's own form
+  (`basilisk:Ingenious CD:Ingenious`); it has no place in the app (`BasiliskPaths`).
+- **In the wrapp** (`BasiliskRuntime`): the startup disk is copied to the program's
+  folder of the person's files on its first launch, so what the Mac writes stays the
+  person's, and Basilisk II starts with prefs written then: the ROM, that disk, the
+  CDs, `--basilisk.screen` (640x480x8 unless said), no JIT (it crashes under
+  Rosetta), and `delay 500`, without which QuickTime's movies stop on their first
+  frame.
 
 ### The engine store
 
