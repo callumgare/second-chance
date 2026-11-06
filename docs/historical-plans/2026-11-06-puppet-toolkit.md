@@ -55,11 +55,39 @@ hardened runtime and signs the copy ad hoc. `PuppeteerVision` became
   four launches. A Mac holds three test sessions besides its console, so it
   can never run more than that, and a per-Mac launch-slot budget would limit
   nothing. More test users would need the slot count measured again.
+
+  > **Post-implementation edit, 2026-11-06, by the agent that finished this
+  > plan:** that conclusion was wrong, and was measured again with eight test
+  > users on the test Mac. The same two games, from 6, 8 and 9 accounts at
+  > once, with nothing else running:
+  >
+  > | Accounts at once | Launches passed | Launch time (each game) | A batch took | Games a minute | CPU mean |
+  > | --- | --- | --- | --- | --- | --- |
+  > | 1 | 2 of 2 | 28–31 s | ~64 s | ~1.9 | 3.0 cores |
+  > | 4 (above) | 16 of 16 | 28–34 s | ~66 s | ~7.3 | 4.7–5.4 cores |
+  > | 6 | 12 of 12 | 31–91 s | ~155 s | ~4.6 | 5.6 cores |
+  > | 8 | 16 of 16 | 35–88 s | ~170 s | ~5.6 | 6.0 cores |
+  > | 9 | 18 of 18 | 30–93 s | ~178 s | ~6.1 | 6.3 cores |
+  > | 9, again | 18 of 18 | 46–199 s | ~310 s | ~3.5 | 7.0 cores |
+  >
+  > So the cliff is between four and six launches at once on an M1 Max
+  > (8 performance cores): up to four, each launch takes as long as it does
+  > alone; from six, each takes 1.5–3 times as long and the Mac gets
+  > through fewer games a minute than at four, though every one still
+  > passed. The repeat at nine was slower again, for no cause found (nothing
+  > else ran; the load average read in the hundreds, which says nothing
+  > here). About four launches at once, one per two performance cores, is
+  > the useful limit there; another Mac needs measuring before that rule is
+  > trusted. Two test users building the same disc game at once failed:
+  > the second reuses the first's mount of the disc image, which the first
+  > detaches when it's done.
 - **Test sessions lock every 20 minutes.** The keep-alive is connected as a
   viewer but sends no input, so macOS counts the session as idle. Its default
   screen saver then starts and locks it. The keep-alive unlocks it within
   seconds, but a launch at that moment fails with "the screen is locked".
   Turning the test users' screen saver off would fix it; not done here.
+  (Post-implementation, 2026-11-06, by the same agent: done since, as
+  `sc session setup --task screensaver`.)
 
 **Not built, as candidates** ([section 8](#8-candidates-built-when-a-port-needs-them)):
 
@@ -644,7 +672,7 @@ work.
 | **A session as a Midscene device** | If a planner-in-the-loop proves useful |
 | **The helper's frame ring** (an in-process `SCStream` keeping small greyscale frames; `stats` from it; dropped from phase 5 by the user's decision) | Before-and-after captures prove too slow, or miss changes shorter than an action's wait |
 | **Running without taking the screen** | Done another way: test sessions ([section 0](#0-sessions-several-gui-logins-per-mac)). A virtual display was ruled out |
-| **A per-Mac launch-slot budget** | A Mac with more test sessions than launches it can take at once: four at once didn't reach the cliff on an M1 Max (measured 2026-11-06), and a Mac has three test sessions besides its console |
+| **A per-Mac launch-slot budget** | A sharded run that would launch more games on one Mac at once than it takes. (Post-implementation, 2026-11-06: an M1 Max takes about four before Wine's cliff, measured with eight test users; see [Outcome](#outcome)) |
 | **The benchmark** (section 7: turns, tokens and pictures, "pictures only" against rich replies) | Someone proposes a candidate whose trigger is the benchmark, such as the local model; or a cheap version first, one `porting-player` run per goal with its counts |
 | **`cursor`** (the cursor's image hash and hot spot) | Built with hover probing |
 | **A `look` verb with `w` and `t` refs** | Agents keep asking for one: `controls` gives `c` refs, and `text`, `screen` and the `--text` locator cover the rest |
