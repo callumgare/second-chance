@@ -564,6 +564,16 @@ the next route (step 4). Bioscopia's black first scene was reported as a
 stopping point with three untried leads, all of them allowed: that's not
 stuck.
 
+**Keep a stuck route's stage in the Wrappfile.** When another route wins,
+the one that got part of the way stays, as a stage of its own that no
+edition's `build.target` names, so nobody can build it, but it's committed
+with the bundle and is where a later attempt starts. Above it, a comment
+says it isn't a working route and why, one line for each blocker with what
+was found and any workaround that got past it. Comment out what it would
+keep in a person's files (its `STORE`s and their `LAUNCH --mount`s) until it
+works, and say in the manifest's `notes` that it's there. Ingenious's
+`scummvm` stage (the Windows side under ScummVM) is the model.
+
 **When the fault is Second Chance's**, not the program's (a disc image that
 won't mount, a copy that fails on an odd file), fix it: the change, a unit
 test beside the existing ones, the doc that describes that code (AGENTS.md's
@@ -617,16 +627,19 @@ is a few lines on an existing one. The steps:
 3. **A download edition**: URLs in the order the docs give, the sha256 and
    size, `unpack`, `licence` and `licence-from`, and a Wayback `id_` copy,
    checked by its CDX digest rather than downloaded twice.
-4. **A disc edition**: `detect` so the build recognises the disc (its
+4. **A route that got part of the way** stays as a stage of its own, built
+   by no edition, with a comment saying why it doesn't work ([step
+   6](#6-when-it-doesnt-work), "Keep a stuck route's stage").
+5. **A disc edition**: `detect` so the build recognises the disc (its
    volume name, a file only it has) and doesn't mistake another for it.
-5. **Its test**: the engine module's `starts-and-quits` scenario and a
+6. **Its test**: the engine module's `starts-and-quits` scenario and a
    `running` needle (`tests/needles/*.yaml`) on text or a picture its
    title screen shows (`docs/testing.md#needles`).
-6. `./sc bundle check Bundles/<namespace>/<name>`, `./sc generate`,
+7. `./sc bundle check Bundles/<namespace>/<name>`, `./sc generate`,
    `./sc test unit` (the bundle tests), then a real build and
    `./sc --on <user>@<host>:<path> test integration <slug> --source
    <source>` in a claimed test account.
-7. Commit, as `.local/AGENTS.md` allows: `feat(bundles): <program> runs`,
+8. Commit, as `.local/AGENTS.md` allows: `feat(bundles): <program> runs`,
    with the bundle, the generated table and any reference changes in
    separate commits where they're separate changes. Commit in the
    worktree, land it on main with a fast-forward, then `./sc worktree
