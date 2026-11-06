@@ -15,12 +15,13 @@ import WrappModuleKit
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WineExecutor")
 
-/// Carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS` and `MOUNT`, and its
+/// Carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS`, `MOUNT` and
+/// `KEEP-THREAD-HANDLES`, and its
 /// setup steps `HELPERS` and `PREFIX`, in the step's tree, and runs a
 /// `wine:` program for `RUN` (docs/modules.md#executors). Portable: it needs
 /// nothing of Second Chance's.
 public nonisolated struct WineExecutor: ModuleExecutor {
-    public static let handles = ["DRIVES", "REGISTRY", "WINETRICKS", "MOUNT", "KEEP-DISCS", "HELPERS", "PREFIX"]
+    public static let handles = ["DRIVES", "REGISTRY", "WINETRICKS", "MOUNT", "KEEP-DISCS", "HELPERS", "PREFIX", "KEEP-THREAD-HANDLES"]
 
     /// The winetricks it runs; nil for the module's own.
     let winetricks: URL?
@@ -46,7 +47,8 @@ public nonisolated struct WineExecutor: ModuleExecutor {
     }
 
     /// What a step makes that its text doesn't say: `HELPERS` lays in this
-    /// build's helpers, and `WINETRICKS` runs this winetricks, so a layer
+    /// build's helpers, `WINETRICKS` runs this winetricks, and
+    /// `KEEP-THREAD-HANDLES` makes this revision of its patch, so a layer
     /// kept by another Second Chance with other ones isn't restored.
     public func keyInputs(for step: PlannedStep, in context: any StepContext) async throws -> KeyInputs {
         switch step.instruction {
@@ -56,6 +58,8 @@ public nonisolated struct WineExecutor: ModuleExecutor {
         case "WINETRICKS":
             guard let script = await Winetricks(wine: Wine(wrapp: context.tree), script: winetricks).resolvedScript() else { return KeyInputs() }
             return KeyInputs([KeyInput("winetricks", try await Blocking.run { try Self.hash(script) })])
+        case "KEEP-THREAD-HANDLES":
+            return KeyInputs([KeyInput("keep-thread-handles", String(KeepThreadHandles.revision))])
         default:
             return KeyInputs()
         }
@@ -121,6 +125,16 @@ public nonisolated struct WineExecutor: ModuleExecutor {
             try await keepDiscs(step, in: context)
         case "HELPERS":
             try layInHelpers(in: context.tree, step: step)
+        case "KEEP-THREAD-HANDLES":
+            // The tree's own Wine, cloned from the engine store, patched in place.
+            let tree = context.tree
+            let outcome: KeepThreadHandles.Outcome
+            do {
+                outcome = try await Blocking.run { try KeepThreadHandles.apply(in: tree) }
+            } catch let error as KeepThreadHandles.PatchError {
+                throw StepFailure.failed("\(step.origin): couldn't keep thread handles: \(error)")
+            }
+            logger.notice("msvcrt.dll's _endthread keeps a thread's handle (\(outcome == .patched ? "patched" : "already patched"))")
         case "PREFIX":
             // wineboot's prefix, Wine's server let finish so it's all written.
             try await wine.run(.wine(["wineboot", "-u"]))

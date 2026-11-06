@@ -6,7 +6,9 @@
 //  Windows program: the DLLs it imports, which say what a game draws with
 //  (GameGraphicsAPI), and the strings in its version info, which say which
 //  game an installer is for and which kind of installer it is (GameDetector,
-//  GameInstallerRunner). Every read is bounds-checked and every loop capped,
+//  GameInstallerRunner), and the exports and import slots a patch to one of
+//  Wine's DLLs finds its code by (the wine module's KEEP-THREAD-HANDLES).
+//  Every read is bounds-checked and every loop capped,
 //  so a damaged or truncated file gives less back, never a crash.
 //  The layouts are Microsoft's "PE Format" and "VS_VERSIONINFO" documentation.
 
@@ -18,6 +20,11 @@ nonisolated public struct WindowsExecutable: Sendable {
     /// Where the optional header's data directories start, and how many there are.
     private let directories: Int
     private let directoryCount: Int
+    /// The address the image prefers to be loaded at, which its absolute
+    /// addresses (an import slot's, in a `call [slot]`) assume.
+    public let imageBase: Int
+    /// PE32+, a 64-bit image: its import tables' entries are 8 bytes.
+    private let is64: Bool
 
     private struct Section: Sendable {
         let name: String
@@ -46,8 +53,14 @@ nonisolated public struct WindowsExecutable: Sendable {
         let optional = pe + 24
         // The data directories start later in PE32+ than in PE32.
         switch bytes.u16(at: optional) {
-        case 0x10B: directories = optional + 96
-        case 0x20B: directories = optional + 112
+        case 0x10B:
+            directories = optional + 96
+            imageBase = bytes.u32(at: optional + 28) ?? 0
+            is64 = false
+        case 0x20B:
+            directories = optional + 112
+            imageBase = (bytes.u32(at: optional + 24) ?? 0) | (bytes.u32(at: optional + 28) ?? 0) << 32
+            is64 = true
         default: return nil
         }
         directoryCount = bytes.u32(at: directories - 4) ?? 0
@@ -93,6 +106,54 @@ nonisolated public struct WindowsExecutable: Sendable {
             descriptor += 20
         }
         return names
+    }
+
+    /// The RVA of the import address table's slot for `function`, imported
+    /// by name from `dll` (case doesn't matter for the DLL): where the loader
+    /// writes its address, which a `call [imageBase + slot]` reads. Nil when
+    /// the image doesn't import it so.
+    public func importSlot(of function: String, from dll: String) -> Int? {
+        guard let imports = directory(1), var descriptor = fileOffset(ofRVA: imports) else { return nil }
+        let width = is64 ? 8 : 4
+        for _ in 0..<1024 {
+            guard let lookup = bytes.u32(at: descriptor), let nameRVA = bytes.u32(at: descriptor + 12),
+                  let addresses = bytes.u32(at: descriptor + 16) else { return nil }
+            if lookup == 0 && nameRVA == 0 && addresses == 0 { return nil }
+            defer { descriptor += 20 }
+            guard cString(atRVA: nameRVA)?.lowercased() == dll.lowercased(),
+                  let table = fileOffset(ofRVA: lookup != 0 ? lookup : addresses) else { continue }
+            // Each entry an RVA of a hint and a name, unless its top bit says
+            // it's by ordinal; the list ends with a zero.
+            for index in 0..<65536 {
+                guard let low = bytes.u32(at: table + index * width) else { break }
+                let high = is64 ? (bytes.u32(at: table + index * width + 4) ?? 0) : 0
+                if low == 0 && high == 0 { break }
+                let byOrdinal = is64 ? high & 0x8000_0000 != 0 : low & 0x8000_0000 != 0
+                if !byOrdinal, cString(atRVA: low + 2) == function { return addresses + index * width }
+            }
+        }
+        return nil
+    }
+
+    // MARK: - Exports
+
+    /// The functions the image exports by name, each with its RVA. Empty if
+    /// it exports none, or they can't be read. A forwarded export's RVA is
+    /// its forwarder string's, as the directory has it.
+    public var exports: [String: Int] {
+        guard let directory = directory(0).flatMap(fileOffset(ofRVA:)),
+              let nameCount = bytes.u32(at: directory + 24), let functions = bytes.u32(at: directory + 28),
+              let names = bytes.u32(at: directory + 32), let ordinals = bytes.u32(at: directory + 36),
+              let functionTable = fileOffset(ofRVA: functions), let nameTable = fileOffset(ofRVA: names),
+              let ordinalTable = fileOffset(ofRVA: ordinals) else { return [:] }
+        var exports: [String: Int] = [:]
+        for index in 0..<min(nameCount, 65536) {
+            guard let nameRVA = bytes.u32(at: nameTable + 4 * index), let name = cString(atRVA: nameRVA),
+                  let ordinal = bytes.u16(at: ordinalTable + 2 * index),
+                  let rva = bytes.u32(at: functionTable + 4 * ordinal) else { continue }
+            exports[name] = rva
+        }
+        return exports
     }
 
     // MARK: - Version info
@@ -212,7 +273,9 @@ nonisolated public struct WindowsExecutable: Sendable {
         return rva
     }
 
-    private func fileOffset(ofRVA rva: Int) -> Int? {
+    /// Where in the file the byte at `rva` is, by the section that holds it;
+    /// nil for one no section does.
+    public func fileOffset(ofRVA rva: Int) -> Int? {
         sections.first { rva >= $0.virtualAddress && rva < $0.virtualAddress + $0.size }
             .map { $0.rawOffset + (rva - $0.virtualAddress) }
     }

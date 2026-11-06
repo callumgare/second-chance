@@ -21,6 +21,7 @@ Modules/
     stages/update           the wine-prefix update, over an old app's prefix (FROM ${input.previous})
     functions/cnc-ddraw     cnc-ddraw, for a DirectDraw game (DO wine.cnc-ddraw)
     functions/prefix-settings  the prefix's settings, which both stages give it (DO wine.prefix-settings)
+    functions/keep-thread-handles  msvcrt keeping _beginthread's handles, for an Allegro 4 game's exit (DO wine.keep-thread-handles)
     routine-errors.yaml     Wine's err: lines that say nothing is wrong
   scummvm/  dosbox/  steam/  big-fish/  nancy-drew/  installer/  disc/  her-download/
 ```
@@ -61,7 +62,7 @@ versions:                      # what this release provides, as a bundle names i
 data: ["routine-errors.yaml"]
 retired: ["prefix.yaml"]       # data only Second Chance's Swift read, dropped (below)
 stages: ["stages/prefix", "stages/update"]  # Wrappfiles a bundle builds FROM (FROM --module=wine@10 prefix)
-functions: ["functions/cnc-ddraw", "functions/prefix-settings"]
+functions: ["functions/cnc-ddraw", "functions/prefix-settings", "functions/keep-thread-handles"]
 allow-paths: ["assets/"]       # folders of its own its stages and functions may read files from
 updates:                       # its default updates, after a bundle's
   - { id: "wine-prefix", when-changed: ["stages/prefix"] }
@@ -199,9 +200,13 @@ its module's executor ([wrapp-build.md](wrapp-build.md#the-runner)).
   `RUN` (`wine:C:/setup.exe`), given as a `ProgramRun` (the program, its
   arguments, `--env` and a timeout), returning its exit code.
 - **`keyInputs(for:in:)`** names what a step's key needs beyond its text
-  (`KeyInputs`: a disc's listing, an installer's fingerprint), and
-  **`checkpoint`** makes the tree safe to keep as a layer, nothing running
-  in it. Nothing calls either yet.
+  (`KeyInputs`: a disc's listing, an installer's fingerprint, the revision
+  of `WINE.KEEP-THREAD-HANDLES`' patch), and **`checkpoint`** makes the
+  tree safe to keep as a layer, nothing running in it.
+- **`revision`** is part of every one of its steps' keys: raise it when a
+  change to its Swift changes what its steps make. A change that touches
+  one instruction's output can key that instruction alone through
+  `keyInputs` instead, so every other layer stays (`KeepThreadHandles.revision`).
 - **`finish`** ends whatever the executor started, and is called at the end
   of every build, on failure and cancel too.
 - A failure is a `StepFailure`: `.recipe` for what the Wrappfile or module
@@ -228,8 +233,55 @@ Swift, its **kit**:
 
 | Package | Products | Has |
 | --- | --- | --- |
-| `Packages/Modules/wine` (`WineModule`) | `WineKit`, `WineExecutor` | The kit is the Wine library every process that runs a Windows program uses — `Wine`, `WineCommand`, the registry, server, desktop and drives ([wrapp-build.md](wrapp-build.md#running-wine)) — which `SecondChanceKit` links. The executor carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS` and `MOUNT`, runs `wine:` programs for `RUN`, and has `Winetricks` and the winetricks script as a package resource. It also carries out the `setup` steps `USE wine` plans, `HELPERS` (the in-process helpers laid in the tree's `Frameworks/`) and `PREFIX` (wineboot's). Beside them, `InProcessHelpers/` and `build-in-process-helpers.sh` ([wine-in-process-helpers.md](wine-in-process-helpers.md)). |
+| `Packages/Modules/wine` (`WineModule`) | `WineKit`, `WineExecutor` | The kit is the Wine library every process that runs a Windows program uses — `Wine`, `WineCommand`, the registry, server, desktop and drives ([wrapp-build.md](wrapp-build.md#running-wine)) — which `SecondChanceKit` links. The executor carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS`, `MOUNT` and `KEEP-THREAD-HANDLES` ([below](#the-wine-modules-patches)), runs `wine:` programs for `RUN`, and has `Winetricks` and the winetricks script as a package resource. It also carries out the `setup` steps `USE wine` plans, `HELPERS` (the in-process helpers laid in the tree's `Frameworks/`) and `PREFIX` (wineboot's). Beside them, `InProcessHelpers/` and `build-in-process-helpers.sh` ([wine-in-process-helpers.md](wine-in-process-helpers.md)). |
 | `Packages/Modules/nancy-drew` (`NancyDrewModule`) | `NancyDrewExecutor` | Carries out `NANCY-DREW.CONFIGURE-INI <folder>`: every `.ini` in the folder given what the module's `ini.yaml` says, read through `moduleFile`, each file written back in the encoding it came in (`TextFile`, in `WindowsFormats`). |
+
+### The wine module's patches
+
+Most Wine problems are worked around outside Wine: a registry setting, a
+winetricks verb, an in-process helper. A few are only fixable in Wine's own
+code. Those are byte edits made by Swift compiled into Second Chance, so no
+Mac that builds needs a compiler, and each finds the code it changes by an
+export and a pattern, checks what it finds, and fails the step (naming what
+it found) on a Wine it doesn't know rather than patching blind.
+
+- **Every Wine gets** `RosettaFaultFix`, in 32-bit `ntdll.dll`, made as the
+  engine is prepared, so it is in the engine store
+  ([big-fish.md](big-fish.md#armadillo-under-rosetta)).
+- **A game that asks gets `WINE.KEEP-THREAD-HANDLES`**, through
+  `DO wine.keep-thread-handles`, in a stage after it has Wine. It patches the
+  stage tree's own copy of the engine (cloned from the store, and replaced
+  file by file, so the store is never touched) and the prefix's copy of the
+  same DLL (`syswow64`, when it's Wine's). A Wrappfile that doesn't name it
+  gets Wine unchanged.
+
+`KEEP-THREAD-HANDLES` (`KeepThreadHandles`, in `WineExecutor`) is for Allegro
+4.x Windows games that sometimes hang as they exit: the game's own log stops
+at `Exiting Allegro`, the window stays up and it uses no CPU. Allegro's
+`remove_timer` sets its stop event and then waits, with no limit, on the
+timer thread's handle from msvcrt's `_beginthread`. The C runtime closes that
+handle itself when the thread returns (Wine's `_beginthread_trampoline` →
+`_endthread` → `CloseHandle`, as on Windows), so when the high-priority timer
+thread ends before the main thread starts waiting, and wineserver has handed
+the freed value to a new object in between, the main thread waits for ever
+on something nobody signals. Icy Tower hung on about 3 exits in 11 on macOS
+26, and on none of 41 on macOS 15: it's a race.
+
+The patch changes `_endthread`'s one `call [CloseHandle]` in Wine's 32-bit
+`msvcrt.dll` (`lib/wine/i386-windows/`) into `pop ecx; test eax, <the same
+address>`: the handle is taken off the stack as the stdcall would have, and
+the call's address stays as an operand, so the base relocation over it still
+lands harmlessly if the DLL loads elsewhere. The call is found from the
+`_endthread` export to the next export, by kernel32's `CloseHandle` import
+slot, and must be the only one there and be followed by `push eax` (its
+result unused). The handle then stays the thread's, signalled once it ends,
+at the cost of one handle per `_beginthread` thread for the life of the
+process. Changing what the patch makes means raising
+`KeepThreadHandles.revision`, which only that step's key holds.
+
+An update of a wrapp that moves Wine (the wine module's `stages/update`)
+lays the new Wine in without the patch, as that stage doesn't run the
+bundle's own stages.
 
 Second Chance's builders have the shipped executors through `ModuleSteps`
 (`ModuleSteps.executors()`), which gives the wine executor the wine engine's
@@ -367,7 +419,7 @@ none.
 
 | Module | Data | Read by |
 | --- | --- | --- |
-| `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), then `functions/prefix-settings`: `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `stages/update`, the `wine-prefix` update, which gives an old app's prefix this Wine and those settings again ([wrappfile.md](wrappfile.md#updates)); `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`) | `WineManager`, as it makes a prefix, and the wine module's executor, which carries the steps out (through `ModuleSteps`); Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
+| `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), then `functions/prefix-settings`: `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `stages/update`, the `wine-prefix` update, which gives an old app's prefix this Wine and those settings again ([wrappfile.md](wrappfile.md#updates)); `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`); `functions/keep-thread-handles`, `WINE.KEEP-THREAD-HANDLES` for an Allegro 4 game that hangs as it exits ([above](#the-wine-modules-patches)) | `WineManager`, as it makes a prefix, and the wine module's executor, which carries the steps out (through `ModuleSteps`); Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
 | `wine` | `routine-errors.yaml`: Wine's routine `err:` lines | the wrapp's quit check (`GameQuitCheck`), compiled in by `sc generate` |
 | `steam` | `stages/client`: Steam's client in the wine module's prefix, ⌘ acting as Ctrl in its windows (`FROM --module=steam@1 client`); `functions/install`, the game installed by Steam with the shared sign-in, then signed out (`DO steam.install`) | `SteamWrappBuilder`, which carries the client stage out before the game is known and the edition's steps after ([steam.md](steam.md#building)) |
 | `big-fish` | `stages/manager`: the Game Manager in the wine module's prefix, from its installer pinned by its hash, ⌘ acting as Ctrl in its window (`FROM --module=big-fish@1 manager`); `functions/install`, the game installed and activated, then the account taken out (`DO big-fish.install`); `functions/cnc-ddraw`, cnc-ddraw hooking the functions themselves, as Armadillo rebuilds a game's imports (`DO big-fish.cnc-ddraw`) | `BigFishWrappBuilder`, which carries the manager stage out before the game is known and the edition's steps after ([big-fish.md](big-fish.md#the-build)) |

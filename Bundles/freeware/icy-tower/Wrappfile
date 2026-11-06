@@ -11,6 +11,9 @@ CONST install-dir = "C:/IcyTower"
 
 FROM --module=wine@10 prefix AS download
 DO wine.cnc-ddraw
+# Allegro's timer can hang its exit, waiting on a thread's handle Wine has
+# closed and given out again.
+DO wine.keep-thread-handles
 COPY --from=${input.game} . C:/icy-tower-setup/ # the installer, as it comes
 RUN "C:/icy-tower-setup/icytower13_install.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /NOICONS /DIR=C:\IcyTower
 REMOVE C:/icy-tower-setup

@@ -44,12 +44,14 @@ let package = Package(
             ],
             swiftSettings: swiftSettings
         ),
-        // WINE.DRIVES, REGISTRY, WINETRICKS, MOUNT, and its setup steps.
+        // WINE.DRIVES, REGISTRY, WINETRICKS, MOUNT, KEEP-THREAD-HANDLES,
+        // and its setup steps.
         .target(
             name: "WineExecutor",
             dependencies: [
                 "WineKit",
                 .product(name: "WrappModuleKit", package: "WrappKit"),
+                .product(name: "WindowsFormats", package: "WrappKit"),
                 .product(name: "ProcessKit", package: "WrappKit"),
                 .product(name: "WrappFormat", package: "WrappKit"),
                 .product(name: "Logging", package: "swift-log"),

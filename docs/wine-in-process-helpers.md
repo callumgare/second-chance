@@ -583,6 +583,12 @@ shift) leaves the quit to Wine, with a warning. A logout the game holds up this 
 an app turns it down. Option-F4 does nothing in Wine's Mac driver, which
 doesn't take Option for Alt unless the prefix says so.
 
+A game that has started quitting and then hangs, its window up, using no CPU,
+isn't ignoring the quit: Icy Tower's, after its log says `Exiting Allegro`,
+was Allegro's timer waiting on a thread handle Wine had closed and given out
+again, which `DO wine.keep-thread-handles` fixes in that game's Wine
+([modules.md](modules.md#the-wine-modules-patches)).
+
 ### Which games get it
 
 Every Wine game. Only a Direct3D game's first frame counts, though: cnc-ddraw

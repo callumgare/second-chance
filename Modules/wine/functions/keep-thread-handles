@@ -1,0 +1,15 @@
+# DO wine.keep-thread-handles
+#
+# For an Allegro 4.x Windows game that sometimes hangs as it exits: its log
+# stops at "Exiting Allegro" (or its own last shutdown line), its window stays
+# up, it uses no CPU, and it happens on some exits and some Macs more than
+# others. Allegro's timer waits without limit on a thread's handle that the C
+# runtime closed when the thread ended, and Wine may have given that value
+# to something else by then. This keeps the handle of every thread
+# `_beginthread` starts open, in this stage's own Wine (its 32-bit
+# msvcrt.dll), so the wait sees the thread has ended. Put it after the stage
+# has Wine (FROM --module=wine… prefix); a game without it gets Wine as it
+# comes. docs/modules.md#the-wine-modules-patches has the details.
+FUNCTION keep-thread-handles
+  WINE.KEEP-THREAD-HANDLES
+END
