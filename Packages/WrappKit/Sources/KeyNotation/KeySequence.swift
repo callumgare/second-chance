@@ -68,11 +68,6 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
             self.action = action
         }
 
-        /// A key alone with nothing written after it: what a quit key was
-        /// before the notation had suffixes, which it still means for a
-        /// launch (`RecordedLaunch.quitKeySequence`).
-        public var isBare: Bool { modifiers.isEmpty && action == .press }
-
         /// How many times it's pressed: 1 for a hold.
         public var pressCount: Int {
             if case .presses(let count) = action { return count }
@@ -117,9 +112,6 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
     public var canonical: String { steps.map(\.canonical).joined(separator: " ") }
 
     public var description: String { canonical }
-
-    /// Whether it's a single key with nothing written after it.
-    public var isSingleBareKey: Bool { steps.count == 1 && steps[0].isBare }
 
     // MARK: - Parsing
 

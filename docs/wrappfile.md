@@ -488,12 +488,9 @@ app keeps no Wine.
   and Escape held confirms). Without `--wine.quit-key` it's refused when
   planning.
 - **Quit keys are checked when planning**, and keys the notation refuses
-  are refused, naming the bad part; they're recorded as written. A single
-  key with nothing after it keeps the meaning it had before the notation
-  had `:hold`: as `--wine.quit-key`, without confirm keys, it's held for
-  5 s, and as `--wine.quit-confirm-key` it's held too, while a quit key
-  before confirm keys is pressed once. `sc bundle check` warns of a held
-  one with its explicit form (`f12:hold`), which a bundle writes.
+  are refused, naming the bad part; they're recorded, and pressed, as
+  written: a key with nothing after it is pressed once, so a game that
+  quits on a held key says so (`f12:hold`).
 - **`--wine.fullscreen-setting=<fields>`** names where the program keeps
   its own fullscreen setting, so the app can keep it in step with the
   window's green button: when the player last moved the window into or out

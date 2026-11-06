@@ -719,12 +719,9 @@ them.
 
 The wrapp (`Wine.inProcessHelperVariables`) hands the quit watch the keys in
 [canonical form](#the-canonical-key-sequence), made from the launch's own
-by `RecordedLaunch.quitKeySequence` and `quitConfirmKeySequence`. A single
-key with nothing after it keeps the meaning it had before the notation had
-`:hold`, so a wrapp built then quits as it did: as `--wine.quit-key` alone
-it's held for 5 s (`f12` is handed over as `f12:hold=5000ms`), as
-`--wine.quit-confirm-key` it's held too, and a quit key before confirm keys
-is pressed once. Keys the wrapp can't read (planning refuses them, so only a
+by `RecordedLaunch.quitKeySequence` and `quitConfirmKeySequence`, exactly
+as written: a key with nothing after it is pressed once, and one held says
+`:hold` (`f12:hold` is handed over as `f12:hold=5000ms`). Keys the wrapp can't read (planning refuses them, so only a
 wrapp built by something else has them) leave the quit to Wine, as does
 anything the helper can't read, with a warning. A logout the game holds up
 this way is cancelled, as macOS does whenever an app turns it down.

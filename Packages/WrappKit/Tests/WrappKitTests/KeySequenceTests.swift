@@ -92,15 +92,6 @@ struct KeySequenceTests {
             "\(error)".contains(naming)
         }
     }
-
-    @Test("A single key alone is bare; anything written after it isn't")
-    func bare() throws {
-        #expect(try KeySequence(parsing: "f12").isSingleBareKey)
-        #expect(try !KeySequence(parsing: "f12:hold").isSingleBareKey)
-        #expect(try !KeySequence(parsing: "f12*1").isSingleBareKey)
-        #expect(try !KeySequence(parsing: "cmd+q").isSingleBareKey)
-        #expect(try !KeySequence(parsing: "up down").isSingleBareKey)
-    }
 }
 
 @Suite("Quit keys")
@@ -109,33 +100,21 @@ struct QuitKeySequenceTests {
         RecordedLaunch(program: "wine:C:/game.exe", options: options)
     }
 
-    @Test("A single bare quit key is held, as before; anything else is pressed as written")
+    @Test("Quit keys are pressed as written: a bare key once, a held one held")
     func quitKey() throws {
-        #expect(try launch(["wine.quit-key": "f12"]).quitKeySequence()?.canonical == "f12:hold=5000ms")
+        #expect(try launch(["wine.quit-key": "f12"]).quitKeySequence()?.canonical == "f12")
         #expect(try launch(["wine.quit-key": "f12:hold"]).quitKeySequence()?.canonical == "f12:hold=5000ms")
-        #expect(try launch(["wine.quit-key": "f12*1"]).quitKeySequence()?.canonical == "f12")
         #expect(try launch(["wine.quit-key": "escape escape return"]).quitKeySequence()?.canonical == "escape escape return")
         #expect(try launch([:]).quitKeySequence() == nil)
     }
 
-    @Test("With confirm keys, a bare quit key is pressed once and a bare confirm key held")
+    @Test("Confirm keys are read beside a quit key, as written, and not without one")
     func confirmKey() throws {
-        let icy = launch(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape"])
+        let icy = launch(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape:hold"])
         #expect(try icy.quitKeySequence()?.canonical == "escape")
         #expect(try icy.quitConfirmKeySequence()?.canonical == "escape:hold=5000ms")
-        let explicit = launch(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape:hold"])
-        #expect(try explicit.quitConfirmKeySequence()?.canonical == "escape:hold=5000ms")
-        #expect(explicit.quitKeyWarnings.isEmpty)
+        #expect(try launch(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape"]).quitConfirmKeySequence()?.canonical == "escape")
         #expect(try launch(["wine.quit-confirm-key": "escape"]).quitConfirmKeySequence() == nil)
-    }
-
-    @Test("A single bare key that's held is warned of, with the explicit form")
-    func warnings() {
-        #expect(launch(["wine.quit-key": "f12"]).quitKeyWarnings.first?.contains("--wine.quit-key=f12:hold") == true)
-        #expect(launch(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape"]).quitKeyWarnings
-            .first?.contains("--wine.quit-confirm-key=escape:hold") == true)
-        #expect(launch(["wine.quit-key": "f12:hold"]).quitKeyWarnings.isEmpty)
-        #expect(launch(["wine.quit-key": "up return*2"]).quitKeyWarnings.isEmpty)
     }
 }
 

@@ -99,13 +99,13 @@ struct InProcessHelperVariablesTests {
         #expect(variables("fullscreen")["NATIVE_MACOS_FULLSCREEN_FORCE"] == "1")
     }
 
-    @Test("--wine.quit-key gives the quit watch its keys in canonical form, a single bare key held as before")
+    @Test("--wine.quit-key gives the quit watch its keys in canonical form, as written")
     func theLaunchNamesAQuitKey() {
         func key(_ options: [String: String]) -> String? {
             let launch = RecordedLaunch(program: "wine:C:/Iji/iji.exe", options: options, format: RecordedLaunch.currentFormat)
             return Wine.inProcessHelperVariables(gameExe: "iji.exe", graphicsAPI: .direct3D, launch: launch, environment: [:])["QUIT_KEY"]
         }
-        #expect(key(["wine.quit-key": "f12"]) == "f12:hold=5000ms")
+        #expect(key(["wine.quit-key": "f12"]) == "f12")
         #expect(key(["wine.quit-key": "f12:hold"]) == "f12:hold=5000ms")
         #expect(key(["wine.quit-key": "f12:hold=1.5s"]) == "f12:hold=1500ms")
         // Several keys are pressed in turn, as written
@@ -124,8 +124,8 @@ struct InProcessHelperVariablesTests {
         let both = variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape escape"])
         #expect(both["QUIT_KEY"] == "escape")
         #expect(both["QUIT_CONFIRM_KEY"] == "escape escape")
-        // A single bare confirm key is held, as before; the quit key pressed once.
-        let icy = variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape"])
+        // Icy Tower's: the quit key pressed once, the confirm key held.
+        let icy = variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape:hold"])
         #expect(icy["QUIT_KEY"] == "escape")
         #expect(icy["QUIT_CONFIRM_KEY"] == "escape:hold=5000ms")
         #expect(variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape:hold"])["QUIT_CONFIRM_KEY"] == "escape:hold=5000ms")

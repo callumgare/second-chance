@@ -122,9 +122,8 @@ nonisolated extension Wine {
         // A launch that says --wine.quit-key has the quit watch press those
         // keys when the app is asked to quit, and with --wine.quit-confirm-key,
         // press those when it's asked again soon after: in canonical form,
-        // every hold explicit, a single bare key held as it was before key
-        // sequences (RecordedLaunch.quitKeySequence), which the helper does
-        // exactly (docs/wine-in-process-helpers.md#quit-keys).
+        // every hold explicit (RecordedLaunch.quitKeySequence), which the
+        // helper does exactly (docs/wine-in-process-helpers.md#quit-keys).
         if let launch {
             do {
                 if let keys = try launch.quitKeySequence() {
