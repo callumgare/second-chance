@@ -9,7 +9,7 @@ wrapp does not have:
 | --- | --- | --- | --- | --- |
 | Native fullscreen | `Packages/Modules/wine/InProcessHelpers/native_fullscreen.m`, with `ddraw_mode_watch.m` | Puts the game window into a real macOS fullscreen Space when the game asks for fullscreen, and takes it out when it asks for a window | `NATIVE_MACOS_FULLSCREEN_EXE`, unless the launch says `--wine.window=windowed` ([below](#when-the-launch-says)) | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Display below the notch | `Packages/Modules/wine/InProcessHelpers/display_below_notch.m` | On a display with a notch, shows Wine only the part below it, so a game in a fullscreen Space gets mouse positions that match its picture | `NATIVE_FULLSCREEN_BELOW_NOTCH=1`, in every Wine process of a wrapp | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
-| Cursor lock | `Packages/Modules/wine/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, when the launch asks for it (`--wine.cursor-lock`, [below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
+| Cursor lock | `Packages/Modules/wine/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, when the launch asks for it (`--wine.mouse=grab-early`, [below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
 | Mode scaling | `Packages/Modules/wine/InProcessHelpers/emulated_mode_scaling.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
 | Quit watch | `Packages/Modules/wine/InProcessHelpers/quit_watch.m` | Tells the wrapp when the game first put a frame on screen and whether anything asked it to quit, so a game that quits before it has started reads as a failure | `QUIT_WATCH_EXE`, for every Wine game ([below](#quit-watch)) | — (it only reports) |
 | Cocoa start wait | `Packages/Modules/wine/InProcessHelpers/cocoa_start_wait.m` | Lets each Wine program's Mac driver wait for its main thread to start Cocoa beyond Wine's 5 s, which a fully loaded Mac runs out, leaving the program with no display driver for good | Nothing: every Wine process ([below](#cocoa-start-wait)) | `SECOND_CHANCE_COCOA_START_WAIT=0` |
@@ -374,11 +374,16 @@ open from the menu bar closes it, and with nothing ever locking the cursor the
 helper kept clicking for its full 15 tries — again on every return to the app.
 
 So the wrapp arms it only when the game's launch asks for it,
-`LAUNCH --wine.cursor-lock`, recorded in its settings
+`LAUNCH --wine.mouse=grab-early`, recorded in its settings
 ([wrappfile.md](wrappfile.md#the-launch-volumes-and-app)), and every Nancy
-Drew DirectDraw game's launches do. Planning refuses a target that sets
-cnc-ddraw up (`DO wine.cnc-ddraw`) and whose launch doesn't ask, since its
-first click would be swallowed. A launch recorded before the option
+Drew DirectDraw game's launches do. A game played with the keyboard says
+`--wine.mouse=free` instead: cnc-ddraw never takes the mouse (planning sets
+its `devmode` for the exe), and the helper isn't armed. Icy Tower does: in
+its window, cnc-ddraw's hold drew the cursor pinned at the window's edge
+while the Mac's pointer, which Wine can't confine to a window, left it and
+clicked whatever was outside. A target that sets cnc-ddraw up (`DO wine.cnc-ddraw`)
+and whose launch says neither still builds, with its first click swallowed,
+and `sc lint` fails on it. A launch recorded before the option
 (`RecordedLaunch.format` nil or 1, `choosesItsHelpers` false) keeps the old
 inference: the lock is armed where cnc-ddraw may be drawing, as the launch
 declares (`--wine.graphics=direct-draw`, `direct-3d` or `unknown`). A wrapp

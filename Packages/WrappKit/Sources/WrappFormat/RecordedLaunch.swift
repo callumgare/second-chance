@@ -30,7 +30,7 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     /// The stores the program sees, where it sees them, in order.
     public var mounts: [Mount]
     /// What the launch says for itself: nil (1) for one recorded before
-    /// `--wine.cursor-lock`, whose wrapp works it out as it did then;
+    /// `--wine.mouse=grab-early`, whose wrapp works it out as it did then;
     /// `currentFormat` for one that says it.
     public var format: Int?
 
@@ -231,10 +231,10 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     }
 
     /// Whether the wrapp arms cursor lock: when its launch says
-    /// `--wine.cursor-lock`, or, recorded before it could, when the program
+    /// `--wine.mouse=grab-early`, or, recorded before it could, when the program
     /// may draw through cnc-ddraw (`inferred`).
     public func cursorLock(inferred: Bool) -> Bool {
-        choosesItsHelpers ? options["wine.cursor-lock"] != nil : inferred
+        choosesItsHelpers ? options["wine.mouse"] == "grab-early" : inferred
     }
 
     /// The store ScummVM keeps its settings in, `scummvm:settings/`.

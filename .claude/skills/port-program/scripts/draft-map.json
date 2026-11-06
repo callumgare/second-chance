@@ -170,7 +170,7 @@
 
   "pk-winetricks": {
     "_about": "A Porting Kit installWinetrick verb that means something other than itself to us. Any other verb our winetricks knows becomes a WINE.WINETRICKS line as it is.",
-    "cnc_ddraw": { "lines": ["DO wine.cnc-ddraw"], "launch": ["--wine.cursor-lock", "--wine.graphics=direct-draw"], "note": "the wine module's cnc-ddraw function: winetricks' cnc_ddraw with our ddraw.ini, and the cursor lock it needs" },
+    "cnc_ddraw": { "lines": ["DO wine.cnc-ddraw"], "launch": ["--wine.mouse=grab-early", "--wine.graphics=direct-draw"], "note": "the wine module's cnc-ddraw function: winetricks' cnc_ddraw with our ddraw.ini, and the cursor lock it needs" },
     "isolate_home": { "noop": true, "note": "the wine module's prefix-settings already runs it" },
     "steam": { "note": "a Steam game: FROM --module=steam@1 client, then DO steam.install (docs/steam.md)" },
     "dxvk": { "note": "DXVK needs Vulkan; Second Chance's Wine draws Direct3D with OpenGL (wined3d): leave it out" },

@@ -419,7 +419,7 @@ END
 
 FROM --module=wine@10 prefix AS prefix
 DO pre-install-setup
-LAUNCH --wine.cursor-lock --wine.graphics=direct-draw ${const.program}
+LAUNCH --wine.mouse=grab-early --wine.graphics=direct-draw ${const.program}
 ```
 
 What a bundle repeats in several stages it writes once: a `CONST` for a
@@ -446,12 +446,21 @@ app keeps no Wine.
   ([wine-in-process-helpers.md](wine-in-process-helpers.md)). A game whose
   non-zero exit is judged by a log says so with `--wine.clean-exit-log` and
   `--wine.clean-exit-line` (Her's later engine's `Debug.LOG`).
-- **`--wine.cursor-lock` asks for the cursor lock**, which keeps cnc-ddraw
-  from swallowing the game's first click
-  ([wine-in-process-helpers.md](wine-in-process-helpers.md#cursor-lock)):
-  the wrapp arms it only when the launch says so. Planning refuses a target
-  that sets cnc-ddraw up (`DO wine.cnc-ddraw`) and whose launch doesn't ask
-  for it, and every Nancy Drew DirectDraw game's launches do. A launch
+- **`--wine.mouse` says what cnc-ddraw does with the mouse**, for a game it
+  draws. cnc-ddraw takes hold of the mouse on a click in the game's window,
+  swallowing that click, and lets go whenever the app is left.
+  `--wine.mouse=grab-early` has the wrapp's cursor-lock helper get it to take
+  hold at the start, so the game's first click counts
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#cursor-lock)), as
+  every Nancy Drew DirectDraw game's launches say. `--wine.mouse=free` has it
+  never take hold: planning adds an `EDIT` setting cnc-ddraw's `devmode` in
+  the launch exe's own section of `ddraw.ini`, for a game played with the
+  keyboard, whose window would otherwise pin the drawn cursor at its edge
+  while the Mac's pointer left it (Icy Tower). A target that sets cnc-ddraw
+  up (`DO wine.cnc-ddraw`) and whose launch says neither still builds, its
+  first click swallowed, and `sc bundle check` and `sc lint` warn about it
+  (`BuildPlanner.warnings(of:)`); planning refuses any other value, and
+  `--wine.mouse` on a launch without cnc-ddraw. A launch
   recorded before the option (format 1) keeps having it worked out from what
   the game draws with.
 - **`--wine.window=fullscreen` or `windowed`** overrides native fullscreen,

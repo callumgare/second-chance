@@ -34,7 +34,7 @@ struct Wrapp {
     /// for (`--wine.window=windowed`).
     let keepsWindowed: Bool
     /// Whether the wrapp arms cursor lock in its game: its launch's
-    /// `--wine.cursor-lock`, or for an older wrapp, a game that may draw
+    /// `--wine.mouse=grab-early`, or for an older wrapp, a game that may draw
     /// through cnc-ddraw.
     let cursorLock: Bool
 

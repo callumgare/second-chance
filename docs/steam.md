@@ -51,7 +51,7 @@ FROM --module=steam@1 client AS steam
 DO pre-install-setup                    # the bundle's: nancy-drew, cnc-ddraw, the icon, the saves volume
 DO steam.install --game=${input.game} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
-LAUNCH --wine.cursor-lock --wine.graphics=direct-draw --steam.exe=${const.program} steam://rungameid/${input.game.app-id}
+LAUNCH --wine.mouse=grab-early --wine.graphics=direct-draw --steam.exe=${const.program} steam://rungameid/${input.game.app-id}
 ```
 
 The client stage installs Steam (`STEAM.CLIENT`) and has ⌘ act as Ctrl in its

@@ -88,7 +88,7 @@ struct BuildPlanTests {
                 == ["wine.WINETRICKS", ".EDIT", ".COPY", "steam.INSTALL", "steam.SIGN-OUT", "nancy-drew.CONFIGURE-INI"])
         let exe = "wine:C:/Nancy Drew/Secret of the Old Clock/Game.exe"
         #expect(steam.launch?.program == "steam://rungameid/31880")
-        #expect(steam.launch?.options == ["wine.graphics": "direct-draw", "wine.cursor-lock": "", "steam.exe": exe])
+        #expect(steam.launch?.options == ["wine.graphics": "direct-draw", "wine.mouse": "grab-early", "steam.exe": exe])
         #expect(steam.launch?.fallback == exe)
         let direct = try plan("direct")
         #expect(direct.bundleSteps.last?.instruction == "REMOVE")
@@ -157,6 +157,34 @@ struct BuildPlanTests {
         }
         #expect(try plan(creates: "C:/Game/Game.exe").launch?.program == "wine:C:/Game/Game.exe")
         #expect(throws: BuildPlanner.PlanError.self) { try plan(creates: "C:/Game/Other.exe") }
+    }
+
+    @Test("A cnc-ddraw launch says what cnc-ddraw does with the mouse, or is warned about; free sets devmode for its exe")
+    func cursorLockOrFree() throws {
+        func plan(_ options: String) throws -> BuildPlan? {
+            let (planner, _, bundle) = try planner("""
+            INPUT disc-1
+            FROM --module=wine@10 prefix AS disc
+            DO wine.cnc-ddraw
+            COPY --from=${input.disc-1} . C:/Game/
+            LAUNCH --wine.graphics=direct-draw \(options) C:/Game/Game.exe
+            """)
+            // The edition's plan: where planning checks the launch against
+            // its stages.
+            return try planner.plan(edition: bundle.manifest.editions[0].id, conditions: BuildConditions(arch: "arm64", macos: 15))
+        }
+        let early = try plan("--wine.mouse=grab-early")
+        #expect(early?.launch?.options["wine.mouse"] == "grab-early")
+        #expect(early?.target?.steps.contains { $0.options["ini"]?.contains("game.devmode=true") == true } == false)
+        // Free: cnc-ddraw's devmode, for the launch's exe only.
+        let free = try #require(try plan("--wine.mouse=free"))
+        let last = try #require(free.target?.steps.last)
+        #expect(last.description == "EDIT --ini=game.devmode=true wine:C:/windows/syswow64/ddraw.ini")
+        // Saying neither builds, and is a warning for sc bundle check and sc lint.
+        let neither = try #require(try plan(""))
+        #expect(BuildPlanner.warnings(of: neither).first?.contains("--wine.mouse") == true)
+        #expect(BuildPlanner.warnings(of: free).isEmpty)
+        #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.mouse=locked") }
     }
 
     @Test("--wine.quit-confirm-key is recorded beside a quit key, and refused without one")

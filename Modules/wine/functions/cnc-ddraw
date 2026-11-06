@@ -3,8 +3,8 @@
 # cnc-ddraw, for a game that draws with DirectDraw, keeping the aspect
 # ratio. windowed=true is what lets native fullscreen adopt the window, but
 # it also makes cnc-ddraw swallow the first click; the wrapp's cursor-lock
-# helper works around that. See docs/wine-in-process-helpers.md before
-# changing these settings. Each must already be in cnc-ddraw's ddraw.ini
+# helper works around that (--wine.mouse=grab-early). See
+# docs/wine-in-process-helpers.md before changing these settings. Each must already be in cnc-ddraw's ddraw.ini
 # (--keys-must-exist): one that's gone means another cnc-ddraw, whose settings
 # would leave the game wrongly windowed.
 FUNCTION cnc-ddraw

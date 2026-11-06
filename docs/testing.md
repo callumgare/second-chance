@@ -368,7 +368,7 @@ copies — and asserts on the events the flow publishes:
   its first click isn't swallowed by cnc-ddraw, and it quits cleanly
 - For a Wine game, its in-process helpers armed in it: the wrapp's log has
   `[Helpers] Native fullscreen armed`, `[Helpers] Cursor lock armed`
-  when its launch asks for it (`--wine.cursor-lock`, or for a launch
+  when its launch asks for it (`--wine.mouse=grab-early`, or for a launch
   recorded before that option, unless the game draws with Direct3D)
   ([wine-in-process-helpers.md](wine-in-process-helpers.md#which-games-get-it)),
   `[Helpers] Mode scaling armed` unless it draws through cnc-ddraw

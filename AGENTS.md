@@ -415,8 +415,9 @@ direct assignment.
   <file>…`, from the `.stringsdata` the build left for the app's target and
   for `SecondChanceKit` under `DerivedData/Build/Intermediates.noindex/`.
 - **Lint passes.** `./sc lint` runs SwiftLint (`--strict`, `.swiftlint.yml`),
-  markdownlint (`.markdownlint.jsonc`) and `wrapp-builder fmt --check` over
+  markdownlint (`.markdownlint.jsonc`), `wrapp-builder fmt --check` over
   `Bundles/` and `Modules/` ([docs/wrappfile.md](docs/wrappfile.md#style)),
+  and the bundle checker's warnings (`sc bundle check`'s) over every bundle;
   CI fails on any, and
   `sc release` asks before releasing with failures. Fix what they find
   rather than loosening a rule; where a line genuinely must break one, a
@@ -529,9 +530,11 @@ direct assignment.
   (which the games ignore, so the publisher logo isn't skipped) until Wine's
   cursor state shows the lock, and again on every return to the app.
   `Wine.inProcessHelperVariables` arms it alongside native fullscreen when the
-  game's launch asks for it, `LAUNCH --wine.cursor-lock`, which every Nancy Drew
-  DirectDraw game's does and planning insists on for a stage that sets cnc-ddraw
-  up; a Direct3D game never uses cnc-ddraw, and the clicks close its menus. A
+  game's launch asks for it, `LAUNCH --wine.mouse=grab-early`, which every Nancy
+  Drew DirectDraw game's does; `sc lint` insists a stage that sets cnc-ddraw up
+  says one of `grab-early` or `free` (cnc-ddraw never takes the mouse, its
+  `devmode` set for the exe, for a game played with the keyboard, as Icy
+  Tower); a Direct3D game never uses cnc-ddraw, and the clicks close its menus. A
   launch recorded before the option keeps the old inference: armed unless the
   `.exe` imports Direct3D rather than `ddraw.dll` (`GameGraphicsAPI`, or the
   catalog's `GameInfo.graphics` when Armadillo hides a Big Fish `.exe`'s imports).

@@ -45,7 +45,7 @@ says where). Wine's `err:` lines usually name the cause. For more,
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `Game window did not go into a fullscreen Space within 120s` | The program asks for a window, and native fullscreen leaves it in one (`Native fullscreen: the game asks for a window`): it goes fullscreen only when the program asks (a Direct3D borderless window covering the screen, a DirectDraw game setting a display mode through cnc-ddraw). A test with no `tests.window` expects fullscreen | If the program's window is what it should be, say so: `tests: { window: windowed }` (LaserTank, SkiFree, Icy Tower). If it should be fullscreen and the helper misjudges it, `LAUNCH --wine.window=fullscreen` forces it (docs/wine-in-process-helpers.md, "When the launch says") |
-| `--wine.graphics=direct-3d` but the log says `Cursor lock armed` | The in-process helpers read the exe's imports (`ddraw.dll` → DirectDraw), not the launch (seen with Iji, 2026-11) | Planned: the lock becomes a launch's choice, `--wine.cursor-lock` (with `DO wine.cnc-ddraw`), never inferred. Harmless for most games meanwhile |
+| `--wine.graphics=direct-3d` but the log says `Cursor lock armed` | The in-process helpers read the exe's imports (`ddraw.dll` → DirectDraw), not the launch (seen with Iji, 2026-11) | The lock is the launch's choice now: `--wine.mouse=grab-early` (with `DO wine.cnc-ddraw`), or `--wine.mouse=free` for a game played with the keyboard; a launch recorded before the option still infers it |
 
 ## ScummVM
 

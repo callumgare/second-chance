@@ -354,7 +354,11 @@ in `Bundles/` and `Modules/` (the bundles' `Wrappfile`s and the modules'
 stages and functions) is formatted, as `wrapp-builder fmt --check --migrate`
 would, so syntax that has changed fails it too
 ([wrappfile.md](wrappfile.md#style)); `wrapp-builder fmt --migrate` fixes
-what it finds. Each linter is a step whose output shows when it fails, and
+what it finds. Last, it runs the bundle checker over every bundle and fails
+on any warning, each as `sc bundle check` prints it: a bundle that loads
+and builds but has something to fix, such as a cnc-ddraw launch that
+doesn't say `--wine.mouse`, or a needle that's slow to look for
+(`Lint.bundleWarnings`). Each linter is a step whose output shows when it fails, and
 the command exits 1 if any does. CI's Lint job runs
 it, and shellcheck over `./sc` and the build phases' scripts (`.shellcheckrc`), and `sc release` runs the same check
 ([releasing.md](releasing.md#lint-first)). `sc setup` checks `swiftlint` and

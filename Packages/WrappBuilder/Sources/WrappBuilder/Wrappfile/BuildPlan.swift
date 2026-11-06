@@ -262,8 +262,15 @@ public nonisolated struct BuildPlanner {
     /// of Mac and every value of every choice: what only a plan shows (a
     /// function's path in a stage without its module, an input given but
     /// never used) found when a bundle is checked, not when it's built.
-    public func problemsPlanningEveryTarget() -> [String] {
-        var problems: [String] = []
+    public func problemsPlanningEveryTarget() -> [String] { findingsPlanningEveryTarget().problems }
+
+    /// What's worth fixing in each edition's plan though it builds
+    /// (`warnings(of:)`), planned as `problemsPlanningEveryTarget` plans them:
+    /// for `sc bundle check` and `sc lint`.
+    public func warningsPlanningEveryTarget() -> [String] { findingsPlanningEveryTarget().warnings }
+
+    private func findingsPlanningEveryTarget() -> (problems: [String], warnings: [String]) {
+        var problems: [String] = [], warnings: [String] = []
         for edition in bundle.manifest.editions where edition.build?.target != nil {
             var combinations: [[String: String]] = [[:]]
             for (name, choice) in (edition.choices ?? [:]).sorted(by: { $0.key < $1.key }) {
@@ -272,7 +279,9 @@ public nonisolated struct BuildPlanner {
             for arch in ["arm64", "x86_64"] {
                 for combination in combinations {
                     do {
-                        _ = try plan(edition: edition.id, conditions: BuildConditions(arch: arch, macos: 15, choices: combination))
+                        if let plan = try plan(edition: edition.id, conditions: BuildConditions(arch: arch, macos: 15, choices: combination)) {
+                            warnings += Self.warnings(of: plan).map { "edition \(edition.id): \($0)" }
+                        }
                     } catch {
                         let chosen = combination.sorted { $0.key < $1.key }.map { ", \($0.key)=\($0.value)" }.joined()
                         problems.append("edition \(edition.id) (\(arch)\(chosen)) doesn't plan: \(error.description)")
@@ -280,7 +289,33 @@ public nonisolated struct BuildPlanner {
                 }
             }
         }
-        return Array(Set(problems)).sorted()
+        return (Array(Set(problems)).sorted(), Array(Set(warnings)).sorted())
+    }
+
+    /// Whether a plan's stages set cnc-ddraw up (`DO wine.cnc-ddraw`).
+    static func setsCncDdrawUp(_ plan: BuildPlan) -> Bool {
+        plan.stages.flatMap(\.steps).contains {
+            $0.module == ModuleID.wine.rawValue && $0.instruction == "WINETRICKS" && $0.arguments == ["cnc_ddraw"]
+        }
+    }
+
+    /// What a plan builds with but shouldn't: a cnc-ddraw game whose launch
+    /// doesn't say what cnc-ddraw does with the mouse, so its first click is
+    /// swallowed unless it's played with the keyboard and says so.
+    static func warnings(of plan: BuildPlan) -> [String] {
+        guard let launch = plan.launch, setsCncDdrawUp(plan), launch.options["wine.mouse"] == nil else { return [] }
+        return ["its launch draws through cnc-ddraw (DO wine.cnc-ddraw) but doesn't say --wine.mouse: grab-early (cnc-ddraw takes "
+                + "the mouse at the start, or the game's first click is swallowed) or free (never, for a game played with the keyboard)"]
+    }
+
+    /// cnc-ddraw's ddraw.ini section for a launch's program: the name of the
+    /// Windows program it starts (or Steam or Big Fish start), less its
+    /// extension, as cnc-ddraw names a game's own settings.
+    static func cncDdrawSection(of launch: RecordedLaunch) -> String? {
+        let candidates = [launch.program, launch.options["steam.exe"], launch.options["big-fish.exe"]].compactMap { $0 }
+        guard let program = candidates.first(where: { $0.lowercased().hasSuffix(".exe") }) else { return nil }
+        let name = program.split(whereSeparator: { $0 == "/" || $0 == "\\" || $0 == ":" }).last.map(String.init) ?? program
+        return String(name.dropLast(4)).lowercased()
     }
 
     /// The plan for `editionID`, built for `conditions`. Nil for an edition
@@ -297,18 +332,16 @@ public nonisolated struct BuildPlanner {
         // cnc-ddraw is for a game that draws with DirectDraw, and such a game
         // needs it: the two are written together.
         if let launch = plan.launch, launch.options["wine.graphics"] != nil {
-            let cncDdraw = plan.stages.flatMap(\.steps).contains {
-                $0.module == ModuleID.wine.rawValue && $0.instruction == "WINETRICKS" && $0.arguments == ["cnc_ddraw"]
-            }
+            let cncDdraw = Self.setsCncDdrawUp(plan)
             if cncDdraw != (launch.options["wine.graphics"] == "direct-draw") {
                 throw PlanError(description: cncDdraw
                     ? "\(target) sets cnc-ddraw up, but its launch doesn't draw with DirectDraw (--wine.graphics=direct-draw)"
                     : "\(target)'s launch draws with DirectDraw, but nothing sets cnc-ddraw up (DO wine.cnc-ddraw)")
             }
-            // cnc-ddraw swallows a game's first click unless the cursor is
-            // locked, which only the launch asks for.
-            if cncDdraw, launch.options["wine.cursor-lock"] == nil {
-                throw PlanError(description: "\(target) sets cnc-ddraw up, so its launch needs --wine.cursor-lock, or the game's first click is swallowed")
+            // A cnc-ddraw launch that doesn't say --wine.mouse builds (its
+            // first click is swallowed): sc lint says so (warnings(of:)).
+            if !cncDdraw, launch.options["wine.mouse"] != nil {
+                throw PlanError(description: "\(target)'s launch says --wine.mouse, which is for a game cnc-ddraw draws (DO wine.cnc-ddraw)")
             }
         }
         let unused = (edition.build?.inputs ?? []).map(\.id).filter { !recorder.usedInputs.contains($0) }
@@ -742,6 +775,15 @@ public nonisolated struct BuildPlanner {
             case _ where InstructionSpec.recorded.contains(instruction.keyword):
                 let before = scope.modules.app
                 try record(instruction, scope: &scope, origin: at)
+                // A launch whose mouse is free has cnc-ddraw leave it alone,
+                // for its exe only: devmode, in the exe's section.
+                if instruction.keyword == "LAUNCH", let launch = scope.modules.launch, launch.options["wine.mouse"] == "free" {
+                    guard let section = BuildPlanner.cncDdrawSection(of: launch) else {
+                        throw PlanError(description: "\(at): --wine.mouse=free needs the launch's Windows program, to set cnc-ddraw's devmode for it")
+                    }
+                    steps.append(PlannedStep(instruction: "EDIT", module: nil, options: ["ini": ["\(section).devmode=true"]],
+                                             arguments: ["wine:C:/windows/syswow64/ddraw.ini"], name: nil, origin: "\(at) (--wine.mouse=free)"))
+                }
                 // APP is a step too, which writes the tree's Info.plist.
                 if instruction.keyword == "APP" {
                     let app = scope.modules.app
@@ -1002,6 +1044,10 @@ public nonisolated struct BuildPlanner {
                     return
                 }
                 let fallback = options.removeValue(forKey: "fallback")
+                if let mouse = options["wine.mouse"], !["grab-early", "free"].contains(mouse) {
+                    throw PlanError(description: "\(origin): --wine.mouse=\(mouse): it's grab-early (cnc-ddraw takes the mouse at the start, so the "
+                                    + "first click counts) or free (it never takes it, for a game played with the keyboard)")
+                }
                 if let window = options["wine.window"], !["fullscreen", "windowed"].contains(window) {
                     throw PlanError(description: "\(origin): --wine.window=\(window): it's fullscreen or windowed, or left out for what the program asks for")
                 }

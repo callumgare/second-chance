@@ -1,11 +1,13 @@
 import Foundation
 import Noora
+import WrappBuilder
 import WrappBuilderTool
 
 /// The repo's linters: SwiftLint over the Swift code (`.swiftlint.yml`),
 /// markdownlint-cli2 over the docs (`.markdownlint.jsonc`), and
 /// `wrapp-builder fmt --check` over every bundle's and module's
-/// Wrappfiles. `sc lint` runs them, and so do CI and `sc release`.
+/// Wrappfiles, and the bundle checker's warnings (`sc bundle check`'s) over
+/// every bundle. `sc lint` runs them, and so do CI and `sc release`.
 struct Lint {
     /// One linter, and how to run it from the repo root.
     struct Linter: Sendable {
@@ -31,6 +33,29 @@ struct Lint {
                arguments: ["--yes", "markdownlint-cli2@\(markdownlintVersion)"] + markdownFiles,
                install: "brew install node"),
     ]
+
+    /// The bundle checker's warnings over every shipped bundle, each line as
+    /// `sc bundle check` gives it: a bundle that loads and builds, but with
+    /// something to fix (a cnc-ddraw launch that doesn't say --wine.mouse, a
+    /// needle that's slow to look for). True when there are none.
+    static func bundleWarnings(session: Session) -> Bool {
+        do {
+            let loader = try ProgramBundleLoader(root: session.repo.bundles, modules: try loadModules(session))
+            var found = false
+            for folder in try loader.bundleFolders() {
+                for warning in loader.warnings(folder) {
+                    found = true
+                    session.ui.line("\(session.repo.display(folder)): warning: \(warning)")
+                }
+            }
+            if found { return false }
+            session.ui.success("Bundles have no warnings")
+            return true
+        } catch {
+            session.ui.line("Bundles couldn't be checked: \(error)")
+            return false
+        }
+    }
 
     /// Run every linter, each as its own step (its output shows when it
     /// fails). Returns the names of the ones that failed, or couldn't run.
@@ -64,6 +89,7 @@ struct Lint {
             session.ui.line("Wrappfiles couldn't be checked: \(error)")
             failed.append("Wrappfile format")
         }
+        if !bundleWarnings(session: session) { failed.append("Bundle warnings") }
         return failed
     }
 }

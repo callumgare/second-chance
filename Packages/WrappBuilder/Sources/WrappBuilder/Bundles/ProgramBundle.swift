@@ -168,8 +168,9 @@ public nonisolated final class ProgramBundleLoader {
         guard let modules, case .success(let bundle) = load(folder),
               let text = try? String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8),
               let parsed = try? WrappfileParser.parse(text) else { return [] }
-        return WrappfileChecker(manifest: bundle.manifest, bundleFolder: folder, modules: modules).warnings(parsed)
-            .map { "Wrappfile \($0)" }
+        let checker = WrappfileChecker(manifest: bundle.manifest, bundleFolder: folder, modules: modules).warnings(parsed)
+        let planned = BuildPlanner(bundle: bundle, wrappfile: parsed, modules: modules).warningsPlanningEveryTarget()
+        return (checker + planned).map { "Wrappfile \($0)" }
     }
 
     /// What the schema can't check: rules across fields and the folder.

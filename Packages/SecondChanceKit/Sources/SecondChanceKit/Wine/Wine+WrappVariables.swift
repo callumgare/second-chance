@@ -55,7 +55,7 @@ nonisolated extension Wine {
     /// work set on Steam as well as on the game.
     /// See docs/wine-in-process-helpers.md.
     ///
-    /// Cursor lock is the launch's to ask for (`--wine.cursor-lock`); a launch
+    /// Cursor lock is the launch's to ask for (`--wine.mouse=grab-early`); a launch
     /// recorded before it could gets it when the game may draw through
     /// cnc-ddraw, as every wrapp did then, as does no launch. `--wine.window`
     /// overrides native fullscreen.

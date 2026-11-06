@@ -24,6 +24,10 @@ DO wine.keep-thread-handles
 COPY --from=${input.game} . C:/icy-tower-setup/ # the installer, as it comes
 RUN "C:/icy-tower-setup/icytower13_install.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /NOICONS /DIR=C:\IcyTower
 REMOVE C:/icy-tower-setup
+# It's played with the keyboard, so cnc-ddraw never takes the mouse
+# (--wine.mouse=free): in a window, its lock drew the cursor pinned at the
+# window's edge while the Mac's pointer left it and clicked whatever was
+# outside.
 # It ignores Wine's quit and its window's close button, and quits through its
 # own menus. The app's first Quit presses Escape once, which asks the player
 # in the game; a second Quit soon after holds Escape down, and its repeats
@@ -39,7 +43,7 @@ REMOVE C:/icy-tower-setup
 # the game has quit, so the next start opens as they left it.
 LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="tower.cfg" \
     --mount=type=store,source=replays,target=${const.install-dir}/replays/,files="*.itr" \
-    --wine.graphics=direct-draw --wine.cursor-lock --wine.quit-key=escape \
+    --wine.graphics=direct-draw --wine.mouse=free --wine.quit-key=escape \
     --wine.quit-confirm-key=escape:hold \
     --wine.fullscreen-setting="file=${const.install-dir}/tower.cfg,format=allegro-packfile,offset=16,bytes=4,fullscreen=-1,windowed=0,checksum-offset=96,checksum-scale=17" \
     "${const.install-dir}/icytower13.exe"

@@ -68,13 +68,16 @@ struct InProcessHelperVariablesTests {
 
     @Test("A launch that says what it wants gets cursor lock only when it asks, whatever the game draws with")
     func theLaunchChoosesCursorLock() {
-        let asks = RecordedLaunch(program: "wine:C:/Game.exe", options: ["wine.cursor-lock": ""], format: RecordedLaunch.currentFormat)
+        let asks = RecordedLaunch(program: "wine:C:/Game.exe", options: ["wine.mouse": "grab-early"], format: RecordedLaunch.currentFormat)
         let doesnt = RecordedLaunch(program: "wine:C:/Iji.exe", format: RecordedLaunch.currentFormat)
         let older = RecordedLaunch(program: "wine:C:/Game.exe")
         func lock(_ launch: RecordedLaunch, _ api: GameGraphicsAPI) -> String? {
             Wine.inProcessHelperVariables(gameExe: "Game.exe", graphicsAPI: api, launch: launch, environment: [:])["CURSOR_LOCK_EXE"]
         }
         #expect(lock(asks, .direct3D) == "Game.exe")
+        // Free: cnc-ddraw never takes the mouse, so nothing gets it to.
+        let free = RecordedLaunch(program: "wine:C:/Game.exe", options: ["wine.mouse": "free"], format: RecordedLaunch.currentFormat)
+        #expect(lock(free, .directDraw) == nil)
         // Iji imports ddraw.dll and d3d8.dll: inferred, it would have had the lock.
         #expect(lock(doesnt, .unknown) == nil)
         #expect(lock(doesnt, .directDraw) == nil)

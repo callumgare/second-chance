@@ -21,7 +21,7 @@ END
 
 FROM --module=wine@10 prefix AS prefix
 DO pre-install-setup
-LAUNCH --wine.cursor-lock --wine.graphics=direct-draw ${const.program}
+LAUNCH --wine.mouse=grab-early --wine.graphics=direct-draw ${const.program}
 
 # The CD edition: the disc kept in the wrapp, as the game checks for it
 FROM prefix AS disc
@@ -46,10 +46,10 @@ DO post-install-setup
 IF ${input.launch-mode} = "direct"
   # Steam taken away, and the game started by Wine
   STEAM.REMOVE
-  LAUNCH --wine.cursor-lock --wine.graphics=direct-draw ${const.program}
+  LAUNCH --wine.mouse=grab-early --wine.graphics=direct-draw ${const.program}
 ELSE
   # Started by Steam, or by Wine when that fails
-  LAUNCH --wine.cursor-lock --wine.graphics=direct-draw \
+  LAUNCH --wine.mouse=grab-early --wine.graphics=direct-draw \
       --steam.exe=${const.program} \
       --fallback=${const.program} steam://rungameid/${input.game.app-id}
 END
@@ -60,5 +60,5 @@ DO pre-install-setup
 DO big-fish.cnc-ddraw                    # Armadillo rebuilds the game's imports
 DO big-fish.install --game=${input.game} --into=${const.install-dir}
 DO post-install-setup
-LAUNCH --wine.cursor-lock --wine.graphics=direct-draw \
+LAUNCH --wine.mouse=grab-early --wine.graphics=direct-draw \
     --big-fish.exe=${const.program} "big-fish:${const.install-dir}/LaunchGame.bfg"
