@@ -1041,10 +1041,13 @@ Beyond a single picture:
   `--max` did, each with its time and the actions just before it. Like
   `shot`, it says what the picture costs to look at (16 tiles at the default
   320 pixels: about 1,500 tokens) and how to fetch it.
-- `audio [--seconds 5] [--raw]` says how loud the program is: peak and RMS
+- `audio [--seconds 5] [--raw] [--tap]` says how loud the program is: peak and RMS
   every 0.1 s, a row a second (`--raw`: every window), and one line: silent
   (every window under -60 dBFS), sound, or clipping (samples at full scale).
-  It measures the samples from a Core Audio process tap on the session's
+  A Wine game is measured inside its process, by its helper's `audio`
+  ([audio levels](wine-in-process-helpers.md#audio-levels)), which needs no
+  permission. Anything else, or with `--tap`, is measured
+  from a Core Audio process tap on the session's
   processes (macOS 14.2), because SDL and Wine keep their output open
   playing silence, so "output running" says nothing. A tap needs macOS's
   system-audio permission, which goes to apps, not command-line tools, so

@@ -15,6 +15,7 @@ wrapp does not have:
 | Cocoa start wait | `Packages/Modules/wine/InProcessHelpers/cocoa_start_wait.m` | Lets each Wine program's Mac driver wait for its main thread to start Cocoa beyond Wine's 5 s, which a fully loaded Mac runs out, leaving the program with no display driver for good | Nothing: every Wine process ([below](#cocoa-start-wait)) | `SECOND_CHANCE_COCOA_START_WAIT=0` |
 | Hidden windows | `Packages/Modules/wine/InProcessHelpers/hidden_windows.m` | Keeps Big Fish's Game Manager's windows and Dock icon off the screen, but while the person signs in | `HIDDEN_WINDOWS_EXE`, set on the Game Manager; `*` for everything it runs during a build ([below](#hidden-windows)) | — |
 | Puppet control | `Packages/Modules/wine/InProcessHelpers/puppet_control.m` | Lets the integration tests' WrappPuppeteer capture and click the game window | `PUPPET_CONTROL_EXE`, set only when `SECOND_CHANCE_PUPPET_DIR` is | — (never armed for players) |
+| Audio levels | `Packages/Modules/wine/InProcessHelpers/audio_levels.m` | Measures how loud the game is from the samples it hands Core Audio, for puppet control's `audio`, so a test can tell a game whose sound works from one playing silence | As puppet control is, in a Wine game only ([below](#audio-levels)) | — (never armed for players) |
 | Virtual pointer | `Packages/Modules/wine/InProcessHelpers/virtual_pointer.m` | Shows the game (Wine, or ScummVM) a pointer that goes where it's put, in a login where the Mac's can't be moved (a test session), so puppet control's clicks land | As puppet control is, and only once a warp is seen not to move the pointer ([below](#virtual-pointer)) | — (never armed for players) |
 
 ## How they get into the game process
@@ -575,7 +576,8 @@ one held: `--wine.quit-key=escape` shows its question in a game, and the
 confirm keys are Escape ten times, more than any of its screens needs (from a
 game, two leave for its menu and two more choose its Exit; a game paused with
 P takes one more). Extra presses do nothing once the game has gone, as the
-helper pressing them goes with it.
+helper pressing them goes with it. Its integration test quits it the same
+way, with two Quits (`quits: 2`, [testing.md](testing.md#scenarios)).
 
 With a quit key, the game window's close button is a Quit too
 (`-[WineWindow windowShouldClose:]`): Wine would pass it to the game as its
@@ -778,7 +780,7 @@ macOS 26 doesn't leave the surface undersized.
 
 | Request | Reply |
 | --- | --- |
-| `hello` | `ok version=3 pid=<n> exe=<name> commands=<list>`: older helpers in built wrapps answer `error unknown request`, which says they're version 1; version 2 has no `scroll` |
+| `hello` | `ok version=4 pid=<n> exe=<name> commands=<list>`: older helpers in built wrapps answer `error unknown request`, which says they're version 1; version 2 has no `scroll`, 3 no `audio` |
 | `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 native=0\|1 key=0\|1 active=0\|1 onspace=0\|1 cursor=held\|free cursorlock=off\|waiting\|locked\|not-locked` — `fullscreen` for a macOS fullscreen Space (`native`) or a borderless window exactly covering the screen, as Direct3D games draw; `onspace` whether the window is on the Space on screen; `cursor` whether cnc-ddraw holds the mouse now, and `cursorlock` how the [cursor lock](#cursor-lock) got on (`off` where it isn't armed, as in ScummVM) |
 | `windows` | `ok <n> windows`, then a line each: `id=<n> frame=<x>,<y>,<w>,<h> level=<n> visible=0\|1 key=0\|1 main=0\|1 kind=game\|panel\|other title=<percent-encoded>`, the frame from the screen's top left; `game` is the window the other requests act on |
 | `capture <path> [region=<x>,<y>,<w>,<h>] [scale=<s>]` | `ok <w>x<h>`, with a PNG of the game window at `<path>`: a part of it (in points) for `region`, and at `scale` pixels a point rather than the window's own |
@@ -791,6 +793,7 @@ macOS 26 doesn't leave the surface undersized.
 | `type <text>` | `ok`: each character as its key, with shift where it needs it, 40 ms apart; the text percent-encoded (`Hi%20there`) |
 | `focus` | `ok`: the app made active and the game window key |
 | `quit` | `ok`: the app is asked to quit as its Quit menu item (Wine's ⌘⌥Q) does, with `-[NSApplication terminate:]`, not waited for, since a hang would be inside it |
+| `audio <seconds>` | After listening that long (at most 60 s): `ok silent\|sound\|clipping windows=<n> sounding=<n> clipped=<n> peak=<p> rms=<r> streams=<n> buffers=<n> format=<f> hooked=0\|1`, then a line a 0.1 s window, `level t=<s> peak=<p> rms=<r>` (0–1 of full scale). `hooked=0`: the game hasn't opened Wine's Core Audio output. `error` outside a Wine game ([audio levels](#audio-levels)) |
 | `yield <pid>` | `ok`: the game's app hands activation to that app, which may then make itself active: WrappPuppeteer switching away from the game, as Cmd-Tab would, since macOS 14 only lets the active app hand activation on |
 
 The wrapp answers for its own window the same way, on
@@ -857,6 +860,60 @@ start the wrapp with the variable and talk to the socket:
 mkdir -m 700 /tmp/wp && SECOND_CHANCE_PUPPET_DIR=/tmp/wp "<wrapp>.app/Contents/MacOS/WrappTemplate" &
 echo state | /usr/bin/nc -U /tmp/wp/game-<pid>.sock   # the game process's PID
 ```
+
+## Audio levels
+
+**A test can only tell that a game's sound works by measuring it**: Wine (and
+SDL) keep their output stream open, playing silence, whether or not the game
+plays anything, so "output running" says nothing. `sc puppet audio`'s tap
+measures the samples from outside, but a Core Audio process tap needs macOS's
+System Audio Recording permission, and WrappPuppeteer
+[needs no permissions](testing.md#wrapppuppeteer). So `audio_levels.m`
+measures them inside the game's process, and puppet control's `audio`
+request reads them back.
+
+Wine's Core Audio driver, `winecoreaudio.so` (`x86_64-unix`), plays each
+stream through an output AudioUnit, and gives it a render callback with
+`AudioUnitSetProperty(kAudioUnitProperty_SetRenderCallback)`: Core Audio
+calls it on its render thread for each buffer, and Wine fills the buffer
+from what the game (DirectSound, winmm…) has mixed. `winecoreaudio.so` is
+loaded only when the game first opens sound, after the helpers' constructors
+have run, so the helper registers a dyld add-image notifier and, when the
+driver arrives, points its import of `AudioUnitSetProperty` at a wrapper
+(`replaceImageImport`, as [the notch helper](#on-a-display-with-a-notch) does
+for `winemac.so`). The wrapper sets its own callback in Wine's place, which
+calls Wine's and then measures what Wine wrote. The stream's sample format
+comes from the unit's `kAudioUnitProperty_StreamFormat`, asked when the
+callback is set and again whenever Wine sets the format: float32 (Wine's mix
+format, and what Icy Tower's DirectSound plays), int16, int24, int32,
+float64 or unsigned 8-bit.
+
+The render thread mustn't wait, or the sound glitches, so the measure does
+no allocation and takes no lock there: each buffer's peak and sum of squares
+go into a ring of 0.1 s windows by atomics alone, keyed by the window's
+number since the process started. `audio <seconds>` sleeps that long, then
+reads the windows back; one nothing rendered into reads as silence. The
+verdict is `sound` once a window's peak reaches -60 dBFS (0.001), `clipping`
+when one reaches full scale, and `silent` otherwise, the same as `sc puppet
+audio`'s (`AudioLevel`, `PuppetAudio` in `Packages/PuppetProtocol`).
+
+It arms where puppet control does (`SECOND_CHANCE_PUPPET_DIR` and
+`PUPPET_CONTROL_EXE`), and only in a Wine process — one that has `winemac.so`,
+which is what loads the dylib there. It says `second-chance-helper[AudioLevels]
+notice: measuring the game's sound in winecoreaudio.so` once it has wrapped
+the driver. The scenario action `expect-sound` uses it
+([testing.md](testing.md#scenarios)), and `sc puppet audio` asks it first,
+falling back to the tap when it can't answer
+([dev-cli.md](dev-cli.md#puppet-sessions)).
+
+**ScummVM and DOSBox aren't measured yet.** Both play through SDL's Core
+Audio backend, which (SDL 2) opens an `AudioQueue` with
+`AudioQueueNewOutput` and fills each buffer in its callback before handing
+it back with `AudioQueueEnqueueBuffer`. A version for them would wrap
+`AudioQueueEnqueueBuffer` among scummvm's (or `libSDL2`'s) imports, found by
+name as [the virtual pointer](#virtual-pointer) finds scummvm's, and measure
+each buffer there in the format `AudioQueueNewOutput` was given; DOSBox
+would need the dylib inserted as ScummVM's is.
 
 ## Virtual pointer
 

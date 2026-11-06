@@ -64,7 +64,7 @@ struct ProgramTestTests {
         let test = try ProgramTest.load(bundleFolder: bundlesRoot.appendingPathComponent("freeware/skifree"), modulesRoot: modulesRoot)
         #expect(test.scenario.id == "wine/starts-and-quits")
         // Its bundle sets no first key, so the handler that acts is the plain quit.
-        #expect(test.scenario.handlers.first { $0.applies(with: test.scenario.parameters) }?.actions == [.quit])
+        #expect(test.scenario.handlers.first { $0.applies(with: test.scenario.parameters) }?.actions == [.quit(1)])
         #expect(test.needles.tagged("running").first?.spec.text?.strings.contains("Start") == true)
     }
 
@@ -141,6 +141,43 @@ struct ScenarioKeyActionTests {
         #expect(!plain.handlers[0].applies(with: plain.parameters))
         let iji = try Scenario.load(id: "test", file: file, overrides: ["first-key": "escape"])
         #expect(iji.handlers[0].applies(with: iji.parameters))
-        #expect(iji.handlers[0].actions == [.key("escape"), .quit])
+        #expect(iji.handlers[0].actions == [.key("escape"), .quit(1)])
+    }
+}
+
+@Suite("Scenario sound checks")
+struct ScenarioSoundTests {
+    @Test("expect-sound is an action, and the wine module's sound handler is on only for a bundle that asks")
+    func soundParameter() throws {
+        let file = modulesRoot.appendingPathComponent("wine/scenarios/starts-and-quits.yaml")
+        let quiet = try Scenario.load(id: "wine/starts-and-quits", file: file)
+        let sound = try #require(quiet.handlers.first { $0.id == "sound" })
+        #expect(sound.actions == [.expectSound] && sound.once)
+        #expect(!sound.applies(with: quiet.parameters))
+        let heard = try Scenario.load(id: "wine/starts-and-quits", file: file, overrides: ["sound": "true"])
+        #expect(heard.handlers.filter { $0.applies(with: heard.parameters) }.map(\.id) == ["sound", "running"])
+    }
+
+    @Test("Icy Tower's test listens for its sound")
+    func icyTower() throws {
+        let test = try ProgramTest.load(bundleFolder: bundlesRoot.appendingPathComponent("freeware/icy-tower"), modulesRoot: modulesRoot)
+        #expect(test.scenario.parameters["sound"] == "true")
+        let on = test.scenario.handlers.filter { $0.applies(with: test.scenario.parameters) }
+        #expect(on.map(\.id) == ["sound", "running"])
+        #expect(on.first?.actions == [.expectSound])
+        // Its first Quit asks (--wine.quit-confirm-key); the second sees it through.
+        #expect(on.last?.actions == [.quit(2)])
+    }
+
+    @Test("The wine module's quit is pressed once unless a bundle says how many times; a count out of range is refused")
+    func quits() throws {
+        let file = modulesRoot.appendingPathComponent("wine/scenarios/starts-and-quits.yaml")
+        let once = try Scenario.load(id: "wine/starts-and-quits", file: file)
+        #expect(once.handlers.first { $0.id == "running" }?.actions == [.quit(1)])
+        let twice = try Scenario.load(id: "wine/starts-and-quits", file: file, overrides: ["quits": "2"])
+        #expect(twice.handlers.first { $0.id == "running" }?.actions == [.quit(2)])
+        #expect(twice.handlers.first { $0.id == "running-after-key" }?.actions.last == .quit(2))
+        #expect(throws: ScenarioError.self) { try Scenario.load(id: "wine/starts-and-quits", file: file, overrides: ["quits": "0"]) }
+        #expect(throws: ScenarioError.self) { try Scenario.load(id: "wine/starts-and-quits", file: file, overrides: ["quits": "two"]) }
     }
 }

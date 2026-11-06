@@ -6,11 +6,18 @@ goal: "program-ends"
 timeout: 120
 parameters:
   first-key: ""   # a key its first screen waits for before it takes a quit (escape, return); none by default
+  sound: false    # true: its first screen must be heard, measured inside the game, before it quits
+  quits: 1        # how many times the app's Quit is pressed: 2 for a launch with --wine.quit-confirm-key, whose first must leave it running
 handlers:
+  - id: "sound"
+    when: "running"
+    if: "sound"
+    once: true
+    do: ["expect-sound"]
   - id: "running-after-key"
     when: "running"
     if: "first-key"
-    do: [{ key: "${first-key}" }, "quit"]
+    do: [{ key: "${first-key}" }, { quit: "${quits}" }]
   - id: "running"
     when: "running"
-    do: ["quit"]
+    do: [{ quit: "${quits}" }]

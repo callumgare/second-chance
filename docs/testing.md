@@ -853,8 +853,25 @@ handlers:
   `{ key: "escape" }` (press a key, by the in-process helper's names, held
   150 ms; several, space-separated, in turn, each waiting until the picture
   changes, up to 10 s, so a key isn't lost while a screen it opened is still
-  coming up) and `quit` (ask
-  the program to quit as its app's Quit does, and expect it to end). A key's
+  coming up), `quit` (ask
+  the program to quit as its app's Quit does, and expect it to end) and
+  `expect-sound` (listen, 3 s at a time, until the program is heard, a 0.1 s
+  window above -60 dBFS, and fail the run if it isn't within 15 s; each
+  listen's levels go in the log, `🔊`). The sound is measured inside a Wine
+  game's process by its helper
+  ([audio levels](wine-in-process-helpers.md#audio-levels)), so it needs no
+  permission and hears nothing else on the Mac; ScummVM and DOSBox games
+  can't use it yet. The wine module's `starts-and-quits` listens on the
+  first screen before it quits when a bundle sets `sound: true`, as Icy
+  Tower's does, whose title screen plays its music. `{ quit: <n> }` presses
+  the app's Quit that many times, for a launch whose first Quit only asks:
+  each Quit but the last must leave the program running a second later (a
+  run fails if the first Quit ends it), and after the last it must end
+  within the usual bound, which allows for the ten confirm keys 2.5 s apart. The wine module's `starts-and-quits` takes the
+  count from its `quits` parameter, 1 unless a bundle says otherwise: 2 for
+  a launch whose first Quit only asks (`--wine.quit-confirm-key`,
+  [wine-in-process-helpers.md](wine-in-process-helpers.md#quit-watch)), as
+  Icy Tower's does. A key's
   name may be a parameter (`"${first-key}"`). The wine module's
   `starts-and-quits` presses a bundle's `first-key` before it quits (a first
   screen that waits for a key). For a program that ignores ⌘Q and quits only

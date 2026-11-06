@@ -5,37 +5,6 @@ import ImageIO
 import Testing
 
 @Suite struct PuppetSensesTests {
-    // MARK: Audio
-
-    @Test func parsesTheTapsLevelLines() {
-        #expect(AudioLevel(line: "level t=0.10 peak=0.500000 rms=0.250000") == AudioLevel(time: 0.1, peak: 0.5, rms: 0.25))
-        #expect(AudioLevel(line: "process pid=12 object=80 output=1") == nil)
-        #expect(AudioLevel(line: "level t=0.10 peak=x rms=0.2") == nil)
-    }
-
-    @Test func silenceIsSilentEvenWithAStreamOpen() {
-        let levels = (1...20).map { AudioLevel(time: Double($0) / 10, peak: 0.0002, rms: 0.0001) }
-        #expect(AudioLevel.summary(levels).hasPrefix("silent:"))
-        #expect(AudioLevel.summary([]).hasPrefix("no samples"))
-    }
-
-    @Test func soundAndClippingAreToldApart() {
-        let quiet = (1...10).map { AudioLevel(time: Double($0) / 10, peak: 0, rms: 0) }
-        let loud = (11...20).map { AudioLevel(time: Double($0) / 10, peak: 0.5, rms: 0.1) }
-        #expect(AudioLevel.summary(quiet + loud) == "sound in 10 of 20 windows (peak -6.0 dBFS, RMS up to -20.0 dBFS)")
-        let clipped = loud + [AudioLevel(time: 2.1, peak: 1.0, rms: 0.7)]
-        #expect(AudioLevel.summary(clipped).hasPrefix("clipping: 1 of 11 windows reach full scale"))
-    }
-
-    @Test func rowsShowASecondEach() {
-        let levels = (1...15).map { AudioLevel(time: Double($0) / 10, peak: $0 > 10 ? 0.5 : 0, rms: $0 > 10 ? 0.5 : 0) }
-        let rows = AudioLevel.rows(levels)
-        #expect(rows.count == 2)
-        #expect(rows[0].contains("··········"))
-        #expect(rows[0].hasSuffix("peak -inf, rms -inf"))
-        #expect(rows[1].hasPrefix("  1.0s  █████ "))
-    }
-
     @Test func findsTheProcessesUnderTheWrapp() {
         let listing = """
             1     0

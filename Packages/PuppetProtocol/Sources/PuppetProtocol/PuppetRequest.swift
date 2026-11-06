@@ -14,9 +14,9 @@ import Foundation
 
 /// The helper's protocol version, as `hello` says it: 1 (no `hello`), 2
 /// (`hello`, `windows`, `down`/`up`/`drag`, `key`, `type`, `focus`), 3
-/// (`scroll`).
+/// (`scroll`), 4 (`audio`).
 nonisolated public enum PuppetProtocolVersion {
-    public static let current = 3
+    public static let current = 4
 }
 
 nonisolated public enum MouseButton: String, Sendable, CaseIterable {
@@ -62,6 +62,10 @@ nonisolated public enum PuppetRequest: Sendable, Equatable {
     case yield(pid: Int32)
     /// Quit as the app's Quit menu item does.
     case quit
+    /// Listen for `seconds` (at most 60) to the samples the game hands Core
+    /// Audio, and say how loud they were (`PuppetAudio`). A Wine game only.
+    /// Protocol 4.
+    case audio(seconds: Double)
 
     /// Its first word.
     public var verb: String {
@@ -81,6 +85,7 @@ nonisolated public enum PuppetRequest: Sendable, Equatable {
         case .focus: "focus"
         case .yield: "yield"
         case .quit: "quit"
+        case .audio: "audio"
         }
     }
 
@@ -125,6 +130,8 @@ nonisolated public enum PuppetRequest: Sendable, Equatable {
             words.append(Self.encoded(text))
         case let .yield(pid):
             words.append(String(pid))
+        case let .audio(seconds):
+            words.append(Self.number(CGFloat(seconds)))
         }
         return (words + options.map { "\($0.0)=\($0.1)" }).joined(separator: " ")
     }

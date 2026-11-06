@@ -870,7 +870,8 @@ struct NancyDrewQuitScenario {
 
             for handler in readHandlers {
                 var remembered = memory[handler.id, default: Memory()]
-                let ends = handler.actions.contains(.expectEnd) || handler.actions.contains(.quit)
+                let quits = handler.actions.lazy.compactMap { if case .quit(let times) = $0 { times } else { nil } }.first
+                let ends = handler.actions.contains(.expectEnd) || quits != nil
                 guard !ended || ends else { continue }
                 if handler.once, remembered.acted { continue }
                 var target = found[handler.when].map { found in
@@ -902,9 +903,9 @@ struct NancyDrewQuitScenario {
                 // (--quit-from-menu): at once, as that is what is tested.
                 if ends, !ended, options.quitFromMenu, found[handler.when] != nil {
                     logger.notice("  ✓ At the menu: quitting through the game's Quit menu item, as ⌘⌥Q does...")
-                    guard context.game.quitApp() else {
+                    if let failure = pressQuit(times: quits ?? 1, gamePid: gamePid, context: context) {
                         forceQuit(app)
-                        return "Couldn't ask the game to quit from its menu"
+                        return failure
                     }
                     return nil
                 }
@@ -950,11 +951,21 @@ struct NancyDrewQuitScenario {
                         }
                         remembered.acted = true
                         remembered.actedAt = Date()
-                    case .quit:
-                        logger.notice("  ✓ \(handler.id): found its \(handler.when), quitting the program as its app's Quit does...")
-                        guard context.game.quitApp() else {
+                    case .expectSound:
+                        guard !ended else { continue }
+                        logger.notice("  ✓ \(handler.id): found its \(handler.when), listening for its sound...")
+                        if let failure = soundFailure(context) {
+                            diagnosticCapture(context, prefix: "no-sound")
                             forceQuit(app)
-                            return "Couldn't ask the program to quit"
+                            return failure
+                        }
+                        remembered.acted = true
+                        remembered.actedAt = Date()
+                    case .quit(let times):
+                        logger.notice("  ✓ \(handler.id): found its \(handler.when), quitting the program as its app's Quit does...")
+                        if let failure = pressQuit(times: times, gamePid: gamePid, context: context) {
+                            forceQuit(app)
+                            return failure
                         }
                         return nil
                     case .expectEnd:
@@ -1028,6 +1039,66 @@ struct NancyDrewQuitScenario {
     }
 
     static let keyChangeWait: TimeInterval = 10
+
+    /// How long after a Quit that should only ask the program is checked to
+    /// be still running, before the next Quit.
+    static let askedQuitCheck: TimeInterval = 1
+
+    /// Ask the program to quit as its app's Quit does, `times` times. Once,
+    /// it's a single Quit, as before. More, for a launch whose first Quit
+    /// only asks (`--wine.quit-confirm-key`): each Quit but the last is
+    /// checked to have left the program running a second later, then the
+    /// last is pressed, and the caller waits for the program to end as
+    /// usually (its bound allows for the ten confirm keys, 2.5 s apart).
+    /// The failure, if a Quit couldn't be asked or ended the program early.
+    private func pressQuit(times: Int, gamePid: Int32, context: Context) -> String? {
+        for press in 1...max(1, times) {
+            if times > 1 { logger.notice("    Quit \(press) of \(times)") }
+            guard context.game.quitApp() else { return "Couldn't ask the program to quit" }
+            guard press < times else { break }
+            Thread.sleep(forTimeInterval: Self.askedQuitCheck)
+            guard ProcessControl.isAlive(gamePid) else {
+                logger.error("❌ Quit \(press) of \(times) ended the program; with --wine.quit-confirm-key it should only ask")
+                return "Quit \(press) of \(times) ended the program; with --wine.quit-confirm-key it should only ask"
+            }
+            logger.notice("    ✓ still running \(Int(Self.askedQuitCheck))s after Quit \(press) of \(times), as a Quit that asks should be")
+        }
+        if times > 1 { logger.notice("    expecting it to end after Quit \(times) of \(times)") }
+        return nil
+    }
+
+    /// How long a program has to be heard (`expect-sound`), and how long each
+    /// listen is: a game's music can start a few seconds after its screen.
+    static let soundWait: TimeInterval = 15
+    static let soundListen: TimeInterval = 3
+
+    /// Listen until the program is heard, for at most `soundWait`: nil once a
+    /// 0.1 s window is above -60 dBFS, else the failure. Measured inside the
+    /// game's process by its helper (docs/wine-in-process-helpers.md#audio-levels),
+    /// so it needs no permission and hears nothing else on the Mac.
+    private func soundFailure(_ context: Context) -> String? {
+        let started = Date()
+        var last: PuppetAudio?
+        while Date().timeIntervalSince(started) < Self.soundWait {
+            switch context.game.listen(seconds: Self.soundListen) {
+            case .failure(let error):
+                logger.error("❌ Couldn't measure the program's sound: \(error)")
+                return "Couldn't measure the program's sound (\(error)); its helper may predate the audio measure"
+            case .success(let audio):
+                last = audio
+                let elapsed = String(format: "%.1f", Date().timeIntervalSince(started))
+                logger.notice("    🔊 [\(elapsed)s] \(audio.summary)")
+                for row in AudioLevel.rows(audio.levels) { logger.notice("       \(row)") }
+                if audio.verdict != .silent {
+                    logger.notice("  ✅ The program is heard")
+                    return nil
+                }
+            }
+        }
+        let why = last.map { $0.hooked ? "every 0.1 s window under -60 dBFS" : "it never opened its sound output" } ?? "nothing measured"
+        logger.error("❌ The program made no sound in \(Int(Self.soundWait))s (\(why))")
+        return "The program made no sound in \(Int(Self.soundWait)) s (\(why)): its sound isn't working"
+    }
 
     private func runCheck(_ check: String, state: ControlledWindowState, shotPath: String, switchedAway: inout Bool,
                           gamePid: Int32, app: NSRunningApplication, context: Context) -> Outcome {

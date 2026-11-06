@@ -104,6 +104,16 @@ nonisolated public struct WindowControl: Sendable {
         send(.quit)
     }
 
+    /// Listen to the window's app for `seconds`, from inside its process
+    /// (a Wine game's helper, protocol 4): its levels, or why it couldn't.
+    public func listen(seconds: Double) -> Result<PuppetAudio, PuppetProtocolError> {
+        guard let reply = socket.request(.audio(seconds: seconds), timeout: seconds + 20) else {
+            return .failure(PuppetProtocolError("no reply to audio"))
+        }
+        guard let audio = PuppetAudio(reply) else { return .failure(PuppetProtocolError(reply.error ?? reply.text)) }
+        return .success(audio)
+    }
+
     /// Hand activation from the window's app to the app with `pid`, which
     /// can then make itself active: since macOS 14 only the active app may
     /// hand it on.

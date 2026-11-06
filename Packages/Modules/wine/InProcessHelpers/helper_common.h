@@ -249,6 +249,13 @@ static inline IMP replaceOwnMethod(Class cls, SEL selector, IMP replacement) {
     return method_setImplementation(method, replacement);
 }
 
+// ## The game's sound (audio_levels.m)
+
+/// Listen for `seconds`, then the reply to puppet control's `audio`: `ok
+/// <silent|sound|clipping> windows=<n> ...` and a `level t= peak= rms=` line
+/// each 0.1 s window, or `error ...` where the measure isn't armed.
+NSString *audioLevelsListen(double seconds);
+
 // ## Keys by name (key_names.m)
 
 /// A key's virtual keycode (US layout), and whether shift types it, from its

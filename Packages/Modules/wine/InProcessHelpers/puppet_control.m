@@ -22,8 +22,8 @@
 //  window, top-left origin -- a capture's pixels divided by its `scale`.
 //  Options are `name=value` words after the arguments.
 //
-//    hello            -> ok version=3 pid=<n> exe=<name> commands=<list>   (version 1 helpers say error;
-//                                       2 has no scroll)
+//    hello            -> ok version=4 pid=<n> exe=<name> commands=<list>   (version 1 helpers say error;
+//                                       2 has no scroll, 3 no audio)
 //    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 native=0|1 key=0|1 active=0|1 onspace=0|1
 //                           cursor=held|free cursorlock=off|waiting|locked|not-locked
 //    windows          -> ok <n> windows, then a line each: id=<n> frame=<x>,<y>,<w>,<h> level=<n> visible=0|1
@@ -50,6 +50,10 @@
 //    focus            -> ok             the app active and the game window key
 //    yield <pid>      -> ok             hand activation to that app, as Cmd-Tab away would
 //    quit             -> ok             ask the app to quit, as its Quit menu item (Cmd-Opt-Q in Wine) does
+//    audio <seconds>  -> ok silent|sound|clipping windows=<n> sounding=<n> clipped=<n> peak=<p> rms=<r>
+//                           streams=<n> buffers=<n> format=<f> hooked=0|1, then a line a 0.1 s window:
+//                           level t=<s> peak=<p> rms=<r>   (listens that long, at most 60 s, to the
+//                                       samples the game hands Core Audio: audio_levels.m; Wine only)
 //
 //  PUPPET_CONTROL_EXE=* arms it in every process that loads it, so an
 //  installer or launcher answers too, each on its own socket.
@@ -664,7 +668,7 @@ static NSString *focusCommand(void) {
 
 static NSString *helloCommand(void) {
     const char *exe = getprogname();
-    return [NSString stringWithFormat:@"ok version=3 pid=%d exe=%s commands=hello,state,windows,capture,click,move,down,up,drag,scroll,key,type,focus,yield,quit",
+    return [NSString stringWithFormat:@"ok version=4 pid=%d exe=%s commands=hello,state,windows,capture,click,move,down,up,drag,scroll,key,type,focus,yield,quit,audio",
             getpid(), exe ? exe : "?"];
 }
 
@@ -745,6 +749,7 @@ static NSString *handle(NSString *line) {
     if ([command isEqualToString:@"focus"] && count == 1) return focusCommand();
     if ([command isEqualToString:@"yield"] && count == 2) return yieldCommand((pid_t)parts[1].intValue);
     if ([command isEqualToString:@"quit"] && count == 1) return quitCommand();
+    if ([command isEqualToString:@"audio"] && count == 2) return audioLevelsListen(parts[1].doubleValue);
     return [@"error unknown request: " stringByAppendingString:line];
 }
 

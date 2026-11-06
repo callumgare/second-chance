@@ -59,12 +59,19 @@ public nonisolated struct Scenario: Sendable, Equatable {
         /// once it has.
         case expectEnd
         /// Ask the program to quit, as its app's Quit (⌘Q) does, and expect
-        /// it to end: for a program with nothing to click to quit.
-        case quit
+        /// it to end: for a program with nothing to click to quit. Pressed
+        /// that many times: twice for a launch whose first Quit only asks
+        /// (`--wine.quit-confirm-key`), each Quit but the last checked to
+        /// have left the program running. `quit` alone is once.
+        case quit(Int)
         /// Press a key (the helper's names: `escape`, `return`, `f5`,
         /// `cmd+q`…), as a program waiting at a keyboard prompt needs, or
         /// several, space-separated, in turn.
         case key(String)
+        /// Listen to the program until it is heard (a 0.1 s window above
+        /// -60 dBFS), and fail if it isn't within the test runner's bound:
+        /// a program whose sound has stopped working.
+        case expectSound
     }
 
     /// The scenario at `file`, with `overrides` (the bundle's parameters)
@@ -98,8 +105,19 @@ public nonisolated struct Scenario: Sendable, Equatable {
             return Handler(id: handler.id, when: handler.when, condition: handler.if, once: handler.once ?? false,
                            retryAfter: try number(handler.retryAfter), repeatWhereLastSeen: try number(handler.repeatWhereLastSeen),
                            actions: try handler.do.map { raw throws(ScenarioError) -> Action in
-                               guard case .key(let name) = raw.action else { return raw.action }
-                               return .key(try substitute(name, parameters: parameters, in: "\(id) \(handler.id)"))
+                               let place = "\(id) \(handler.id)"
+                               switch raw.action {
+                               case .ready(.key(let name)):
+                                   return .key(try substitute(name, parameters: parameters, in: place))
+                               case .ready(let action):
+                                   return action
+                               case .quitTimes(let text):
+                                   let value = try substitute(text, parameters: parameters, in: place)
+                                   guard let times = Int(value), (1...5).contains(times) else {
+                                       throw ScenarioError(description: "\(place): quit \(value) times isn't a whole number from 1 to 5")
+                                   }
+                                   return .quit(times)
+                               }
                            })
         }
         return Scenario(id: id, goal: raw.goal, timeout: raw.timeout, parameters: parameters, handlers: handlers)
@@ -113,6 +131,12 @@ public nonisolated struct Scenario: Sendable, Equatable {
     }
 
     // MARK: - As written
+
+    /// An action as written: one ready as it is, or a quit whose count may be a parameter.
+    enum RawKind: Equatable {
+        case ready(Action)
+        case quitTimes(String)
+    }
 
     struct Raw: Decodable {
         let goal: String
@@ -130,16 +154,18 @@ public nonisolated struct Scenario: Sendable, Equatable {
             let `do`: [RawAction]
         }
 
-        /// `click`, `expect-end`, `quit`, `{ click: { x, y } }`, `{ check: menu }` or `{ key: escape }`.
+        /// `click`, `expect-end`, `quit`, `expect-sound`, `{ click: { x, y } }`, `{ check: menu }`,
+        /// `{ key: escape }` or `{ quit: 2 }` (`"${quits}"`).
         struct RawAction: Decodable {
-            let action: Action
+            let action: RawKind
 
             init(from decoder: Decoder) throws {
                 if let word = try? decoder.singleValueContainer().decode(String.self) {
                     switch word {
-                    case "click": action = .click
-                    case "expect-end": action = .expectEnd
-                    case "quit": action = .quit
+                    case "click": action = .ready(.click)
+                    case "expect-end": action = .ready(.expectEnd)
+                    case "quit": action = .ready(.quit(1))
+                    case "expect-sound": action = .ready(.expectSound)
                     default:
                         throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "no action called \(word)"))
                     }
@@ -147,14 +173,16 @@ public nonisolated struct Scenario: Sendable, Equatable {
                 }
                 let keyed = try decoder.container(keyedBy: Update.AnyKey.self)
                 if let key = Update.AnyKey(stringValue: "click"), keyed.contains(key) {
-                    action = .clickAt(try keyed.decode(Needle.Point.self, forKey: key))
+                    action = .ready(.clickAt(try keyed.decode(Needle.Point.self, forKey: key)))
                 } else if let key = Update.AnyKey(stringValue: "check"), keyed.contains(key) {
-                    action = .check(try keyed.decode(String.self, forKey: key))
+                    action = .ready(.check(try keyed.decode(String.self, forKey: key)))
                 } else if let key = Update.AnyKey(stringValue: "key"), keyed.contains(key) {
-                    action = .key(try keyed.decode(String.self, forKey: key))
+                    action = .ready(.key(try keyed.decode(String.self, forKey: key)))
+                } else if let key = Update.AnyKey(stringValue: "quit"), keyed.contains(key) {
+                    action = .quitTimes(try keyed.decode(Manifest.TestValue.self, forKey: key).text)
                 } else {
-                    throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
-                                                            debugDescription: "an action is click, expect-end, quit, { click: … }, { check: … } or { key: … }"))
+                    let actions = "click, expect-end, quit, expect-sound, { click: … }, { check: … }, { key: … } or { quit: <times> }"
+                    throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "an action is \(actions)"))
                 }
             }
         }

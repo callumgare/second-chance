@@ -210,11 +210,12 @@ struct PuppetAudioCommand: AsyncParsableCommand {
         commandName: "audio",
         abstract: "How loud the program is over a few seconds, from its samples: silent, sound or clipping.",
         discussion: """
-        Taps the sound of the session's processes (a Core Audio process tap, \
-        macOS 14.2) and measures peak and RMS every 0.1 s: a stream left open \
-        playing silence reads as silent. The tap is a small app of its own, \
-        SC Audio Tap, built on first use, which needs macOS's "System Audio \
-        Recording Only" permission for this user (exit 6 until it has it).
+        Measures peak and RMS every 0.1 s: a stream left open playing silence \
+        reads as silent. A Wine game is measured from inside its process, by \
+        its helper (no permission needed). Anything else, or with --tap, is \
+        tapped (a Core Audio process tap, macOS 14.2) by a small app of its \
+        own, SC Audio Tap, built on first use, which needs macOS's "System \
+        Audio Recording Only" permission for this user (exit 6 until it has it).
         """
     )
 
@@ -226,6 +227,7 @@ struct PuppetAudioCommand: AsyncParsableCommand {
 
     @Option(help: "How long to listen, in seconds (at most 120).") var seconds: Double = 5
     @Flag(help: "Every 0.1 s window, not a row a second.") var raw = false
+    @Flag(help: "Tap the session's sound even when the game's helper can measure it.") var tap = false
 
     func validate() throws {
         guard seconds > 0, seconds <= 120 else { throw ValidationError("--seconds is between 0 and 120.") }
@@ -236,6 +238,11 @@ struct PuppetAudioCommand: AsyncParsableCommand {
         let puppet = try PuppetSession.load(name)
         guard puppet.isRunning, let root = puppet.wrappPID else { throw SCError("\(name) has stopped: \(puppet.stopReason ?? "?").", exitCode: 4) }
         puppet.touch()
+        if !tap, let measured = await helperMeasure(puppet, session: session) {
+            session.ui.line("audio: " + measured.summary)
+            show(measured.levels, session: session)
+            return
+        }
         let signer = try await AudioTapApp.ensure(repo: session.repo.root, ui: session.ui)
         var permission = try await AudioTapApp.run(["check"]).lines.first ?? ""
         if permission == "permission unknown" {
@@ -270,6 +277,32 @@ struct PuppetAudioCommand: AsyncParsableCommand {
         let playing = processes.filter { $0.hasSuffix("output=1") }.count
         session.ui.line("audio: " + AudioLevel.summary(levels))
         session.ui.line("from \(processes.count) process\(processes.count == 1 ? "" : "es") with sound (\(playing) playing), \(format)")
+        show(levels, session: session)
+    }
+
+    /// The levels the game's helper measures inside its process (a Wine
+    /// game's, protocol 4); nil when it can't, and the tap is to listen.
+    private func helperMeasure(_ puppet: PuppetSession, session: Session) async -> PuppetAudio? {
+        guard let hello = try? puppet.ask(.hello), PuppetHello(hello).supports("audio"),
+              let socket = try? puppet.gameSocket() else { return nil }
+        let seconds = seconds
+        do {
+            let reply = try await session.ui.progressStep("Listening to \(name) for \(Int(seconds)) s, inside the game",
+                                                          success: "Listened to \(name)") { _ in
+                try HelperSocket.ask(socket, .audio(seconds: seconds), timeout: seconds + 20)
+            }
+            guard let measured = PuppetAudio(reply) else {
+                session.ui.detail("The game's helper can't measure its sound (\(reply.error ?? reply.text)); tapping it instead")
+                return nil
+            }
+            return measured
+        } catch {
+            session.ui.detail("The game's helper didn't measure its sound (\(error)); tapping it instead")
+            return nil
+        }
+    }
+
+    private func show(_ levels: [AudioLevel], session: Session) {
         if raw {
             for level in levels {
                 session.ui.line(String(format: "%6.1fs  ", level.time) + "peak \(AudioLevel.decibels(level.peak)), rms \(AudioLevel.decibels(level.rms))")

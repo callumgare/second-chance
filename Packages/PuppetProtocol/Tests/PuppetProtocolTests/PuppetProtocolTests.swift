@@ -15,6 +15,8 @@ struct PuppetRequestTests {
         (.key("escape", hold: 150), "key escape hold=150"),
         (.type("Hi there"), "type Hi%20there"),
         (.yield(pid: 42), "yield 42"),
+        (.audio(seconds: 5), "audio 5"),
+        (.audio(seconds: 2.5), "audio 2.5"),
     ])
     func line(request: PuppetRequest, line: String) {
         #expect(request.line == line)
@@ -92,5 +94,62 @@ struct PuppetSocketTests {
     func notListening() {
         let socket = PuppetSocket(path: NSTemporaryDirectory() + "no-such-\(UUID().uuidString).sock")
         #expect(throws: PuppetSocket.Failure.self) { try socket.send(.hello, timeout: 1) }
+    }
+}
+
+struct AudioLevelTests {
+    @Test func parsesTheTapsLevelLines() {
+        #expect(AudioLevel(line: "level t=0.10 peak=0.500000 rms=0.250000") == AudioLevel(time: 0.1, peak: 0.5, rms: 0.25))
+        #expect(AudioLevel(line: "process pid=12 object=80 output=1") == nil)
+        #expect(AudioLevel(line: "level t=0.10 peak=x rms=0.2") == nil)
+    }
+
+    @Test func silenceIsSilentEvenWithAStreamOpen() {
+        let levels = (1...20).map { AudioLevel(time: Double($0) / 10, peak: 0.0002, rms: 0.0001) }
+        #expect(AudioLevel.summary(levels).hasPrefix("silent:"))
+        #expect(AudioLevel.summary([]).hasPrefix("no samples"))
+    }
+
+    @Test func soundAndClippingAreToldApart() {
+        let quiet = (1...10).map { AudioLevel(time: Double($0) / 10, peak: 0, rms: 0) }
+        let loud = (11...20).map { AudioLevel(time: Double($0) / 10, peak: 0.5, rms: 0.1) }
+        #expect(AudioLevel.summary(quiet + loud) == "sound in 10 of 20 windows (peak -6.0 dBFS, RMS up to -20.0 dBFS)")
+        let clipped = loud + [AudioLevel(time: 2.1, peak: 1.0, rms: 0.7)]
+        #expect(AudioLevel.summary(clipped).hasPrefix("clipping: 1 of 11 windows reach full scale"))
+    }
+
+    @Test func rowsShowASecondEach() {
+        let levels = (1...15).map { AudioLevel(time: Double($0) / 10, peak: $0 > 10 ? 0.5 : 0, rms: $0 > 10 ? 0.5 : 0) }
+        let rows = AudioLevel.rows(levels)
+        #expect(rows.count == 2)
+        #expect(rows[0].contains("··········"))
+        #expect(rows[0].hasSuffix("peak -inf, rms -inf"))
+        #expect(rows[1].hasPrefix("  1.0s  █████ "))
+    }
+
+    @Test func readsTheHelpersAudioReply() throws {
+        let reply = PuppetReply("""
+            ok sound windows=3 sounding=2 clipped=0 peak=0.500000 rms=0.100000 streams=1 buffers=30 format=float32 hooked=1
+            level t=0.1 peak=0.000000 rms=0.000000
+            level t=0.2 peak=0.500000 rms=0.100000
+            level t=0.3 peak=0.250000 rms=0.050000
+            """)
+        let audio = try #require(PuppetAudio(reply))
+        #expect(audio.levels.count == 3 && audio.levels[1] == AudioLevel(time: 0.2, peak: 0.5, rms: 0.1))
+        #expect(audio.verdict == .sound && audio.streams == 1 && audio.format == "float32" && audio.hooked)
+        #expect(audio.summary == "sound in 2 of 3 windows (peak -6.0 dBFS, RMS up to -20.0 dBFS); 1 stream, float32")
+    }
+
+    @Test func aGameWithNoSoundOpenIsSilent() throws {
+        let reply = "ok silent windows=1 sounding=0 clipped=0 peak=0 rms=0 streams=0 buffers=0 format=unknown hooked=0\nlevel t=0.1 peak=0 rms=0"
+        let audio = try #require(PuppetAudio(PuppetReply(reply)))
+        #expect(audio.verdict == .silent && !audio.hooked)
+        #expect(audio.summary.hasSuffix("the game hasn't opened Wine's Core Audio output"))
+        #expect(PuppetAudio(PuppetReply("error no audio measure here")) == nil)
+    }
+
+    @Test func fullScaleIsClipping() throws {
+        let audio = try #require(PuppetAudio(PuppetReply("ok clipping hooked=1\nlevel t=0.1 peak=1.000000 rms=0.700000")))
+        #expect(audio.verdict == .clipping)
     }
 }
