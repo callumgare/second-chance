@@ -276,7 +276,11 @@ fills, and the porting log is your memory: keep it current and carry on.
   running, a reference that's out of date, a step in this procedure that
   sent you the wrong way — fix it then, test the fix, and note it in the
   porting log's "Lessons for the skill". A lesson left for "later" is lost
-  when the session ends.
+  when the session ends. In particular, whenever you learn something about a
+  program's files or installer that `scripts/identify.py` didn't report (its
+  format, platform, engine, installer kind, packer, graphics API, the
+  executable to launch) by any other means, teach `identify.py` to detect it,
+  and check it now does against the file that showed it.
 
 ## The porting log
 
@@ -686,7 +690,11 @@ done](#keep-going-until-its-done)):
   (checked, not assumed); any `caffeinate` you started is gone; the screens
   are handed back to the peers.
 - **Improve this skill** before you finish: a new tell for identifying a
-  format goes in `identifying-files.md`; a new source of knowledge in
+  format goes in `identifying-files.md`, and in `scripts/identify.py` too
+  wherever it can be detected from the files: anything about the program's
+  files or installer that `identify.py` missed and you found out another way
+  (unpacking it, running it, a source of knowledge, trial and error) is a gap
+  in it to close, not just a note; a new source of knowledge in
   `knowledge-sources.md`; a symptom and fix in `troubleshooting.md`; a new
   Wrappfile shape in `cookbook.md`; a step of this procedure that wasted
   time or misled you, here. Keep each file's facts dated where they'll go
