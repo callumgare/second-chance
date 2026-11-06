@@ -801,8 +801,10 @@ Mac's. Unlike other commands it doesn't run on the other Mac (`Remote.runsHere`)
 reaches the test sessions over SSH itself, since the Screen Sharing window has to open
 where you are. Here it needs this Mac's own keys in each test user's authorized keys, which
 `session add` gives them (`--install-keys` for older users); and as Screen Sharing
-won't connect a Mac to itself, it goes through an SSH tunnel into the test user. For
-each test user (default: the pool) it:
+won't connect a Mac to itself, it goes through an SSH tunnel into the test user. A
+session someone else has leased (a run going there) is left alone unless you say
+otherwise: at a terminal it asks first, defaulting to no, and from a script it stops
+unless given `--ignore-screen-lease`. For each test user (default: the pool) it:
 
 1. installs Peekaboo on the test Mac if it's missing: the app into `/Applications`
    and the CLI into `/Users/Shared/second-chance/bin` when Homebrew's isn't there, both
