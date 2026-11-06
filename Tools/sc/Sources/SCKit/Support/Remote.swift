@@ -99,8 +99,10 @@ enum Remote {
 
     /// What every runtime copy holds besides the build: the data sc reads
     /// there (program bundles' manifests and needles, modules), which the
-    /// app also carries inside itself.
-    static let dataFolders = ["Bundles", "Modules"]
+    /// app also carries inside itself, and the fixtures the integration
+    /// tests read from the repo (`TestFixtures/edition-patches.json`), which
+    /// fail without them.
+    static let dataFolders = ["Bundles", "Modules", "TestFixtures"]
 
     /// Commands that need no build there: they claim, lease, list or clean.
     static let buildlessCommands: Set = ["session", "lease", "attach", "clean", "installers", "setup"]

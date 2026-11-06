@@ -515,7 +515,8 @@ of this checkout's gigabytes. It holds:
   this checkout's absolute path and holds Xcode's sparse caches, and
   `Release`'s products are gigabytes nothing there runs.
 - **The data sc reads there:** `Bundles/` and `Modules/` (manifests, needles),
-  as the app carries them inside itself.
+  as the app carries them inside itself, and `TestFixtures/`, which the
+  integration tests read from the repo.
 - **For `puppet` commands, the audio tap** (`SC Audio Tap.app`, below), built
   and signed here, as `.sc/SC Audio Tap.app` with its stamp: `puppet audio`
   there installs it into the user's own folder when its stamp differs,

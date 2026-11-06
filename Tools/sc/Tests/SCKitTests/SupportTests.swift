@@ -812,7 +812,7 @@ struct DotEnvTests {
     @Test("--on sends the runtime copy's folders and nothing else of the checkout")
     func syncFilters() throws {
         let filters = Remote.syncFilters(for: ["test", "integration", "old-clock"])
-        #expect(filters.contains("/Bundles/") && filters.contains("/Modules/"))
+        #expect(filters.contains("/Bundles/") && filters.contains("/Modules/") && filters.contains("/TestFixtures/"))
         // rsync takes the first rule that matches: Release's products are left
         // out before the products are let in, and they before the catch-all.
         let release = try #require(filters.firstIndex(of: "/DerivedData/Build/Products/Release/"))
