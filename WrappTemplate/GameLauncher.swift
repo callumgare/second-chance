@@ -95,6 +95,9 @@ class GameLauncher {
     private var watchers: LaunchWatchers?
     /// What the in-process helpers report from inside the game.
     private var helperReport: InProcessHelperReport? { watchers?.helperReport }
+    /// The session's last move of the game's window into or out of a
+    /// fullscreen Space, and whether the player made it.
+    var lastFullscreenChange: InProcessHelperReport.FullscreenChange? { helperReport?.lastFullscreenChange }
     /// Judges whether a Wine game's exit was a quit; nil for ScummVM.
     private var quitCheck: GameQuitCheck? { watchers?.quitCheck }
     /// Set when the game's exit was no quit, but the game failing: it quit

@@ -478,6 +478,30 @@ app keeps no Wine.
   confirm key is held, repeating as a held key does; several are pressed in
   turn.
   Without `--wine.quit-key` it's refused when planning.
+- **`--wine.fullscreen-setting=<fields>`** names where the program keeps
+  its own fullscreen setting, so the app can keep it in step with the
+  window's green button: when the player last moved the window into or out
+  of fullscreen themselves, rather than through the game's own option, the
+  app writes their choice there once the game has quit, and the next start
+  opens as they left it
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#the-players-choice-kept)).
+  Its fields, comma-separated: `file=`, a file on Wine's C: drive (usually
+  one a `files=` mount keeps); `format=allegro-packfile` (an Allegro 4
+  game's `pack_fopen` file, `slh!` and LZSS) or `bytes` (the file as it
+  is); `offset=` and `bytes=` (1, 2, 4 or 8), where the value is in what
+  the format holds; and `fullscreen=` and `windowed=`, its two values, whole
+  numbers stored little-endian (`-1`, `0`, `0xFF`). A file that checks
+  itself with a sum takes `checksum-offset=` and `checksum-scale=` as well:
+  a sum as wide as the value, which counts the value that many times and is
+  moved to match. Icy Tower's:
+
+  ```dockerfile
+  LAUNCH --wine.fullscreen-setting="file=C:/IcyTower/tower.cfg,format=allegro-packfile,offset=16,bytes=4,fullscreen=-1,windowed=0,checksum-offset=96,checksum-scale=17" \
+         C:/IcyTower/icytower13.exe
+  ```
+
+  A missing field, an unknown one, a value that doesn't fit or two values
+  the same is refused when planning, saying which.
 - **A Steam launch is `steam://rungameid/<app id>`**, with no arguments, and
   names the program Steam starts, `--steam.exe=<its path in Wine>`, which the
   app finds the game's process by; as Steam starts a Windows game in the

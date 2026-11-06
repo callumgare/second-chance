@@ -412,6 +412,91 @@ static void putBackOldSize(NSWindow *window) {
     [window setFrame:frame display:YES];
 }
 
+// MARK: - Who moved the window
+//
+// The wrapp keeps the player's choice in the game's own fullscreen setting
+// (`--wine.fullscreen-setting`) when the session's last change was theirs,
+// so each move into or out of a Space is reported with its cause:
+//
+//   fullscreen changed by the player: fullscreen|windowed
+//   fullscreen changed by the game: fullscreen|windowed
+//
+// The player's are what reach WineWindow's -toggleFullScreen: from anywhere
+// but this file: the green title-bar button, and the Window menu's Enter Full
+// Screen and its key (Control-Option-Command-F, Wine's). This file's own
+// calls go through helperToggle(), which names the cause while AppKit posts its
+// will-enter or will-exit notification, inside the call. A move with no cause
+// (Wine taking a window that no longer qualifies out with NSWindow's own
+// method, or the window going as the game quits) is reported as nothing,
+// nor is this file putting a window back into the Space Wine closed.
+//
+// A window the player put into a Space stays there until the game makes a
+// new request (switches its mode), as one the player took out stays out
+// until then; once it does, the game decides again, and that is the game's
+// change.
+
+typedef NS_ENUM(int, ToggleCause) {
+    kToggleNone = 0,
+    kTogglePlayer,
+    kToggleGame,     // following the game's request (or, forced, the launch's)
+    kToggleRestore,  // back into the Space Wine closed: no change
+};
+
+/// Whose -toggleFullScreen: is running. Main thread only.
+static ToggleCause gToggling = kToggleNone;
+static IMP gWineToggleFullScreen;
+
+static char kTransitionCauseKey;  // the cause of the move into or out of a Space under way
+static char kPlayerSpaceKey;      // in a Space the player chose: the game's request then, plus one
+
+/// Who a change is by, as the report names them.
+static const char *causeName(ToggleCause cause) {
+    if (cause == kTogglePlayer) return "the player";
+    return gForced ? "the launch" : "the game";
+}
+
+static void reportChange(ToggleCause cause, BOOL fullscreen, const char *how) {
+    const char *state = fullscreen ? "fullscreen" : "windowed";
+    os_log(gLog, "[NativeFS] fullscreen changed by %{public}s: %{public}s%{public}s", causeName(cause), state, how);
+    debugLog("fullscreen changed by %s: %s%s", causeName(cause), state, how);
+    helperReport("NativeFullscreen", "notice", "fullscreen changed by %s: %s%s", causeName(cause), state, how);
+}
+
+/// This file's own move of `window` into or out of its Space.
+static void helperToggle(NSWindow *window, ToggleCause cause) {
+    ToggleCause was = gToggling;
+    gToggling = cause;
+    [window toggleFullScreen:nil];
+    gToggling = was;
+}
+
+static void playerAwareToggleFullScreen(NSWindow *self, SEL _cmd, id sender) {
+    if (gToggling != kToggleNone) {
+        ((void (*)(id, SEL, id))gWineToggleFullScreen)(self, _cmd, sender);
+        return;
+    }
+    BOOL entering = !(self.styleMask & NSWindowStyleMaskFullScreen);
+    debugLog("the player asks to %s fullscreen: window %ld", entering ? "enter" : "leave", (long)self.windowNumber);
+    if (entering) {
+        objc_setAssociatedObject(self, &kFrameBeforeKey, [NSValue valueWithRect:self.frame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    gToggling = kTogglePlayer;
+    ((void (*)(id, SEL, id))gWineToggleFullScreen)(self, _cmd, sender);
+    gToggling = kToggleNone;
+}
+
+/// Watch for the player's -toggleFullScreen: on Wine's windows. Main thread.
+static void installToggleWatch(void) {
+    static BOOL attempted = NO;
+    if (attempted) return;
+    attempted = YES;
+    Class wineWindow = NSClassFromString(@"WineWindow");
+    gWineToggleFullScreen = replaceOwnMethod(wineWindow, @selector(toggleFullScreen:), (IMP)playerAwareToggleFullScreen);
+    if (!gWineToggleFullScreen) {
+        helperReport("NativeFullscreen", "warning", "WineWindow has no -toggleFullScreen:; the player's fullscreen changes go unreported");
+    }
+}
+
 // MARK: - Choosing, entering and leaving
 
 /// Whether a window has held still for kSettleSeconds asking for a window,
@@ -467,8 +552,28 @@ static BOOL handleFullscreenWindow(void) {
         if (!(window.styleMask & NSWindowStyleMaskFullScreen)) continue;
 
         // Something is fullscreen, so leave the rest of this process alone.
-        if (!gFollowsGame || !windowFlag(window, &kEnteredKey) || windowIsMovingSpaces(window) ||
-            fullscreenRequest(window) != 0) {
+        if (!gFollowsGame || windowIsMovingSpaces(window)) {
+            gLeaving = nil;
+            return YES;
+        }
+        unsigned long request = fullscreenRequest(window);
+        NSNumber *playerChose = objc_getAssociatedObject(window, &kPlayerSpaceKey);
+        if (playerChose) {
+            // The player's Space holds until the game switches its mode.
+            if (playerChose.unsignedLongValue == request + 1) {
+                gLeaving = nil;
+                return YES;
+            }
+            objc_setAssociatedObject(window, &kPlayerSpaceKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            setWindowFlag(window, &kEnteredKey, YES);
+            setWindowRequestValue(window, &kEnteredRequestKey, request);
+            if (request != 0) {
+                reportChange(kToggleGame, YES, " (the window was in its Space already)");
+                gLeaving = nil;
+                return YES;
+            }
+        }
+        if (!windowFlag(window, &kEnteredKey) || request != 0) {
             gLeaving = nil;
             return YES;
         }
@@ -485,7 +590,7 @@ static BOOL handleFullscreenWindow(void) {
         debugLog("leaving native fullscreen: the game asked for a window: '%s'", title);
         helperReport("NativeFullscreen", "notice", "leaving native fullscreen: the game asked for a window: '%s'", title);
         restoreFrameOnLeaving(window);
-        [window toggleFullScreen:nil];
+        helperToggle(window, kToggleGame);
         return YES;
     }
     gLeaving = nil;
@@ -493,6 +598,7 @@ static BOOL handleFullscreenWindow(void) {
 }
 
 static void attemptFullscreen(void) {
+    installToggleWatch();
     BOOL overridesInstalled = installOverrides();
     for (NSWindow *window in NSApp.windows) putBackOldSize(window);
 
@@ -549,6 +655,7 @@ static void attemptFullscreen(void) {
     gCandidate = nil;
     gReportedWindowed = NO;
     BOOL reentering = windowFlag(window, &kEnteredKey);
+    BOOL wasReenter = windowFlag(window, &kReenterKey);
     gEntered = YES;
     setWindowFlag(window, &kEnteredKey, YES);
     setWindowFlag(window, &kReenterKey, NO);
@@ -572,14 +679,51 @@ static void attemptFullscreen(void) {
     helperReport("NativeFullscreen", "notice", "%s native fullscreen: '%s' %dx%d%s",
                  kind, title, (int)frame.size.width, (int)frame.size.height, how);
 
-    [window toggleFullScreen:nil];
+    // Back into the Space Wine closed is no change; anything else follows a
+    // request of the game's (or, forced, the launch).
+    helperToggle(window, wasReenter ? kToggleRestore : kToggleGame);
 }
 
 /// A window left its Space: unless Wine closed it (and it goes back when
 /// shown), it stays out until the game makes a new request. Main thread.
-static void noteWindowLeftSpace(NSWindow *window) {
+static void noteWindowLeftSpace(NSWindow *window, ToggleCause cause) {
+    objc_setAssociatedObject(window, &kPlayerSpaceKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (cause == kTogglePlayer && fullscreenRequest(window) != 0) {
+        setWindowRequestValue(window, &kLeftRequestKey, fullscreenRequest(window));
+        return;
+    }
     if (!windowFlag(window, &kEnteredKey) || windowFlag(window, &kReenterKey)) return;
     setWindowRequestValue(window, &kLeftRequestKey, windowRequestValue(window, &kEnteredRequestKey));
+}
+
+/// The cause the will-enter or will-exit notification found, taken.
+static ToggleCause takeTransitionCause(NSWindow *window) {
+    ToggleCause cause = (ToggleCause)[objc_getAssociatedObject(window, &kTransitionCauseKey) intValue];
+    objc_setAssociatedObject(window, &kTransitionCauseKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return cause;
+}
+
+static void noteTransitionCause(NSWindow *window) {
+    objc_setAssociatedObject(window, &kTransitionCauseKey, gToggling == kToggleNone ? nil : @(gToggling),
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+/// A window finished moving into (`entered`) or out of a Space: say who
+/// moved it. Main thread.
+static void noteTransitionEnded(NSWindow *window, BOOL entered) {
+    ToggleCause cause = takeTransitionCause(window);
+    if (entered && cause == kTogglePlayer) {
+        objc_setAssociatedObject(window, &kPlayerSpaceKey, @(fullscreenRequest(window) + 1), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    } else if (entered) {
+        objc_setAssociatedObject(window, &kPlayerSpaceKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (!entered) noteWindowLeftSpace(window, cause);
+    if (cause == kTogglePlayer || cause == kToggleGame) {
+        reportChange(cause, entered, "");
+    } else {
+        debugLog("window %ld %s its Space, by %s", (long)window.windowNumber, entered ? "entered" : "left",
+                 cause == kToggleRestore ? "this file, putting it back" : "neither the player nor the game");
+    }
 }
 
 /// Wine dedicates the process's main thread to a CFRunLoop (see __wine_main in
@@ -687,6 +831,7 @@ void watchFullscreenTransitions(void) {
             [center addObserverForName:NSWindowWillEnterFullScreenNotification object:nil queue:nil
                             usingBlock:^(NSNotification *notification) {
                 [gEnteringWindows addObject:notification.object];
+                noteTransitionCause(notification.object);
                 transitionLog("window %ld will enter fullscreen", (long)[notification.object windowNumber]);
             }];
             [center addObserverForName:NSWindowDidEnterFullScreenNotification object:nil queue:nil
@@ -694,17 +839,19 @@ void watchFullscreenTransitions(void) {
                 [gEnteringWindows removeObject:notification.object];
                 gAWindowEntered = YES;
                 transitionLog("window %ld did enter fullscreen", (long)[notification.object windowNumber]);
+                noteTransitionEnded(notification.object, YES);
             }];
             [center addObserverForName:NSWindowWillExitFullScreenNotification object:nil queue:nil
                             usingBlock:^(NSNotification *notification) {
                 [gExitingWindows addObject:notification.object];
+                noteTransitionCause(notification.object);
             }];
             [center addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:nil
                             usingBlock:^(NSNotification *notification) {
                 [gEnteringWindows removeObject:notification.object];
                 [gExitingWindows removeObject:notification.object];
-                noteWindowLeftSpace(notification.object);
                 transitionLog("window %ld did exit fullscreen", (long)[notification.object windowNumber]);
+                noteTransitionEnded(notification.object, NO);
             }];
         });
         CFRunLoopWakeUp(CFRunLoopGetMain());

@@ -175,6 +175,28 @@ struct BuildPlanTests {
         #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.quit-confirm-key=escape") }
     }
 
+    @Test("--wine.fullscreen-setting is recorded with ${…} filled in, and a bad one refused saying why")
+    func fullscreenSetting() throws {
+        func plan(_ setting: String) throws -> BuildPlan {
+            let (planner, _, bundle) = try planner("""
+            CONST dir = "C:/Game"
+            FROM --module=wine@10 prefix AS only
+            LAUNCH --wine.graphics=direct-draw --wine.fullscreen-setting="\(setting)" ${const.dir}/Game.exe
+            """)
+            return try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
+                                    conditions: BuildConditions(arch: "arm64", macos: 15))
+        }
+        let planned = try plan("file=${const.dir}/game.cfg,format=allegro-packfile,offset=16,bytes=4,fullscreen=-1,windowed=0")
+        let setting = try #require(planned.launch?.fullscreenSetting)
+        #expect(setting.file == "C:/Game/game.cfg")
+        #expect(setting.offset == 16)
+        #expect {
+            try plan("file=${const.dir}/game.cfg,format=allegro-packfile,offset=16,bytes=3,fullscreen=-1,windowed=0")
+        } throws: { error in
+            "\(error)".contains("--wine.fullscreen-setting") && "\(error)".contains("bytes=3")
+        }
+    }
+
     @Test("The wine update: an old app's tree, given this Wine and the prefix's settings, its drives left alone")
     func wineUpdate() throws {
         let modules = try shippedModules()

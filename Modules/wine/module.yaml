@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 20
+release: 21
 native: "wine"                               # its Swift: Packages/Modules/wine (WineKit, WineExecutor), WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -79,5 +79,9 @@ build:
     # asks for when the wrapp gets it wrong, quit-key, a key the app's Quit
     # holds down (or keys it presses in turn) in a program that ignores
     # Wine's quit, and quit-confirm-key, the keys a second Quit soon after
-    # presses, for a program whose quit key first asks.
-    LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, cursor-lock: flag, window: value, quit-key: value, quit-confirm-key: value }
+    # presses, for a program whose quit key first asks, and
+    # fullscreen-setting, where the program keeps its own fullscreen
+    # setting (file=,format=,offset=,bytes=,fullscreen=,windowed=), set to
+    # the player's choice when they last changed it with the window's
+    # fullscreen button.
+    LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, cursor-lock: flag, window: value, quit-key: value, quit-confirm-key: value, fullscreen-setting: value }

@@ -31,8 +31,15 @@ REMOVE C:/icy-tower-setup
 # holding Escape would (from a game, two leave for the menu and two more
 # choose Exit; a game paused with P takes one more). Not past the high-score
 # name box, which waits for the player.
+# Its Options > GFX > Fullscreen is the int32 at 16 in tower.cfg, an Allegro
+# packfile: -1 for Yes, 0 for No. The int32 at 96 is 17 times the sum of the
+# eight settings there and 28, which it checks as it loads (a file that fails
+# gets the defaults). When the player last switched with the window's green
+# button rather than the game's menu, the app writes their choice there once
+# the game has quit, so the next start opens as they left it.
 LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="tower.cfg" \
     --mount=type=store,source=replays,target=${const.install-dir}/replays/,files="*.itr" \
     --wine.graphics=direct-draw --wine.cursor-lock --wine.quit-key=escape \
     --wine.quit-confirm-key=escape \
+    --wine.fullscreen-setting="file=${const.install-dir}/tower.cfg,format=allegro-packfile,offset=16,bytes=4,fullscreen=-1,windowed=0,checksum-offset=96,checksum-scale=17" \
     "${const.install-dir}/icytower13.exe"

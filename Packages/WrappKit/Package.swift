@@ -78,6 +78,8 @@ let package = Package(
             name: "WrappFormat",
             dependencies: [
                 "WrappModules",
+                // A game's settings file, read and written (FullscreenSetting).
+                "WindowsFormats",
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "Logging", package: "swift-log"),
             ],

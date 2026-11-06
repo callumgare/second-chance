@@ -66,15 +66,55 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// it has ended.
     var filesMounts: [FilesMount] = []
 
+    /// Whether `keepFullscreenChoice` has run: each exit's path collects.
+    private var keptFullscreenChoice = false
+
     /// The files the game made beside its program moved into their stores
-    /// (`FilesMount.collect`), each exit's last step before the wrapp goes.
+    /// (`FilesMount.collect`), each exit's last step before the wrapp goes,
+    /// the player's fullscreen choice kept in the game's setting first.
     func collectLaunchFiles() {
+        keepFullscreenChoice()
         for mount in filesMounts {
             do {
                 for line in try mount.collect() { mainLogger.notice("[User files] \(mount.folder.lastPathComponent): \(line)") }
             } catch {
                 mainLogger.error("[User files] Couldn't keep the files the game made in \(mount.folder.lastPathComponent): \(error)")
             }
+        }
+    }
+
+    /// When the player last moved the game's window into or out of
+    /// fullscreen themselves (the green button), their choice is written
+    /// into the game's own setting, where its launch says it keeps it
+    /// (`--wine.fullscreen-setting`), so the next launch opens as they left
+    /// it: the game wrote its own choice as it quit. A change the game made
+    /// last is its own setting already. Never fails the launch: a file that
+    /// isn't as expected is left alone, saying why.
+    /// docs/wine-in-process-helpers.md#the-players-choice-kept
+    func keepFullscreenChoice() {
+        guard !keptFullscreenChoice, let setting = config.launch.fullscreenSetting else { return }
+        keptFullscreenChoice = true
+        let name = (setting.file as NSString).lastPathComponent
+        guard let change = gameLauncher?.lastFullscreenChange else {
+            mainLogger.notice("[Fullscreen setting] The window didn't go into or out of fullscreen: \(name) left as the game wrote it")
+            return
+        }
+        let choice = change.fullscreen ? "fullscreen" : "windowed"
+        guard change.byPlayer else {
+            mainLogger.notice("[Fullscreen setting] The game made the last change, to \(choice): \(name) left as it wrote it")
+            return
+        }
+        guard let url = WrappLayout(app: config.appPath).location("wine:" + setting.file) else {
+            mainLogger.warning("[Fullscreen setting] \(setting.file) has no place in the app: the player's choice of \(choice) isn't kept")
+            return
+        }
+        switch setting.apply(fullscreen: change.fullscreen, at: url) {
+        case .written:
+            mainLogger.notice("[Fullscreen setting] The player chose \(choice) last: set it in \(name)")
+        case .alreadySet:
+            mainLogger.notice("[Fullscreen setting] The player chose \(choice) last, and \(name) says so already")
+        case .leftAlone(let why):
+            mainLogger.warning("[Fullscreen setting] The player chose \(choice) last, but \(name) is left alone: \(why)")
         }
     }
 

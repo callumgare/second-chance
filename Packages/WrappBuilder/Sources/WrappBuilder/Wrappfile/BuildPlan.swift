@@ -1007,6 +1007,13 @@ public nonisolated struct BuildPlanner {
                 if options["wine.quit-confirm-key"] != nil, options["wine.quit-key"] == nil {
                     throw PlanError(description: "\(origin): --wine.quit-confirm-key is pressed on a second Quit after --wine.quit-key's: name the quit key too")
                 }
+                if let setting = options[FullscreenSetting.option] {
+                    do {
+                        _ = try FullscreenSetting(parsing: setting)
+                    } catch {
+                        throw PlanError(description: "\(origin): --wine.fullscreen-setting=\(setting): \(error)")
+                    }
+                }
                 let launch = RecordedLaunch(program: program, arguments: Array(arguments.dropFirst()), environment: environment,
                                             options: options, fallback: fallback, format: RecordedLaunch.currentFormat)
                 try checkLaunch(launch, origin: origin)

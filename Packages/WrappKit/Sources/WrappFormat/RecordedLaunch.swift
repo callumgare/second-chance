@@ -176,6 +176,14 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     /// Tower's Escape); the first Quit then presses the quit key alone.
     public var quitConfirmKey: String? { options["wine.quit-confirm-key"] }
 
+    /// `--wine.fullscreen-setting=…`: where the program keeps its own
+    /// fullscreen setting, which the wrapp sets to the player's choice when
+    /// they last changed it with the window's fullscreen button. Nil when
+    /// the launch names none, or one planning would have refused.
+    public var fullscreenSetting: FullscreenSetting? {
+        options[FullscreenSetting.option].flatMap { try? FullscreenSetting(parsing: $0) }
+    }
+
     /// Whether the wrapp arms cursor lock: when its launch says
     /// `--wine.cursor-lock`, or, recorded before it could, when the program
     /// may draw through cnc-ddraw (`inferred`).

@@ -94,11 +94,46 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
     /// game first draws, well before its window shows, so this is only slack.
     static let armDeadline: TimeInterval = 60
 
+    /// A move of the game's window into or out of a fullscreen Space, and
+    /// who made it: native fullscreen's `fullscreen changed by the player:
+    /// fullscreen` (docs/wine-in-process-helpers.md#the-players-choice-kept).
+    public struct FullscreenChange: Equatable, Sendable {
+        public let fullscreen: Bool
+        /// The player, with the window's fullscreen button or its menu;
+        /// otherwise the game, as native fullscreen followed it.
+        public let byPlayer: Bool
+
+        public init(fullscreen: Bool, byPlayer: Bool) {
+            self.fullscreen = fullscreen
+            self.byPlayer = byPlayer
+        }
+
+        /// From a native fullscreen report's message; nil for any other.
+        init?(message: String) {
+            let prefix = "fullscreen changed by "
+            guard message.hasPrefix(prefix), let colon = message.firstIndex(of: ":") else { return nil }
+            let who = message[message.index(message.startIndex, offsetBy: prefix.count)..<colon]
+            let state = message[message.index(after: colon)...].drop { $0 == " " }
+            if state.hasPrefix("fullscreen") {
+                fullscreen = true
+            } else if state.hasPrefix("windowed") {
+                fullscreen = false
+            } else {
+                return nil
+            }
+            byPlayer = who == "the player"
+        }
+    }
+
     private let expected: [Helper]
     private let logger: Logger
     private let state = NSLock()
     private var armed: Set<Helper> = []
     private var checked = false
+    private var lastChange: FullscreenChange?
+
+    /// The session's last move into or out of a fullscreen Space, if any.
+    public var lastFullscreenChange: FullscreenChange? { state.withLock { lastChange } }
 
     /// `armingVariables` is what the game was started with: the helpers
     /// whose variables are set are the ones expected to arm.
@@ -115,6 +150,9 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
             let first = state.withLock { armed.insert(line.helper).inserted }
             if first { logger.notice("\(line.helper.armedMarker) (\(line.message))") }
         } else {
+            if line.helper == .nativeFullscreen, let change = FullscreenChange(message: line.message) {
+                state.withLock { lastChange = change }
+            }
             logger.log(level: line.level, "[Helpers] \(line.helper.name): \(line.message)")
         }
     }

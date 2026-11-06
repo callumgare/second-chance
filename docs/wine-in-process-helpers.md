@@ -210,9 +210,64 @@ a warning and gives fullscreen only to the windows Wine already allows.
 The helper keeps watching after the first entry. A window whose Space Wine
 closed while the app was active goes back into one when it is shown again.
 A window the player took out of fullscreen themselves is left windowed until
-the game asks for fullscreen anew.
+the game asks for fullscreen anew, and one the player put into fullscreen
+stays there until the game switches its mode; then the game decides again.
 
 The header comment of `native_fullscreen.m` has the details.
+
+### The player's choice, kept
+
+The green button, and the Window menu's Enter Full Screen (⌃⌥⌘F, Wine's
+key), change the window but not the game's own setting, which it writes as
+it quits: left so, the next start would open in the mode the game last
+chose, not the one the player last chose. So the helper reports each move
+into or out of a Space, and who made it:
+
+```text
+second-chance-helper[NativeFullscreen] notice: fullscreen changed by the player: fullscreen
+second-chance-helper[NativeFullscreen] notice: fullscreen changed by the game: windowed
+```
+
+The player's moves are the calls of WineWindow's own `-toggleFullScreen:`
+that don't come from the helper, which the helper replaces to see: the
+button and the menu both send it. The helper's own moves (following the
+game, or forced by the launch, `by the launch`) name their cause while
+AppKit posts its will-enter or will-exit notification, inside the call.
+Wine taking a window that no longer qualifies out of its Space calls
+`NSWindow`'s method past Wine's, so it isn't counted, and nor is the window
+leaving its Space as the game quits, or the helper putting it back into the
+Space Wine closed. A game that switches its mode while the window is
+already where it asks to be (Fullscreen: Yes in a Space the player made)
+reports `by the game: fullscreen (the window was in its Space already)`.
+
+`InProcessHelperReport` keeps the session's last change. A launch that says
+where the game keeps its setting, `--wine.fullscreen-setting`
+([wrappfile.md](wrappfile.md#the-launch-volumes-and-app)), has the wrapp
+write the player's choice there once the game has ended and Wine's session
+with it, before the launch's `files=` mounts are collected
+(`AppDelegate.keepFullscreenChoice`, `FullscreenSetting` in `WrappFormat`):
+
+- **The player made the last change**: the value is set, through the
+  `files=` mount's link into its store, a sum the file checks itself with
+  moved to match, and an Allegro packfile written packed again (every byte
+  as it is, which Allegro reads as its own, and packs smaller on its next
+  save). `[Fullscreen setting] The player chose fullscreen last: set it in
+  tower.cfg`.
+- **The game made it, or nothing did**: the file is left as the game wrote
+  it, its own save already matching.
+- **The file is missing, isn't the format or size the launch says, or has
+  neither value there**: it's left alone, with a warning saying why. It never
+  fails the launch.
+
+Icy Tower keeps Options › GFX › Fullscreen in `tower.cfg`, an Allegro
+packfile: the int32 at 16, -1 for Yes and 0 for No, and at 96 a sum it
+checks as it loads, 17 × (its eight settings at 0–31 + 28), which a changed
+value without it fails, starting the game with its defaults (found in its
+`.exe`'s config loader, 2026-11-06). Checked on macOS 26 the same day: a
+windowed start taken into fullscreen with ⌃⌥⌘F and quit through its menu
+starts fullscreen; one taken out of its Space that way starts windowed;
+the green button then Fullscreen: Yes and No in the game starts windowed (the
+game's change last); a quit with no change leaves the game's own file.
 
 ### When the launch says
 
