@@ -216,23 +216,32 @@ nonisolated final class LaunchWatchers: @unchecked Sendable {
     ]
 
     /// The modules `config`'s composition has, or nil when one is a module
-    /// this wrapp can't run (a wrapp built by a newer Second Chance).
+    /// this wrapp can't run (a wrapp built by a newer Second Chance). A
+    /// composition with no launcher has the core start its program
+    /// (`ProgramRuntime`), last, as a launcher is.
     init?(config: GameConfig) {
         var all: [any RuntimeModule] = []
         for id in config.composition.modules {
             guard let type = Self.known.first(where: { $0.id == id }) else { return nil }
             all.append(type.init(config: config))
         }
-        guard let launcher = all.first(where: { type(of: $0).id == config.composition.launcher }) as? any GameStarting else {
-            return nil
+        let launcher: any GameStarting
+        if let id = config.composition.launcher {
+            guard let module = all.first(where: { type(of: $0).id == id }) as? any GameStarting else { return nil }
+            launcher = module
+        } else {
+            launcher = ProgramRuntime(config: config)
+            all.append(launcher)
         }
         self.all = all
         self.launcher = launcher
     }
 
-    /// The type of the module that starts `composition`'s games.
+    /// The type of what starts `composition`'s games: its launcher's
+    /// module, or the core's `ProgramRuntime`.
     nonisolated static func launcher(of composition: Composition) -> (any GameStarting.Type)? {
-        known.first { $0.id == composition.launcher } as? any GameStarting.Type
+        guard let id = composition.launcher else { return ProgramRuntime.self }
+        return known.first { $0.id == id } as? any GameStarting.Type
     }
 
     /// The module of type `M`, when the composition has it.

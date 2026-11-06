@@ -165,9 +165,40 @@ struct DOSBoxTestModule: TestModule {
     }
 }
 
+/// A program the core starts (`LAUNCH /MacOS/tool`): a single native
+/// process, named by its file, activated for focus, and ended by its path.
+/// No module: a composition with no launcher has it.
+struct CoreTestModule: TestModule {
+    static let id = ModuleID(rawValue: Composition.coreTag)
+    /// The program, in the app; nil when the wrapp's settings don't say.
+    let program: URL?
+
+    init(layout: WrappLayout, prefix: URL) {
+        program = (try? WrappSettings(of: layout)).flatMap { layout.bareLocation($0.launch.program) }
+    }
+
+    var gameProcessName: String? { program?.lastPathComponent }
+
+    var cleanupCommands: [[String]] {
+        program.map { Wrapp.pkillCommand(matchingFrom: $0.path) } ?? []
+    }
+
+    /// SIGTERM, before the caller's SIGKILL.
+    func endLeftovers() -> String? {
+        guard let program, Wrapp.isSafeToKill(from: program.path) else { return nil }
+        let leftovers = "^" + Wrapp.extendedRegexEscaped(program.path)
+        if ProcessControl.anyRunning(matching: leftovers),
+           ProcessControl.end(matching: leftovers, signal: SIGTERM, timeout: 5) {
+            logger.notice("   The program ended when asked")
+            return nil
+        }
+        return leftovers
+    }
+}
+
 /// The test modules a wrapp's composition has, in start order.
 struct TestModules {
-    let all: [any TestModule]
+    private(set) var all: [any TestModule]
     /// The module that starts the game; nil for a composition this doesn't
     /// know.
     let launcher: (any TestModule)?
@@ -185,6 +216,13 @@ struct TestModules {
         all = composition.modules.compactMap { id in
             Self.known.first { $0.id == id }?.init(layout: layout, prefix: prefix)
         }
-        launcher = all.first { type(of: $0).id == composition.launcher }
+        guard let id = composition.launcher else {
+            // The core starts the program.
+            let core = CoreTestModule(layout: layout, prefix: prefix)
+            all.append(core)
+            launcher = core
+            return
+        }
+        launcher = all.first { type(of: $0).id == id }
     }
 }

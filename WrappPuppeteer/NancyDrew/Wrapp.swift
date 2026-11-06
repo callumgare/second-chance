@@ -78,7 +78,7 @@ struct Wrapp {
         let settings: WrappSettings?
         do {
             settings = try WrappSettings(of: layout)
-            engineSetting = settings?.engine.rawValue ?? "unknown"
+            engineSetting = settings.map { $0.engine?.rawValue ?? $0.composition.engineTag } ?? "unknown"
         } catch {
             settings = nil
             engineSetting = "unreadable (\(error.localizedDescription))"

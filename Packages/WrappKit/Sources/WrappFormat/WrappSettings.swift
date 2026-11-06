@@ -17,7 +17,10 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
     /// slashes (`/Program Files (x86)/Nancy Drew/Game.exe`). For a game
     /// ScummVM runs, its data folder.
     public var gameExePath: String
-    public var engine: GameInfo.GameEngine
+    /// The engine, for older readers; nil for a composition no engine
+    /// expresses (a program the core starts), which is read from
+    /// `recordedLaunch`. Every wrapp built before that has one.
+    public var engine: GameInfo.GameEngine?
     /// The game's `GameInfoProvider` id; nil in a wrapp built before it was
     /// recorded.
     public var gameSlug: String?
@@ -60,7 +63,7 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
     }
 
     public init(
-        gameExePath: String, engine: GameInfo.GameEngine, gameSlug: String?, source: WrappSource?,
+        gameExePath: String, engine: GameInfo.GameEngine?, gameSlug: String?, source: WrappSource?,
         installerDir: String, steamAppID: String? = nil, steamLaunchMode: String? = nil,
         bigFishLaunchFile: String? = nil, bigFishSKU: String? = nil, bigFishTrial: Bool? = nil,
         recordedLaunch: RecordedLaunch? = nil
@@ -83,7 +86,7 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
     public var composition: Composition {
         // Steam running beside a game the wrapp starts itself, which only
         // a wrapp built before launches were recorded does.
-        if recordedLaunch == nil, engine == .wineSteamSilent { return Composition(legacy: engine) }
+        if recordedLaunch == nil, engine == .wineSteamSilent { return Composition(legacy: .wineSteamSilent) }
         return Composition(launch: launch)
     }
 
@@ -94,12 +97,12 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
     public var launch: RecordedLaunch {
         if let recordedLaunch { return recordedLaunch }
         switch engine {
-        case .scummvm:
+        case .scummvm?:
             let folder = "/SharedSupport/prefix/drive_c/" + installerDir.drop { $0 == "/" }
             return RecordedLaunch(program: "scummvm:" + (folder.hasSuffix("/") ? folder : folder + "/"))
-        case .dosbox:
+        case .dosbox?:
             return RecordedLaunch(program: "dosbox:C:" + gameExePath)
-        case .wineSteam where steamLaunchMode != "direct":
+        case .wineSteam? where steamLaunchMode != "direct":
             let exe = "wine:C:" + gameExePath
             return RecordedLaunch(program: "steam://rungameid/\(steamAppID ?? "")", options: ["steam.exe": exe],
                                   fallback: steamLaunchMode == "steam" ? exe : nil)

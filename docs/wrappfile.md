@@ -441,8 +441,10 @@ app keeps no Wine.
   Wine stage is Wine's, `scummvm:/SharedSupport/game/` ScummVM's (with the
   game's id after it: `nancy:nancy7`), `C:/TYRIAN/TYRIAN2K.EXE` in a DOSBox
   stage DOSBox's. The build records which module that is with the launch, and
-  the app starts it with that module. Like `RUN`, it takes options only before
-  the program.
+  the app starts it with that module. A bare `/…` file, a program the app
+  carries (`LAUNCH /MacOS/tool`), is started by the core itself, with no
+  engine ([wrapp-launch.md](wrapp-launch.md#modules)); `RUN` still needs one.
+  Like `RUN`, it takes options only before the program.
 - **A Wine launch says what the program draws with**, `--wine.graphics=direct-draw`,
   `direct-3d` or `unknown` (neither: GDI), which arms the app's helpers
   ([wine-in-process-helpers.md](wine-in-process-helpers.md)). A game whose

@@ -324,6 +324,29 @@ struct BuildPlanTests {
         #expect(throws: BuildPlanner.PlanError.self) { try plan("STORE saves", target: "C:/Game") }
     }
 
+    @Test("A bare LAUNCH /… is the core's: a file in the app, started by no module")
+    func coreLaunch() throws {
+        func plan(_ launch: String, stage: String = "FROM scratch AS only") throws -> BuildPlan {
+            let (planner, _, bundle) = try planner("""
+            \(stage)
+            \(launch)
+            """)
+            return try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
+                                    conditions: BuildConditions(arch: "arm64", macos: 15))
+        }
+        let launch = try #require(try plan("LAUNCH --env MODE=demo /MacOS/tool level-2").launch)
+        #expect(launch.program == "/MacOS/tool")
+        #expect(launch.environment == ["MODE": "demo"])
+        #expect(launch.arguments == ["level-2"])
+        #expect(launch.module == nil && launch.launcher() == nil)
+        #expect(Composition(launch: launch) == Composition(launcher: nil))
+        // Even in a stage that uses ScummVM, whose type claims no bare path.
+        let inScummVM = try #require(try plan("LAUNCH /MacOS/tool", stage: "FROM scratch AS only\nUSE scummvm").launch)
+        #expect(inScummVM.module == nil)
+        // A folder is no program.
+        #expect(throws: BuildPlanner.PlanError.self) { try plan("LAUNCH /MacOS/") }
+    }
+
     /// A planner over Old Clock's bundle and the shipped modules, for a
     /// Wrappfile of a test's own.
     private func planner(_ text: String, slug: String = "old-clock") throws -> (BuildPlanner, Wrappfile, ProgramBundle) {

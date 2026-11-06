@@ -1268,6 +1268,12 @@ public nonisolated struct BuildPlanner {
                 guard !launch.arguments.isEmpty else {
                     throw PlanError(description: "\(origin): a ScummVM launch names its game: LAUNCH <folder> <game id>")
                 }
+            case nil:
+                // The core starts a program the app carries: a file in it.
+                guard launch.program.hasPrefix("/"), !launch.program.hasSuffix("/") else {
+                    throw PlanError(description: "\(origin): LAUNCH \(launch.program): no module of the stage starts it; "
+                        + "a program the app starts itself is a file in it, /MacOS/<name>")
+                }
             default:
                 break
             }

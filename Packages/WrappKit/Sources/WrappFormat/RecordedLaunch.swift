@@ -268,8 +268,8 @@ nonisolated extension Composition {
     public init(launch: RecordedLaunch) {
         switch launch.launcher() {
         case .steam?: self.init(launcher: .steam, services: [.steam])
-        case let launcher?: self.init(launcher: launcher)
-        case nil: self.init(launcher: .wine)
+        // A bare program in the app: the core starts it.
+        case let launcher: self.init(launcher: launcher)
         }
     }
 }

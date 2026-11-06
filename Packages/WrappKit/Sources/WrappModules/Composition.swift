@@ -37,8 +37,9 @@ nonisolated public struct ModuleID: RawRepresentable, Hashable, Codable, Sendabl
 }
 
 /// What a wrapp runs: the one module that starts the program (its
-/// launcher), and the services started before it, in order, and stopped in
-/// the reverse. Everything that would ask "is this a Wine game?" asks the
+/// launcher; nil when the core starts it, a program the app carries,
+/// `LAUNCH /MacOS/tool`), and the services started before it, in order, and
+/// stopped in the reverse. Everything that would ask "is this a Wine game?" asks the
 /// composition whether it has a module instead, so a module added later is
 /// asked about the same way.
 ///
@@ -47,11 +48,13 @@ nonisolated public struct ModuleID: RawRepresentable, Hashable, Codable, Sendabl
 /// more, Big Fish's DRM starting the game in Wine, is written as the Wine
 /// engine with the game's `.bfg` beside it (`WrappSettings.bigFishLaunchFile`).
 nonisolated public struct Composition: Codable, Sendable, Hashable, CustomStringConvertible {
-    public var launcher: ModuleID
+    /// The module that starts the program; nil for the core, which starts a
+    /// program in the app itself.
+    public var launcher: ModuleID?
     /// In start order.
     public var services: [ModuleID]
 
-    public init(launcher: ModuleID, services: [ModuleID] = []) {
+    public init(launcher: ModuleID?, services: [ModuleID] = []) {
         self.launcher = launcher
         self.services = services
     }
@@ -69,7 +72,7 @@ nonisolated public struct Composition: Codable, Sendable, Hashable, CustomString
             for dependency in Self.dependencies[module] ?? [] { add(dependency) }
             all.append(module)
         }
-        (services + [launcher]).forEach(add)
+        (services + [launcher].compactMap { $0 }).forEach(add)
         return all
     }
 
@@ -78,8 +81,13 @@ nonisolated public struct Composition: Codable, Sendable, Hashable, CustomString
     public func has(_ module: ModuleID) -> Bool { modules.contains(module) }
 
     public var description: String {
-        services.isEmpty ? launcher.rawValue : "\(launcher.rawValue) with \(services.map(\.rawValue).joined(separator: ", "))"
+        let launcher = launcher?.rawValue ?? Self.coreTag
+        return services.isEmpty ? launcher : "\(launcher) with \(services.map(\.rawValue).joined(separator: ", "))"
     }
+
+    /// What a composition whose program the core starts is called where a
+    /// launcher's id would be (`engineTag`, its description).
+    public static let coreTag = "core"
 
     // MARK: - Today's engines
 
@@ -109,7 +117,7 @@ nonisolated public struct Composition: Codable, Sendable, Hashable, CustomString
     /// The `engine` tag reports and the integration tests' events carry:
     /// today's engine's name, or for a composition with none, its
     /// launcher's id.
-    public var engineTag: String { legacyEngine?.rawValue ?? launcher.rawValue }
+    public var engineTag: String { legacyEngine?.rawValue ?? launcher?.rawValue ?? Self.coreTag }
 }
 
 nonisolated extension GameInfo {

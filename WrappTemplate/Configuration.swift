@@ -83,7 +83,7 @@ struct GameConfig {
         launch.options["steam.exe"] = nil
         return GameConfig(
             appPath: appPath, winePrefix: winePrefix, gameExePath: drivePath(of: launch) ?? gameExePath,
-            gameInstallerDir: gameInstallerDir, composition: Composition(launcher: launch.launcher() ?? .wine), launch: launch,
+            gameInstallerDir: gameInstallerDir, composition: Composition(launcher: launch.launcher()), launch: launch,
             launchRecorded: launchRecorded, steamGameId: nil,
             gameTitle: gameTitle, gameSlug: gameSlug,
             gameSource: gameSource, bundleId: bundleId, appSupportPath: appSupportPath, settingsPath: settingsPath,

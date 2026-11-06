@@ -53,13 +53,15 @@ with no `explorer.exe` left to finish the job.
 A wrapp starts its program as its build recorded it (`WrappSettings.launch`,
 from the Wrappfile's `LAUNCH`es and the stores they mount: [wrappfile.md](wrappfile.md#the-launch-volumes-and-app)):
 a Wine program at its C: path, ScummVM on the game's data folder in the app
-with the game's id (`nancy:nancy7`), DOSBox on its own C:. A wrapp built
+with the game's id (`nancy:nancy7`), DOSBox on its own C:, or a program the
+app carries started as it is. The build records which module starts it
+(`RecordedLaunch.module`), and the wrapp starts it with that module. A wrapp built
 before launches were recorded has one made from its older settings, in one
 place (`WrappSettings.launch`): a ScummVM game's data in its prefix, started
 by ScummVM's `--auto-detect`.
 
 A wrapp runs a composition of modules (`Composition`, from its settings):
-the one that starts the game, and the services started before it. Wine
+the one that starts the game (none, when the core does), and the services started before it. Wine
 alone, ScummVM alone, DOSBox alone, Wine with Steam running beside it,
 Steam starting the game in Wine, or Big Fish's DRM starting it in Wine
 (`BigFishRuntime`, [big-fish.md](big-fish.md)). `RuntimeModules` makes one `RuntimeModule` for each, in
@@ -91,6 +93,15 @@ is what the game sees. The saves volume is laid over that C:
 (`mount c … -t overlay`): what the game writes goes there, and the wrapp is
 never written to. `--exit` ends DOSBox
 when the game does.
+
+**The core** (`ProgramRuntime`) starts a program the app carries, when no
+module does: `LAUNCH /MacOS/tool`, a composition with no launcher. It runs the
+file at its place under `Contents/` with the launch's arguments and `--env`,
+in the program's folder of the person's files (never the app), and the
+program is the game's own process, as ScummVM's and DOSBox's are, its output
+in the log. It shows no save warning, and the settings of such a wrapp have
+no `GameEngine`: older readers' engines can't say it, so the launch does.
+WrappPuppeteer's `CoreTestModule` finds and ends it by its path.
 
 ## Wine's desktop
 

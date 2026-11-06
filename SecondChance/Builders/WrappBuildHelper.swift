@@ -189,9 +189,12 @@ class WrappBuildHelper {
         try updatedData.write(to: infoPlistPath)
 
         // What the wrapp reads about its game when it starts. Its settings
-        // still name the composition by its engine, as every wrapp's have.
-        let composition = composition ?? gameInfo.composition
-        guard let engine = composition.legacyEngine else { throw WrappBuildError.unsupportedEngine }
+        // still name the composition by its engine, as every wrapp's have,
+        // when it has one; a composition with none (a program the core
+        // starts) is read from the recorded launch, which it must have.
+        let composition = composition ?? launch.map(Composition.init(launch:)) ?? gameInfo.composition
+        let engine = composition.legacyEngine
+        if engine == nil, launch == nil { throw WrappBuildError.unsupportedEngine }
         let settings = WrappSettings(
             gameExePath: gameExePath, engine: engine, gameSlug: gameInfo.id,
             source: source, installerDir: installerDir, steamAppID: steamID, steamLaunchMode: steamLaunchMode,
@@ -199,7 +202,7 @@ class WrappBuildHelper {
             recordedLaunch: launch
         )
         try settings.write(to: WrappLayout(app: wrappPath))
-        logger.notice("Created AppSettings.plist with engine: \(settings.engine.rawValue)")
+        logger.notice("Created AppSettings.plist for \(composition)")
 
         // A build that ran Wine has a prefix with drives; one that didn't (a
         // download ScummVM runs) has a bare C: drive, and nothing to point.
@@ -440,7 +443,7 @@ class WrappBuildHelper {
         // bundle names the wrapp's bundle id. Checking the bundle runs ajv:
         // off the main thread.
         let edition = edition ?? Self.edition(of: source)
-        let slug = gameInfo.id, lockComposition = composition ?? gameInfo.composition
+        let slug = gameInfo.id, lockComposition = composition ?? launch.map(Composition.init(launch:)) ?? gameInfo.composition
         var lock = try await Blocking.run {
             try ShippedBundles.lock(forGame: slug, edition: edition, source: source, composition: lockComposition)
         }
@@ -457,7 +460,7 @@ class WrappBuildHelper {
         )
         // A program whose launch has no Wine (a ScummVM game whose data is in
         // the app) keeps no prefix: what was built in one isn't the app's.
-        if let launch, !(composition ?? gameInfo.composition).has(.wine), launch.launcher() != .wine {
+        if let launch, !(composition ?? Composition(launch: launch)).has(.wine), launch.launcher() != .wine {
             await removeQuietly(WrappLayout(app: wrappPath).prefix, what: "the Wine prefix, which the game doesn't use")
         }
         try lock.write(to: WrappLayout(app: wrappPath))

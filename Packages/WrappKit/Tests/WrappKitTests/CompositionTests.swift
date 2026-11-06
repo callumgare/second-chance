@@ -23,6 +23,15 @@ struct CompositionTests {
         }
     }
 
+    @Test("With no launcher the core starts the program: no modules, no engine, tagged core")
+    func theCoreStartsAProgram() {
+        let core = Composition(launcher: nil)
+        #expect(core.modules.isEmpty)
+        #expect(core.legacyEngine == nil)
+        #expect(core.engineTag == "core")
+        #expect(core.description == "core")
+    }
+
     @Test("Steam brings Wine, before itself, once")
     func dependenciesComeFirstAndOnce() {
         #expect(Composition(launcher: .steam, services: [.steam]).modules == [.wine, .steam])

@@ -331,7 +331,8 @@ The rules that keep it working:
   ([docs/wrapp-build.md](docs/wrapp-build.md#the-runner)).
 - **`Composition`** (`WrappModules`, in `Packages/WrappKit`): the modules a
   wrapp runs — the one that starts the game (`launcher`: `wine`, `scummvm`,
-  `dosbox`, `steam` or `big-fish`) and the services started before it — read from a wrapp's
+  `dosbox`, `steam` or `big-fish`; nil when the core starts a program the app
+  carries) and the services started before it — read from a wrapp's
   settings or a game's `GameInfo.GameEngine`, which it replaces as the
   question every process asks: `composition.has(.wine)`, `launcher ==
   .steam`, never the engine's raw values. Each module does its own part in
