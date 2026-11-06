@@ -477,6 +477,9 @@ nonisolated final class RemoteStepContext: StepContext {
 
     func tree(ofStage name: String) -> URL? { waiting("tree", Named(name: name), as: Path.self)?.path.map(URL.init(fileURLWithPath:)) }
     func file(_ fullForm: String) -> URL? { waiting("file", Named(name: fullForm), as: Path.self)?.path.map(URL.init(fileURLWithPath:)) }
+    func location(of fullForm: String) -> URL? {
+        waiting("location", Named(name: fullForm), as: Path.self)?.path.map(URL.init(fileURLWithPath:))
+    }
     func moduleFile(_ module: String, _ path: String) -> URL? {
         waiting("moduleFile", ModuleFile(module: module, path: path), as: Path.self)?.path.map(URL.init(fileURLWithPath:))
     }

@@ -180,6 +180,7 @@ public nonisolated enum WrappfileMigration {
     public static func migrate(_ tree: WrappfileSyntaxTree) -> WrappfileSyntaxTree {
         var migrated = tree
         var stores: [String] = []
+        var stage = StageModules()
         migrated.nodes = tree.nodes.map { node in
             guard case .instruction(var lines) = node else { return node }
             for index in lines.indices {
@@ -189,9 +190,65 @@ public nonisolated enum WrappfileMigration {
                 lines[0].code = launch
                 if !stores.contains(store) { stores.append(store) }
             }
+            stage.read(lines[0].code)
+            if stage.uses("scummvm") { lines[0].code = migrateScummVMLaunch(lines[0].code) }
             return .instruction(lines)
         }
         return declaring(stores, in: migrated)
+    }
+
+    /// The modules each stage uses, as far as a migration needs to know:
+    /// those its `USE`s name, its module's (`FROM --module=<id>@<v> <stage>`)
+    /// and those of the stage it's built from.
+    struct StageModules {
+        private var named: [String: Set<String>] = [:]
+        private var current: Set<String> = []
+        private var name: String?
+
+        func uses(_ module: String) -> Bool { current.contains(module) }
+
+        mutating func read(_ code: String) {
+            let words = code.split(separator: " ").map(String.init)
+            switch WrappfileFormatter.keyword(code) {
+            case "FROM":
+                var modules: Set<String> = []
+                var operands: [String] = []
+                var index = 1
+                while index < words.count {
+                    let word = words[index]
+                    if word.lowercased().hasPrefix("--module=") {
+                        modules.insert(Self.id(String(word.dropFirst("--module=".count))))
+                    } else if !word.hasPrefix("--") {
+                        operands.append(word)
+                    }
+                    index += 1
+                }
+                if let base = operands.first { modules.formUnion(named[base] ?? []) }
+                current = modules
+                name = operands.count >= 3 && operands[1].uppercased() == "AS" ? operands[2] : nil
+            case "USE":
+                for word in words.dropFirst() where !word.hasPrefix("--") { current.insert(Self.id(word)) }
+            default:
+                return
+            }
+            if let name { named[name] = current }
+        }
+
+        /// A module's id without its version: `wine` of `wine@10`.
+        private static func id(_ word: String) -> String { String(word.prefix { $0 != "@" }) }
+    }
+
+    /// A `LAUNCH` of a bare `/…` in a stage that uses scummvm as ScummVM's
+    /// full form, `scummvm:/…`: a bare path is the core's now, and ScummVM's
+    /// path type has no short form.
+    static func migrateScummVMLaunch(_ code: String) -> String {
+        guard WrappfileFormatter.keyword(code) == "LAUNCH" else { return code }
+        var words = code.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
+        guard let keyword = words.firstIndex(where: { !$0.isEmpty }),
+              let program = words.indices.dropFirst(keyword + 1).first(where: { !words[$0].isEmpty && !words[$0].hasPrefix("--") }),
+              words[program].hasPrefix("/"), !words[program].hasPrefix("//") else { return code }
+        words[program] = "scummvm:" + words[program]
+        return words.joined(separator: " ")
     }
 
     /// A `VOLUME` as the `LAUNCH` that mounts its store now, and the store

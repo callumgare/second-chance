@@ -54,7 +54,7 @@ final class ScummVMRuntime: GameStarting {
         // built before launches were recorded, in its prefix, whose copy the
         // wrapp may be running from.
         let dataDir = config.launchRecorded
-            ? (layout.location(config.launch.path)?.path ?? config.launch.path)
+            ? (layout.location(config.launch.program, places: .shipped)?.path ?? config.launch.path)
             : WrappLayout.onDriveC(config.gameInstallerDir, in: config.wine.driveC).path
         // The game its launch names (`nancy:nancy7`), or for an older wrapp,
         // whichever ScummVM detects in the folder.

@@ -242,7 +242,7 @@ final class UpdateWrappBuilder {
     private func moveScummVMData(of settings: WrappSettings, to launch: RecordedLaunch, in wrappPath: URL) async throws {
         let layout = WrappLayout(app: wrappPath)
         let data = layout.onDriveC(settings.installerDir)
-        guard let destination = layout.location(launch.path) else {
+        guard let destination = layout.location(launch.program, places: helper.places) else {
             throw WrappBuildError.buildRecipeProblem("the launch's \(launch.path) has no place in the app")
         }
         guard FileManager.default.fileExists(atPath: data.path) else {
@@ -262,7 +262,7 @@ final class UpdateWrappBuilder {
     private func runFileCopies(_ plan: BuildPlan, wrappPath: URL) async throws {
         let layout = WrappLayout(app: wrappPath)
         for step in plan.stages.flatMap(\.steps) where WrappBuildHelper.isAppStep(step) && step.option("from") == nil {
-            guard let file = plan.file(step.arguments[0]), let destination = layout.location(step.arguments[1]) else { continue }
+            guard let file = plan.file(step.arguments[0]), let destination = layout.location(step.arguments[1], places: helper.places) else { continue }
             try helper.copyFile(file, to: destination)
         }
     }

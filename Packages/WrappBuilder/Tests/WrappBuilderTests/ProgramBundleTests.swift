@@ -1,6 +1,11 @@
 import Foundation
+import BigFishKit
+import DOSBoxKit
 import GameCatalog
+import ScummVMKit
 import Testing
+import WineKit
+import WrappModules
 @testable import WrappBuilder
 
 /// The repo's root, from this file's place in it.
@@ -8,6 +13,9 @@ nonisolated let repoRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     .deletingLastPathComponent().deletingLastPathComponent()
 nonisolated let bundlesRoot = repoRoot.appendingPathComponent("Bundles")
+
+/// Where the shipped modules' paths are: their kits', as a host gives them.
+nonisolated let shippedPlaces = PathPlaces([WinePaths.self, DOSBoxPaths.self, ScummVMPaths.self, BigFishPaths.self])
 
 /// Every module in the repo's Modules/.
 nonisolated func shippedModules() throws -> [ModuleFolder] {
@@ -29,14 +37,14 @@ struct ProgramBundleTests {
     @Test func theCatalogueIsWhatTheBundlesMake() throws {
         let loader = try ProgramBundleLoader(root: bundlesRoot, modules: try shippedModules())
         let bundles = try loader.loadAll().get()
-        let generated = GameCatalogSource.source(for: try GameCatalogSource.games(from: bundles, modules: try shippedModules()))
+        let generated = GameCatalogSource.source(for: try GameCatalogSource.games(from: bundles, modules: try shippedModules(), places: shippedPlaces))
         let checkedIn = try String(contentsOf: repoRoot.appendingPathComponent(GameCatalogSource.path), encoding: .utf8)
         #expect(generated == checkedIn, "\(GameCatalogSource.path) is stale: run `sc generate`")
     }
 
     @Test func theCatalogueRoundTripsThroughTheSourceItIsMadeOf() throws {
         let loader = try ProgramBundleLoader(root: bundlesRoot, modules: try shippedModules())
-        let games = try GameCatalogSource.games(from: try loader.loadAll().get(), modules: try shippedModules())
+        let games = try GameCatalogSource.games(from: try loader.loadAll().get(), modules: try shippedModules(), places: shippedPlaces)
         #expect(games == GameInfoProvider.shared.allGames())
     }
 

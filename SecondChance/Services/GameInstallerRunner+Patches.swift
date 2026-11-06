@@ -78,15 +78,11 @@ extension GameInstallerRunner {
 
     // MARK: - Files
 
-    /// A location in full form as a path on this Mac: a `wine:` path in the
-    /// prefix's drive C, or a bare path in the app's `Contents/`.
+    /// A location in full form (planning wrote it so) as a path on this Mac,
+    /// where its module places it: a `wine:C:/…` path in the prefix's drive
+    /// C, a bare path in the app's `Contents/`.
     func hostLocation(_ location: String, in wrappPath: URL) -> URL? {
-        let layout = WrappLayout(app: wrappPath)
-        var path = location
-        if path.hasPrefix("wine:") { path = String(path.dropFirst("wine:".count)) }
-        if path.hasPrefix("C:/") { return layout.onDriveC(String(path.dropFirst(2))) }
-        if location.hasPrefix("/") { return wrappPath.appendingPathComponent("Contents").appendingPathComponent(location) }
-        return nil
+        WrappLayout(app: wrappPath).location(location, places: .shipped)
     }
 
     /// The Windows path (`C:\\…`) of a file inside the prefix's `drive_c`.
@@ -100,7 +96,7 @@ extension GameInstallerRunner {
 
     /// `C:/a/b` as `C:\a\b`; anything else as it is.
     nonisolated static func windowsStyle(_ argument: String) -> String {
-        guard PathTypeRegistry.shortForm(of: argument) == .driveLetter else { return argument }
+        guard argument.range(of: #"^[A-Za-z]:([/\\].*)?$"#, options: .regularExpression) != nil else { return argument }
         return argument.replacingOccurrences(of: "/", with: "\\")
     }
 

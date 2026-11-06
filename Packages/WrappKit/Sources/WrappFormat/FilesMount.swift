@@ -9,6 +9,7 @@
 
 import Darwin
 import Foundation
+import WrappModules
 
 /// The store's files linked into `folder` before the program starts, and
 /// new ones moved into the store after it ends. Each file is matched by
@@ -28,12 +29,14 @@ nonisolated public struct FilesMount: Sendable, Equatable {
     }
 
     /// The `files=` mounts `launch` records, in the app at `app`, each
-    /// with the app's own store of its name in `userFiles`. One whose
-    /// target has no place in the app is left out (the build checks it
-    /// has, `WrappBuildHelper.checkLaunchMounts`).
-    public static func mounts(of launch: RecordedLaunch, app: WrappLayout, userFiles: UserFilesLayout) -> [FilesMount] {
+    /// with the app's own store of its name in `userFiles`, their targets
+    /// placed by the modules of `places`. One whose target has no place in
+    /// the app is left out (the build checks it has,
+    /// `WrappBuildHelper.checkLaunchMounts`).
+    public static func mounts(of launch: RecordedLaunch, app: WrappLayout, userFiles: UserFilesLayout,
+                              places: PathPlaces) -> [FilesMount] {
         launch.mounts.compactMap { mount in
-            guard let patterns = mount.filePatterns, let folder = app.location(mount.target) else { return nil }
+            guard let patterns = mount.filePatterns, let folder = app.location(mount.target, places: places) else { return nil }
             let owner = String(mount.store.prefix { $0 != ":" })
             return FilesMount(folder: folder, store: userFiles.store(owner: owner, name: mount.name), patterns: patterns)
         }

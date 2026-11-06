@@ -8,6 +8,7 @@
 import Foundation
 import GameCatalog
 import Logging
+import WrappModules
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.ExtraBundles")
 
@@ -68,13 +69,13 @@ public nonisolated enum ExtraBundles {
     /// Adds the extra bundles' games to `GameInfoProvider`, as
     /// `sc generate` would have made them, so everything that asks the
     /// catalogue for a game finds them. Call once, at start-up.
-    public static func addGames(shippedRoot: URL, modules: [ModuleFolder],
+    public static func addGames(shippedRoot: URL, modules: [ModuleFolder], places: PathPlaces,
                                 environment: [String: String] = ProcessInfo.processInfo.environment,
                                 to provider: GameInfoProvider = .shared) {
         let bundles = load(shippedRoot: shippedRoot, modules: modules, environment: environment)
         guard !bundles.isEmpty else { return }
         do {
-            provider.add(try GameCatalogSource.games(from: bundles, modules: modules))
+            provider.add(try GameCatalogSource.games(from: bundles, modules: modules, places: places))
         } catch {
             logger.error("Couldn't add the extra bundles' games: \(error)")
         }

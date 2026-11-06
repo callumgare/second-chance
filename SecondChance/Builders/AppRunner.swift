@@ -42,6 +42,7 @@ enum AppRunner {
             },
             providedFile: { fullForm in fullForm == "module:installer:/autoit" ? autoIt : nil },
             engine: { module, version in try await helper.engine(module, version: version) },
+            pathTypes: ModuleSteps.pathTypes(), places: helper.places,
             moduleFolders: ModuleSteps.moduleFolders())
         // Layers (docs/wrapp-build.md#the-layer-cache): the store builds
         // share, with the policy `SECOND_CHANCE_LAYER_CACHE` sets, a module's

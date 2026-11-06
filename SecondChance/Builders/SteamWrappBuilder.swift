@@ -528,7 +528,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         let layout = WrappLayout(app: wrappPath)
         let steamGameDir = layout.prefix.appendingPathComponent(SteamClient.steamDirInPrefix)
             .appendingPathComponent("steamapps/common").appendingPathComponent(installDir)
-        guard let into = step.option("into"), let link = layout.location(into) else {
+        guard let into = step.option("into"), let link = layout.location(into, places: helper.places) else {
             throw WrappBuildError.buildRecipeProblem("\(step.origin): STEAM.INSTALL's --into isn't in the app")
         }
         guard FileManager.default.fileExists(atPath: steamGameDir.path) else {
@@ -794,7 +794,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         let layout = WrappLayout(app: wrappPath)
         let files = FileManager.default
         for install in plan.bundleSteps where install.module == "steam" && install.instruction == "INSTALL" {
-            guard let into = install.option("into"), let link = layout.location(into),
+            guard let into = install.option("into"), let link = layout.location(into, places: helper.places),
                   let target = try? files.destinationOfSymbolicLink(atPath: link.path) else { continue }
             let gameDir = link.deletingLastPathComponent().appendingPathComponent(target).standardizedFileURL
             try files.removeItem(at: link)

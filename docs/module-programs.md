@@ -42,9 +42,10 @@ build:
   every step key it carries out, so a new build of the program means fresh
   layers.
 
-What an added module still can't do: add a path type, run in the wrapp or
-in WrappPuppeteer, be a source, or prepare an engine. Its program runs only
-during a build.
+What an added module still can't do: give its path types a place in the
+app (it may declare them, and builds plan and check them, but only the
+shipped modules' kits place paths), run in the wrapp or in WrappPuppeteer,
+be a source, or prepare an engine. Its program runs only during a build.
 
 ## How a build runs it
 

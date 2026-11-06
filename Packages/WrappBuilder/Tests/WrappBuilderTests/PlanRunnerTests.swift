@@ -52,7 +52,8 @@ struct PlanRunnerTests {
         let configuration = RunnerConfiguration(
             executors: ["fake": executor], inputs: GivenInputs(inputs), emitter: recorder, ask: { _ in answer },
             fetch: { _, _, _ in throw StepFailure.failed("no downloads here") },
-            pathTypes: PathTypeRegistry([PathType(name: "fake", module: "fake", roles: [.program], shortForm: nil)]))
+            pathTypes: PathTypeRegistry([PathType(name: "fake", module: "fake", roles: [.program], shortForm: nil)]),
+            places: shippedPlaces)
         try await PlanRunner(plan: plan, configuration: configuration).run(in: tree)
     }
 

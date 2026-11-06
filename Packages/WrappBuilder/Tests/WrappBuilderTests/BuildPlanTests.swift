@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import WrappBuilder
+import WrappModules
 import WrappFormat
 
 struct BuildPlanTests {
@@ -70,7 +71,7 @@ struct BuildPlanTests {
         #expect(scarlet.target?.steps.map(\.description) == ["COPY --from=input:disc-1 . /SharedSupport/game/"])
         #expect(scarlet.launch == RecordedLaunch(program: "scummvm:/SharedSupport/game/", arguments: ["nancy:nancy6"], mounts: [
             .init(store: "app:scummvm-saves", target: "scummvm:saves/"), .init(store: "app:scummvm-settings", target: "scummvm:settings/"),
-        ], format: RecordedLaunch.currentFormat))
+        ], format: RecordedLaunch.currentFormat, module: .scummvm))
         #expect(scarlet.icon == "/Resources/nancy-drew.icns")
     }
 

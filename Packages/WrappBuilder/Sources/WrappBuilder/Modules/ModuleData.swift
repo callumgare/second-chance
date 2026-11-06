@@ -7,6 +7,7 @@
 
 import CryptoKit
 import Foundation
+import WrappModules
 import Logging
 
 private nonisolated let addedLogger = Logger(label: "au.gare.callum.second-chance.SecondChance.AddedModules")
@@ -85,6 +86,21 @@ public nonisolated struct ModuleFolder: Sendable {
 
     /// A file the module carries, by its path in the module's folder.
     public func file(_ path: String) -> URL { folder.appendingPathComponent(path) }
+
+    /// The path types it declares, as its own.
+    public var pathTypes: [PathType] {
+        declarations.pathTypes.map {
+            PathType(name: $0.name, module: ModuleID(rawValue: manifest.id), roles: $0.roles, shortForm: $0.shortForm)
+        }
+    }
+}
+
+nonisolated extension PathTypeRegistry {
+    /// The path types `modules` declare: all a build knows of. A module
+    /// someone adds brings its own as a shipped one does.
+    public init(modules: [ModuleFolder]) {
+        self.init(modules.flatMap(\.pathTypes))
+    }
 }
 
 /// Loads modules from a modules folder (`Modules/` in the repo, the app's

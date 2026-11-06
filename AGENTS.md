@@ -246,7 +246,11 @@ build, and its **kit**, what other processes use of it. The wine module's
 (`WineModule`) has `WineKit`, the Wine library, which `SecondChanceKit`
 depends on and re-exports, and `WineExecutor`, with winetricks, the
 in-process helpers' source and their build script; the nancy-drew module's
-has `NancyDrewExecutor`, and the scummvm module's `ScummVMExecutor`. An executor needs nothing of Second Chance's: it
+has `NancyDrewExecutor`, the scummvm module's `ScummVMExecutor` and
+`ScummVMKit`, and the dosbox and big-fish modules' `DOSBoxKit` and
+`BigFishKit`. Each kit answers where its module's path types' paths are
+(`ModulePaths`, [docs/wrappfile.md](docs/wrappfile.md#path-types)), which
+`SecondChanceKit` gathers as `PathPlaces.shipped`. An executor needs nothing of Second Chance's: it
 is written against `WrappKit`'s `WrappModuleKit` ([docs/modules.md](docs/modules.md#executors)).
 
 `Packages/GameCatalog/` is a package of its own: `GameInfo`, the engine and

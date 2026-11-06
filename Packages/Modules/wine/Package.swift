@@ -40,6 +40,7 @@ let package = Package(
                 .product(name: "WrappLogging", package: "WrappKit"),
                 .product(name: "ProcessKit", package: "WrappKit"),
                 .product(name: "WrappFormat", package: "WrappKit"),
+                .product(name: "WrappModules", package: "WrappKit"),
                 .product(name: "Logging", package: "swift-log"),
             ],
             swiftSettings: swiftSettings

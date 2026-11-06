@@ -91,17 +91,17 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
             let wrappPath = try await run(plan, inputs: [chosen.input.id: unpacked], folder: folder, game: game, input: input)
             try await Blocking.run { try WrappAssembler.layIn(template, into: wrappPath) }
             // What the wrapp starts, as the plan's launch says: it must be
-            // there. The settings' older keys name a program on a C: drive,
-            // which a ScummVM game's data in the app isn't.
+            // there, where its module places it. The settings' older keys
+            // name a program on a drive, which a ScummVM game's data in the
+            // app isn't.
             let layout = WrappLayout(app: wrappPath)
             guard let launch = plan.launch else { throw WrappBuildError.gameExecutableNotFound }
-            let launcher = launch.launcher()
-            let place = launcher == .scummvm ? launch.path : launch.program
-            guard let program = layout.location(place), FileManager.default.fileExists(atPath: program.path) else {
+            guard let program = layout.location(launch.program, places: helper.places),
+                  FileManager.default.fileExists(atPath: program.path) else {
                 throw WrappBuildError.gameExecutableNotFound
             }
-            let exe = launcher == .scummvm ? "" : String(launch.path.dropFirst(2))
-            await bus.publishWrappBuild(.gameExeDetected(path: launcher == .scummvm ? "/SharedSupport/game" : exe, gameInfo: game))
+            let exe = launch.legacyProgramPath(places: helper.places) ?? ""
+            await bus.publishWrappBuild(.gameExeDetected(path: launch.shownPath(places: helper.places), gameInfo: game))
 
             // Why it was free to have, for anyone who wants to know later,
             // with the licence's own words when it has some.

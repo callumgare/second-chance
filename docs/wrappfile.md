@@ -438,9 +438,11 @@ nancy-drew there would bring in Wine, which it depends on, and a ScummVM
 app keeps no Wine.
 
 - **`LAUNCH`'s program's path type is what starts it**: `C:/…/Game.exe` in a
-  Wine stage is Wine's, `/SharedSupport/game/` ScummVM's (with the game's id
-  after it: `nancy:nancy7`), `C:/TYRIAN/TYRIAN2K.EXE` in a DOSBox stage
-  DOSBox's. Like `RUN`, it takes options only before the program.
+  Wine stage is Wine's, `scummvm:/SharedSupport/game/` ScummVM's (with the
+  game's id after it: `nancy:nancy7`), `C:/TYRIAN/TYRIAN2K.EXE` in a DOSBox
+  stage DOSBox's. The build records which module that is with the launch, and
+  the app starts it with that module. Like `RUN`, it takes options only before
+  the program.
 - **A Wine launch says what the program draws with**, `--wine.graphics=direct-draw`,
   `direct-3d` or `unknown` (neither: GDI), which arms the app's helpers
   ([wine-in-process-helpers.md](wine-in-process-helpers.md)). A game whose
@@ -663,29 +665,40 @@ and the app never see an alias. Mount types themselves are the core's.
 
 A path's type says which engine handles it, and so whether a module of the
 stage can: a place to copy to (a **location**) or something to run (a
-**program**). Each module registers its own, in `PathTypeRegistry`
-(`Packages/WrappKit/Sources/WrappModules/PathTypes.swift`), which the
-builder and the app both read:
+**program**). The builder knows none of its own: each module declares its
+types in its `module.yaml` (`build: path-types:`,
+[modules.md](modules.md#what-a-module-declares)), and a build learns them
+from the modules it loads. The shipped modules declare:
 
 | Path type | Module | Roles | Example | Short form |
 | --- | --- | --- | --- | --- |
 | `wine:` | wine | location, program | `wine:C:/Nancy Drew/Game.exe` | a drive-letter path, `C:/…` |
 | `dosbox:` | dosbox | location, program | `dosbox:C:/TYRIAN/TYRIAN2K.EXE` | a drive-letter path, `C:/…` |
-| `scummvm:` | scummvm | program, location | `scummvm:/SharedSupport/game/`, `scummvm:saves/` | a folder (`/…/`), as a program |
+| `scummvm:` | scummvm | program, location | `scummvm:/SharedSupport/game/`, `scummvm:saves/` | none |
 | `big-fish:` | big-fish | program | `big-fish:C:/…/LaunchGame.bfg` | none |
 | `steam:` | steam | program | `steam://rungameid/572740` | none |
 
 - **A type is named after the engine that handles it**, never with one
   letter, so `C:` is always a drive.
+- **A short form is its module's regular expression** on the whole path,
+  claimed in every role the type has, in a stage that uses the module.
 - **Every short form is written in full when a build is planned**, so `sc
   bundle plan`, layer keys and the app always say which type took a path.
-- **Short forms clash only within a stage.** Wine and DOSBox both claim
-  `C:/…`; a stage with both writes `wine:C:/…` or `dosbox:C:/…`.
+- **When short forms overlap, the module the stage used last wins.** Wine
+  and DOSBox both claim `C:/…`: in a stage that `USE`s wine and then dosbox,
+  `C:/x` is `dosbox:C:/x`. The modules of the stage it's built from (`FROM
+  <stage>`) count as used before its own `USE`s. Write the full form to say
+  otherwise.
 - **A path starting `/` with no type is in the app**: `/` is its
-  `Contents/`, and `/../` its top level, never higher. As a program, `/…/` is
-  ScummVM's short form, since a program always runs in an engine.
+  `Contents/`, and `/../` its top level, never higher. No module claims it,
+  so a ScummVM game's folder is written in full, `scummvm:/SharedSupport/game/`
+  (`wrapp-builder fmt --migrate` rewrites a bare `LAUNCH /…` in a stage that
+  uses scummvm).
 - **What follows a type's prefix is its module's to interpret**:
-  `steam://rungameid/…` is a URL.
+  `steam://rungameid/…` is a URL. Where a path is in the app, and how it's
+  described in a message, is its module's code (`ModulePaths`, in its kit:
+  `WinePaths`, `DOSBoxPaths`, `ScummVMPaths`, `BigFishPaths`), which each
+  process that places paths carries (`PathPlaces`).
 
 ## Checking
 
@@ -696,8 +709,9 @@ check every Wrappfile against its manifest and the modules' declarations
 - every instruction is the core's or one of a module the stage has, with
   options it takes (a module's `--<module>.<option>` and mount fields
   included) and the right number of arguments;
-- every path is in a type a module of the stage registers, in a role the
-  type has, and no short form is claimed by two of the stage's modules. A
+- every path is in a type a module of the stage declares, in a role the
+  type has; a short form two of the stage's modules claim is the last-used
+  one's. A
   `COPY --from=<stage>` source is checked against the stage it's copied
   from. A path a function writes, or one a `${…}` starts, is checked when the
   build is planned, in the stage that has it;

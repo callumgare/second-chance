@@ -159,14 +159,15 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             await emitter.finish()
             await isoMounter.unmountAll()
             try await Blocking.run { try WrappAssembler.layIn(template, into: wrappPath) }
-            if launch.launcher() == .scummvm {
-                await bus.publishWrappBuild(.gameExeDetected(path: "/SharedSupport/game", gameInfo: gameInfo))
-            } else if !executor.installed && !installers.installed {
-                // An install restored from a layer, which never said.
-                await bus.publishWrappBuild(.gameExeDetected(path: String(launch.path.dropFirst(2)), gameInfo: gameInfo))
+            // A program on a drive was announced by its install, unless that
+            // was restored from a layer, which never said; any other (a
+            // ScummVM game's folder) is announced now.
+            let onDrive = launch.legacyProgramPath(places: helper.places)
+            if onDrive == nil || (!executor.installed && !installers.installed) {
+                await bus.publishWrappBuild(.gameExeDetected(path: launch.shownPath(places: helper.places), gameInfo: gameInfo))
             }
             let finalPath = try await finish(wrappPath: wrappPath, gameInfo: gameInfo,
-                                             gameExePath: launch.launcher() == .scummvm ? "" : String(launch.path.dropFirst(2)),
+                                             gameExePath: onDrive ?? "",
                                              edition: edition, plan: plan, input: input)
             await helper.removeTempWrapp(folder)
             return finalPath

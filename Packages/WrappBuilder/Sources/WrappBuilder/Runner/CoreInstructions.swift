@@ -51,7 +51,7 @@ public nonisolated enum CoreInstructions {
                 guard let other = context.tree(ofStage: from) else {
                     throw StepFailure.recipe("\(step.origin): there's no stage \(from) to copy from")
                 }
-                guard let found = WrappLayout(app: other).location(step.arguments[0]) else {
+                guard let found = WrappLayout(app: other).location(step.arguments[0], places: context.configuration.places) else {
                     throw StepFailure.recipe("\(step.origin): \(step.arguments[0]) has no place in \(from)")
                 }
                 source = found

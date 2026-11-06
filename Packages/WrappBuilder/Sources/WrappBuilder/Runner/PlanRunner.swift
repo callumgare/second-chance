@@ -34,7 +34,12 @@ public nonisolated struct RunnerConfiguration: Sendable {
     /// An engine, by module and version, from the engine store: what an
     /// `ENGINE` step installs.
     public var engine: @Sendable (String, String) async throws -> EngineStore.Engine
+    /// The path types of the modules the build loaded (`PathTypeRegistry(modules:)`):
+    /// which module's engine runs a `RUN`'s program.
     public var pathTypes: PathTypeRegistry
+    /// The modules' answers for where their path types' paths are
+    /// (`ModulePaths`, each module's kit's): what the host carries.
+    public var places: PathPlaces
     /// Each module's folder, by id, for what its executor reads of its own.
     public var moduleFolders: [String: URL]
     /// Where layers are kept, and which (decisions 12 to 15 of the builders
@@ -68,7 +73,8 @@ public nonisolated struct RunnerConfiguration: Sendable {
                 engine: @escaping @Sendable (String, String) async throws -> EngineStore.Engine = { module, _ in
                     throw StepFailure.recipe("this build has no engine store to install \(module) from")
                 },
-                pathTypes: PathTypeRegistry = .shipped, moduleFolders: [String: URL] = [:]) {
+                pathTypes: PathTypeRegistry = PathTypeRegistry([]), places: PathPlaces = .none,
+                moduleFolders: [String: URL] = [:]) {
         self.moduleFolders = moduleFolders
         self.executors = executors
         self.inputs = inputs
@@ -79,6 +85,7 @@ public nonisolated struct RunnerConfiguration: Sendable {
         self.moduleStage = moduleStage
         self.engine = engine
         self.pathTypes = pathTypes
+        self.places = places
     }
 }
 
@@ -212,7 +219,7 @@ public nonisolated struct PlanRunner: Sendable {
         let executors = configuration.executors
         let watchContext = context
         let signals = StepSignals(step: step, plan: plan, listeners: listeners.all, emitter: emitter,
-                                  resolve: { WrappLayout(app: tree).location($0) },
+                                  resolve: { [places = configuration.places] in WrappLayout(app: tree).location($0, places: places) },
                                   moduleWatch: { id, name, value in executors[id]?.watch(name, value: value, in: watchContext) })
         context.signals = signals
         signals.start()

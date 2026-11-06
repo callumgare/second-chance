@@ -232,16 +232,16 @@ public nonisolated struct BuildPlanner {
         public let description: String
     }
 
-    /// `pathTypes` are the shipped modules' unless a test gives its own.
+    /// `pathTypes` are those `modules` declare unless a test gives its own.
     public init(bundle: ProgramBundle, wrappfile: Wrappfile, modules: [ModuleFolder],
-                pathTypes: PathTypeRegistry = .shipped,
+                pathTypes: PathTypeRegistry? = nil,
                 declarations: @escaping @Sendable (ModuleFolder) -> ModuleDeclarations = { $0.declarations },
                 hostPaths: HostPaths? = nil) {
         self.hostPaths = hostPaths ?? HostPaths(allowed: bundle.manifest.allowPaths ?? [])
         self.bundle = bundle
         self.wrappfile = wrappfile
         self.modules = Dictionary(modules.map { ($0.manifest.id.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
-        self.pathTypes = pathTypes
+        self.pathTypes = pathTypes ?? PathTypeRegistry(modules: modules)
         self.declarations = declarations
         stores = Result { () throws(StoreDeclarations.Problem) -> StoreDeclarations in
             var all = try StoreDeclarations.parse(wrappfile.storeDeclarations, module: nil, origin: "Wrappfile")
@@ -531,6 +531,10 @@ public nonisolated struct BuildPlanner {
     /// `FROM` as the modules are: its launch, the stores it mounts, and `APP`.
     struct StageModules {
         var aliases: [String: String] = [:]
+        /// The modules in the order the stage used them, those it was built
+        /// from first: of short forms that more than one claims, the last's
+        /// wins.
+        var order: [String] = []
         var versions: [String: String] = [:]
         var launch: RecordedLaunch?
         var mounts: [RecordedLaunch.Mount] = []
@@ -599,7 +603,7 @@ public nonisolated struct BuildPlanner {
                 return false
             }
 
-            var moduleIDs: Set<ModuleID> { Set(modules.aliases.values.map(ModuleID.init(rawValue:))) }
+            var moduleIDs: [ModuleID] { modules.order.map(ModuleID.init(rawValue:)) }
         }
 
         /// The file's `INPUT`s, `CONST`s and `VAR`s, in order.
@@ -721,6 +725,9 @@ public nonisolated struct BuildPlanner {
                     try addModule(dependencyID, constraint: dependencyConstraint, as: nil, to: &scope, origin: origin)
                 }
             }
+            // Used now: after what it needs, and after any earlier use of it.
+            scope.modules.order.removeAll { $0 == id }
+            scope.modules.order.append(id)
         }
 
         func expand(_ body: [Step], scope: inout Scope, origin: String, into steps: inout [PlannedStep]) throws(PlanError) {
@@ -845,7 +852,7 @@ public nonisolated struct BuildPlanner {
                             arguments.append(value)
                             continue
                         }
-                        let modules = Set(copied.aliases.values.map(ModuleID.init(rawValue:)))
+                        let modules = copied.order.map(ModuleID.init(rawValue:))
                         arguments.append(try fullForm(value, role: .location, scope: scope, modules: modules, origin: at))
                         continue
                     }
@@ -1069,8 +1076,11 @@ public nonisolated struct BuildPlanner {
                         throw PlanError(description: "\(origin): --wine.fullscreen-setting=\(setting): \(error)")
                     }
                 }
+                // What starts it: the module whose path type its program is
+                // (by now in full form); none, the core's, for a bare one.
                 let launch = RecordedLaunch(program: program, arguments: Array(arguments.dropFirst()), environment: environment,
-                                            options: options, fallback: fallback, format: RecordedLaunch.currentFormat)
+                                            options: options, fallback: fallback, format: RecordedLaunch.currentFormat,
+                                            module: planner.pathTypes.split(program)?.type.module)
                 try checkLaunch(launch, origin: origin)
                 scope.modules.launch = launch
             default:
@@ -1189,7 +1199,7 @@ public nonisolated struct BuildPlanner {
 
         /// One of `LAUNCH`'s `--mount=`s: a store, where the program sees it,
         /// added to the stage's; or with `remove`, the store's taken off.
-        func recordMount(_ value: String, scope: inout Scope, modules: Set<ModuleID>, origin: String) throws(PlanError) {
+        func recordMount(_ value: String, scope: inout Scope, modules: [ModuleID], origin: String) throws(PlanError) {
             let fields = PlannedStep.fields(ofMount: try plannedMount(value, scope: scope, modules: modules, origin: origin))
             guard fields["type"] == "store", let store = fields["source"] else {
                 throw PlanError(description: "\(origin): a launch mounts stores: --mount=type=store,source=<store>,target=<path>")
@@ -1238,14 +1248,14 @@ public nonisolated struct BuildPlanner {
                     throw PlanError(description: "\(origin): \(what) says what it draws with: --wine.graphics=direct-draw, direct-3d or unknown")
                 }
             }
-            switch launch.launcher(planner.pathTypes) {
+            switch launch.launcher() {
             case .wine?:
                 try checkGraphics("a Wine launch")
             case .steam?, .bigFish?:
                 // Steam, or Big Fish's DRM, starts a Windows game in the app's
                 // Wine, so the launch says what it draws with too, and the
                 // program that's started.
-                let module = launch.launcher(planner.pathTypes)?.rawValue ?? ""
+                let module = launch.launcher()?.rawValue ?? ""
                 let what = module == "steam" ? "a Steam launch" : "a Big Fish launch"
                 try checkGraphics(what)
                 guard launch.options["\(module).exe"]?.hasPrefix("wine:") == true else {
@@ -1297,7 +1307,7 @@ public nonisolated struct BuildPlanner {
 
         /// A `--mount=` value with its fields' aliases made ids and its
         /// paths and files in full form, and a store's source its full name.
-        func plannedMount(_ value: String, scope: Scope, modules: Set<ModuleID>, origin: String) throws(PlanError) -> String {
+        func plannedMount(_ value: String, scope: Scope, modules: [ModuleID], origin: String) throws(PlanError) -> String {
             var fields: [String] = []
             let isStore = PlannedStep.fields(ofMount: value)["type"] == "store"
             for part in value.split(separator: ",", omittingEmptySubsequences: false) {
@@ -1334,7 +1344,7 @@ public nonisolated struct BuildPlanner {
         /// bundle plan`, layer keys and builders see, so each says which type
         /// took a path. The stage-dependent checks the checker can't make in a
         /// function's body are made here.
-        func fullForm(_ path: String, role: InstructionSpec.Role, scope: Scope, modules: Set<ModuleID>,
+        func fullForm(_ path: String, role: InstructionSpec.Role, scope: Scope, modules: [ModuleID],
                       origin: String) throws(PlanError) -> String {
             let pathRole: PathType.Role
             switch role {
@@ -1353,24 +1363,12 @@ public nonisolated struct BuildPlanner {
                 }
                 return path
             }
-            guard let form = PathTypeRegistry.shortForm(of: path) else { return path }
-            if form == .folder, pathRole == .location {
-                if WrappfileChecker.leavesTheApp(path) {
-                    throw PlanError(description: "\(origin): \(path): it goes above the app's top level")
-                }
-                return path
+            if let problem = WrappfileChecker.shortFormProblem(path, as: pathRole, modules: modules, types: planner.pathTypes) {
+                throw PlanError(description: "\(origin): \(path): \(problem)")
             }
-            let claiming = planner.pathTypes.claiming(form, as: pathRole, among: modules)
-            switch claiming.count {
-            case 1:
-                return claiming[0].fullForm(path)
-            case 0:
-                let uses = modules.map(\.rawValue).sorted().joined(separator: ", ")
-                let what = form == .driveLetter ? "\(path.prefix(2)) paths" : "a folder as a \(pathRole.rawValue)"
-                throw PlanError(description: "\(origin): \(path): no module of this stage handles \(what) (it uses \(uses))")
-            default:
-                throw PlanError(description: "\(origin): \(path): both \(claiming.map(\.name).joined(separator: " and ")) take it here; write it in full")
-            }
+            // The type of the module the stage used last that claims it; a
+            // bare `/…`, or what no module claims, stays as it is: the core's.
+            return planner.pathTypes.claiming(path, as: pathRole, among: modules)?.fullForm(path) ?? path
         }
 
         /// A file the build reads, in full form: a relative path is the

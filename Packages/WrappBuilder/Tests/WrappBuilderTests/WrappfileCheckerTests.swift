@@ -57,7 +57,7 @@ struct WrappfileCheckerTests {
          "line 9: RUN --mount type=volume isn't a mount type"),
         // Paths: a short form no module of the stage claims, or a type the stage hasn't.
         ("FROM prefix AS her-download", "FROM scratch AS other\nCOPY --from=${input.disc-1} . C:/x\nFROM prefix AS her-download",
-         "line 14: COPY C:/x: no module of this stage handles C: paths (it uses none)"),
+         "line 14: COPY C:/x: it's a path dosbox or wine takes, which the stage doesn't use (it uses none)"),
         ("USE installer", "USE installer\nRUN steam:x", "line 9: RUN steam:x: steam: paths are steam's, which the stage doesn't USE"),
         ("USE installer", "USE installer\nCOPY --from=${input.disc-1} . steam:x", "line 9: COPY steam:x: a steam: path isn't a location"),
         ("USE installer", "USE installer\nREMOVE /../../x", "line 9: REMOVE /../../x: it goes above the app's top level"),
@@ -142,16 +142,16 @@ struct WrappfileCheckerTests {
         #expect(found.warnings.contains { $0.contains("copy is a core instruction") })
     }
 
-    @Test("Two modules claiming one short form clash in a stage; the full form settles it")
-    func shortFormClash() throws {
+    @Test("Two modules claiming one short form is no clash: the stage's last USE takes it")
+    func shortFormOverlap() throws {
         let folder = bundlesRoot.appendingPathComponent("nancy-drew/old-clock")
         let loader = try ProgramBundleLoader(root: bundlesRoot, modules: try shippedModules())
         let manifest = try loader.load(folder).get().manifest
         let checker = WrappfileChecker(manifest: manifest, bundleFolder: folder, modules: try shippedModules())
-        let clash = try WrappfileParser.parse("FROM scratch AS x\nUSE wine\nUSE dosbox\nREMOVE C:/x")
-        #expect(checker.problems(clash).contains { $0.hasPrefix("line 4: REMOVE C:/x: both wine and dosbox take C: paths here") })
-        let full = try WrappfileParser.parse("FROM scratch AS x\nUSE wine\nUSE dosbox\nREMOVE dosbox:C:/x")
-        #expect(!checker.problems(full).contains { $0.contains("REMOVE") })
+        let both = try WrappfileParser.parse("FROM scratch AS x\nUSE wine\nUSE dosbox\nREMOVE C:/x")
+        #expect(!checker.problems(both).contains { $0.contains("REMOVE") })
+        let neither = try WrappfileParser.parse("FROM scratch AS x\nUSE scummvm\nREMOVE C:/x")
+        #expect(checker.problems(neither).contains { $0.hasPrefix("line 3: REMOVE C:/x: it's a path dosbox or wine takes, which the stage doesn't use") })
     }
 
     @Test("A stub module's path types, options and mount fields, through the registry seams")
@@ -159,7 +159,7 @@ struct WrappfileCheckerTests {
         let folder = bundlesRoot.appendingPathComponent("nancy-drew/old-clock")
         let loader = try ProgramBundleLoader(root: bundlesRoot, modules: try shippedModules())
         let manifest = try loader.load(folder).get().manifest
-        let types = PathTypeRegistry([PathType(name: "stub", module: "wine", roles: [.program], shortForm: .driveLetter)])
+        let types = PathTypeRegistry([PathType(name: "stub", module: "wine", roles: [.program], shortForm: "^[A-Za-z]:/.*$")])
         let checker = WrappfileChecker(manifest: manifest, bundleFolder: folder, modules: try shippedModules(), pathTypes: types,
                                        declarations: { $0.manifest.id == "wine" ? Self.stub : $0.declarations })
         let file = try WrappfileParser.parse("""
@@ -171,7 +171,6 @@ struct WrappfileCheckerTests {
         """)
         #expect(checker.problems(file).filter { $0.hasPrefix("line") }.sorted() == [
             "line 5: COPY --from=nothere, but there's no stage called that (an input is written ${input.<name>})",
-            "line 5: COPY C:/c: no module of this stage handles C: paths (it uses wine)",
         ])
     }
 

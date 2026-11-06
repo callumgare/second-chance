@@ -64,7 +64,7 @@ nonisolated enum ShippedBundles {
         guard !ExtraBundles.folders().isEmpty, let resources = bundle.resourceURL else { return }
         do {
             let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
-            ExtraBundles.addGames(shippedRoot: resources.appendingPathComponent("Bundles"), modules: modules)
+            ExtraBundles.addGames(shippedRoot: resources.appendingPathComponent("Bundles"), modules: modules, places: .shipped)
         } catch {
             logger.error("Couldn't load the modules, so leaving out the extra bundles: \(error)")
         }

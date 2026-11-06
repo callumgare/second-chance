@@ -3,6 +3,7 @@ import NancyDrewExecutor
 import ScummVMExecutor
 import WineExecutor
 import WrappBuilder
+import WrappModules
 
 /// `wrapp-builder build`: a bundle's stage built into an app, by the runner,
 /// with the executors the tool has. It speaks only the builder's language: a
@@ -72,6 +73,7 @@ public nonisolated enum BuildTool {
                 guard let module = modules.first(where: { $0.manifest.id == id }) else { throw ToolError("there's no \(id) module") }
                 return try await store.engine(module, version: version) { step in output.line(step) }
             },
+            pathTypes: PathTypeRegistry(modules: modules), places: ModuleKits.places,
             moduleFolders: Dictionary(uniqueKeysWithValues: modules.map { ($0.manifest.id, $0.folder) }))
         let tree: URL
         do {

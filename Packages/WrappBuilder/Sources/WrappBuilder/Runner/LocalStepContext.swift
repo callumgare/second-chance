@@ -108,9 +108,14 @@ nonisolated struct LocalStepContext: StepContext {
         }
     }
 
-    /// Where a location in full form is in the step's tree.
+    func location(of fullForm: String) -> URL? {
+        WrappLayout(app: tree).location(fullForm, places: configuration.places)
+    }
+
+    /// Where a location in full form is in the step's tree, or the step's
+    /// failure for one with no place there.
     func location(_ fullForm: String) throws -> URL {
-        guard let url = WrappLayout(app: tree).location(fullForm) else {
+        guard let url = location(of: fullForm) else {
             throw StepFailure.recipe("\(step.origin): \(fullForm) has no place in the app")
         }
         return url

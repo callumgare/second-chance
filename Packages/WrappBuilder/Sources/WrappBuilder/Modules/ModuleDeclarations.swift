@@ -6,6 +6,7 @@
 //  its instructions, the options it adds to the core's, its mount fields.
 
 import Foundation
+import WrappModules
 
 /// A module's `build:` (docs/modules.md#what-a-module-declares): what the
 /// checker and planner know of a module, read from its folder alone, so a
@@ -27,6 +28,9 @@ public nonisolated struct ModuleDeclarations: Sendable, Equatable {
     /// Files its Swift provides rather than its folder, which a Wrappfile
     /// names as `module:<id>:/<path>` (the installer module's `autoit`).
     public var providedFiles: Set<String> = []
+    /// The path types it handles (`build: path-types:`), each named after
+    /// it or its engine: what the builder learns path types from.
+    public var pathTypes: [PathType] = []
     /// The instructions `USE` plans in a tree that doesn't have the module
     /// yet, in order (decision 2 of the builders plan).
     public var setup: [String] = []
@@ -67,6 +71,12 @@ public nonisolated struct ModuleDeclarations: Sendable, Equatable {
             mountFields[type] = Set(fields as? [String] ?? [])
         }
         providedFiles = Set(build["provided-files"] as? [String] ?? [])
+        for (name, value) in (build["path-types"] as? [String: Any] ?? [:]).sorted(by: { $0.key < $1.key }) {
+            let fields = value as? [String: Any] ?? [:]
+            let roles = Set((fields["roles"] as? [String] ?? []).compactMap(PathType.Role.init(rawValue:)))
+            pathTypes.append(PathType(name: name, module: ModuleID(rawValue: ""), roles: roles,
+                                      shortForm: fields["short-form"] as? String))
+        }
         setup = build["setup"] as? [String] ?? []
         for name in setup where instructions[name] == nil {
             throw Problem(description: "setup names \(name), which isn't one of its instructions")

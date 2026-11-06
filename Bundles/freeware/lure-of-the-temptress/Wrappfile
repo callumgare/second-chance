@@ -11,4 +11,4 @@ SCUMMVM.KEEP-DATA lure.dat
 COPY --from=${input.game} lure /SharedSupport/game/ # the zip's lure/ folder: the game's data and its licence
 LAUNCH --mount=type=store,source=scummvm-saves,target=scummvm:saves/
 LAUNCH --mount=type=store,source=scummvm-settings,target=scummvm:settings/
-LAUNCH /SharedSupport/game/ lure
+LAUNCH scummvm:/SharedSupport/game/ lure

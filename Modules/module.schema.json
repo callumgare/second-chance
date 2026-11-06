@@ -213,6 +213,20 @@
           "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
           "uniqueItems": true
         },
+        "path-types": {
+          "description": "The path types it handles, by name (wine for wine:C:/…): what a path of its may be, and the short form it claims in a stage that USEs it (docs/wrappfile.md#path-types).",
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z][a-z0-9-]+$" },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["roles"],
+            "properties": {
+              "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["location", "program"] } },
+              "short-form": { "description": "A regular expression the whole path must match: the short form it claims, in its roles. A bare /… is always the core's.", "type": "string", "minLength": 1 }
+            }
+          }
+        },
         "provided-files": {
           "description": "Files its Swift provides rather than its folder, named module:<id>:/<path>.",
           "type": "array",

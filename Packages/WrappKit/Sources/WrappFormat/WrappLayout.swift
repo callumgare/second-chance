@@ -5,6 +5,7 @@
 //  Where things are inside a wrapp.
 
 import Foundation
+import WrappModules
 
 /// Where things are inside a wrapp, the `.app` Second Chance makes for a
 /// game. The build writes them and the wrapp and WrappPuppeteer read them,
@@ -64,16 +65,19 @@ nonisolated public struct WrappLayout: Sendable, Hashable {
     public var dosboxC: URL { app.appendingPathComponent("Contents/SharedSupport/dosbox/c") }
 
     /// Where a location in full form is in the app (docs/wrappfile.md#path-types):
-    /// `wine:C:/…` on the prefix's C: drive, `dosbox:C:/…` on DOSBox's, and a
-    /// bare `/…` in the app's `Contents/`, `/../` its top level. Nil for one
-    /// whose type has no place in the app, or a bare path that goes above it.
-    public func location(_ fullForm: String) -> URL? {
-        func onDrive(_ path: Substring, _ drive: URL) -> URL? {
-            guard path.hasPrefix("C:/") || path == "C:" else { return nil }
-            return drive.appendingPathComponent(String(path.dropFirst(2).drop { $0 == "/" }))
+    /// a bare `/…` in the app's `Contents/`, `/../` its top level (the
+    /// core's); a typed path (`wine:C:/…`) wherever its type's module says,
+    /// of those `places` has. Nil for a type with no place in the app, one no
+    /// module of `places` answers for, or a bare path above the app.
+    public func location(_ fullForm: String, places: PathPlaces) -> URL? {
+        if let (module, type, rest) = places.split(fullForm) {
+            return module.location(of: rest, type: type, in: app.appendingPathComponent("Contents"))
         }
-        if fullForm.hasPrefix("wine:") { return onDrive(fullForm.dropFirst("wine:".count), driveC) }
-        if fullForm.hasPrefix("dosbox:") { return onDrive(fullForm.dropFirst("dosbox:".count), dosboxC) }
+        return bareLocation(fullForm)
+    }
+
+    /// Where a bare `/…` is in the app: the core's own paths, no module's.
+    public func bareLocation(_ fullForm: String) -> URL? {
         guard fullForm.hasPrefix("/") else { return nil }
         // `/` is Contents/, one below the top: no `..` may climb past the top.
         var depth = 1

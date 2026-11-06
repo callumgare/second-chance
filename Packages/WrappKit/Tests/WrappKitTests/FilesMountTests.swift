@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import WrappFormat
+import WrappModules
 
 @Suite("A launch's files= mount")
 struct FilesMountTests {
@@ -21,14 +22,16 @@ struct FilesMountTests {
 
     @Test("A launch's files= mounts are the app's folders, each with the app's store")
     func fromLaunch() {
-        let launch = RecordedLaunch(program: "wine:C:/LaserTank/lasertank.exe", mounts: [
+        // A bare path in the app is the core's; a typed one no module here
+        // answers for (`wine:A:`) has no place, and is left out.
+        let launch = RecordedLaunch(program: "/SharedSupport/LaserTank/lasertank", mounts: [
             RecordedLaunch.Mount(store: "app:wine-documents", target: "wine:A:"),
-            RecordedLaunch.Mount(store: "app:saves", target: "wine:C:/LaserTank/", options: ["files": "LaserTank.ini;*.hs"]),
+            RecordedLaunch.Mount(store: "app:saves", target: "/SharedSupport/LaserTank/", options: ["files": "LaserTank.ini;*.hs"]),
         ])
         let app = WrappLayout(app: URL(fileURLWithPath: "/Apps/LaserTank.app"))
         let userFiles = UserFilesLayout(appSupport: URL(fileURLWithPath: "/Support"), bundleID: "com.example.laser-tank")
-        let mounts = FilesMount.mounts(of: launch, app: app, userFiles: userFiles)
-        #expect(mounts == [FilesMount(folder: app.driveC.appendingPathComponent("LaserTank"),
+        let mounts = FilesMount.mounts(of: launch, app: app, userFiles: userFiles, places: .none)
+        #expect(mounts == [FilesMount(folder: app.app.appendingPathComponent("Contents/SharedSupport/LaserTank"),
                                       store: userFiles.store(owner: "app", name: "saves"), patterns: ["LaserTank.ini", "*.hs"])])
     }
 

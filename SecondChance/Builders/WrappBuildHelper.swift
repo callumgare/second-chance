@@ -35,15 +35,20 @@ class WrappBuildHelper {
     private let wineManager: WineManager
     private let engines: EngineStore
     let bus: EventBus<AppEvent>
+    /// Where each module's paths are in an app, and what older settings
+    /// call them: the modules' kits Second Chance carries.
+    let places: PathPlaces
 
     init(
         wineManager: WineManager = .shared,
         engines: EngineStore = WrappBuildHelper.standardEngines,
-        bus: EventBus<AppEvent> = .app
+        bus: EventBus<AppEvent> = .app,
+        places: PathPlaces = .shipped
     ) {
         self.wineManager = wineManager
         self.engines = engines
         self.bus = bus
+        self.places = places
     }
 
     /// The engine store every build shares: this Mac's, fetched with the
@@ -165,7 +170,7 @@ class WrappBuildHelper {
         // generic one, which `CFBundleIconName` names in its asset catalog
         // and would win over the file.
         if let icon = app.icon {
-            guard let file = WrappLayout(app: wrappPath).location(icon), fileManager.fileExists(atPath: file.path),
+            guard let file = WrappLayout(app: wrappPath).location(icon, places: places), fileManager.fileExists(atPath: file.path),
                   file.deletingLastPathComponent().lastPathComponent == "Resources" else {
                 throw WrappBuildError.buildRecipeProblem("APP --icon=\(icon) isn't a file in the app's Resources/")
             }
@@ -223,15 +228,17 @@ class WrappBuildHelper {
     }
 
     /// The recorded launch's program is in the app, once the build has made
-    /// it: a Wine or DOSBox program's file, a ScummVM game's folder. A
-    /// launch that isn't a path in the app (`steam://`) isn't checked.
-    nonisolated static func checkLaunchProgram(_ launch: RecordedLaunch, in wrappPath: URL) throws {
+    /// it, where its module places it (`places`): a Wine or DOSBox program's
+    /// file, a ScummVM game's folder. A program its module gives no place in
+    /// the app (`steam://`) isn't checked; a bare one above the app is wrong.
+    nonisolated static func checkLaunchProgram(_ launch: RecordedLaunch, in wrappPath: URL, places: PathPlaces = .shipped) throws {
         // Steam's and Big Fish's launches name the program they start.
-        let program = launch.options["steam.exe"] ?? launch.options["big-fish.exe"] ?? launch.program
-        guard program.hasPrefix("wine:") || program.hasPrefix("dosbox:") || program.hasPrefix("scummvm:") else { return }
-        // ScummVM's is a folder in the app (`scummvm:/SharedSupport/game/`).
-        let place = program.hasPrefix("scummvm:") ? String(program.dropFirst("scummvm:".count)) : program
-        guard let location = WrappLayout(app: wrappPath).location(place) else {
+        let program = launch.startedProgram
+        guard let location = WrappLayout(app: wrappPath).location(program, places: places) else {
+            guard program.hasPrefix("/") else {
+                logger.notice("LAUNCH's program has no place in the app to check: \(program)")
+                return
+            }
             throw WrappBuildError.buildRecipeProblem("LAUNCH \(program) isn't in the app")
         }
         guard FileManager.default.fileExists(atPath: location.path) else {
@@ -244,9 +251,9 @@ class WrappBuildHelper {
     /// Each `files=` mount's target is a folder in the app once it's built:
     /// the files the store holds are linked in beside what's there, so the
     /// folder must be (docs/wrappfile.md#the-launch-volumes-and-app).
-    nonisolated static func checkLaunchMounts(_ launch: RecordedLaunch, in wrappPath: URL) throws {
+    nonisolated static func checkLaunchMounts(_ launch: RecordedLaunch, in wrappPath: URL, places: PathPlaces = .shipped) throws {
         for mount in launch.mounts where mount.filePatterns != nil {
-            guard let folder = WrappLayout(app: wrappPath).location(mount.target) else {
+            guard let folder = WrappLayout(app: wrappPath).location(mount.target, places: places) else {
                 throw WrappBuildError.buildRecipeProblem("LAUNCH's files= mount of \(mount.store) at \(mount.target) isn't in the app")
             }
             var isFolder: ObjCBool = false
@@ -439,8 +446,8 @@ class WrappBuildHelper {
         }
         lock.updated = updated
         if let launch {
-            try Self.checkLaunchProgram(launch, in: wrappPath)
-            try Self.checkLaunchMounts(launch, in: wrappPath)
+            try Self.checkLaunchProgram(launch, in: wrappPath, places: places)
+            try Self.checkLaunchMounts(launch, in: wrappPath, places: places)
         }
         try await configureWrapp(
             at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,

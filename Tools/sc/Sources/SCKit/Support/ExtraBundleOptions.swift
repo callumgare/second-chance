@@ -1,6 +1,7 @@
 import Foundation
 import GameCatalog
 import WrappBuilder
+import WrappBuilderTool
 
 /// `--bundle`: program bundles from beyond `Bundles/`, such as a port's
 /// draft in `.local/porting/` (docs/program-bundles.md#extra-bundles).
@@ -37,7 +38,7 @@ enum ExtraBundleOptions {
             throw SCError("Two --bundle folders are \(bundle.manifest.id).")
         }
         setenv(ExtraBundles.environmentVariable, folders.map(\.path).joined(separator: ":"), 1)
-        GameInfoProvider.shared.add(try GameCatalogSource.games(from: bundles, modules: modules))
+        GameInfoProvider.shared.add(try GameCatalogSource.games(from: bundles, modules: modules, places: ModuleKits.places))
     }
 
     /// What a `--bundle` names.

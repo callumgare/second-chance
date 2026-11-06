@@ -28,6 +28,12 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams", .upToNextMinor(from: "6.2.2")),
         .package(path: "../GameCatalog"),
         .package(path: "../WrappKit"),
+        // The modules' kits, for the tests alone: what a host gives the
+        // builder of where each module's paths are (`PathPlaces`).
+        .package(path: "../Modules/wine"),
+        .package(path: "../Modules/dosbox"),
+        .package(path: "../Modules/scummvm"),
+        .package(path: "../Modules/big-fish"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),
     ],
     targets: [
@@ -58,7 +64,11 @@ let package = Package(
         ),
         .testTarget(
             name: "WrappBuilderTests",
-            dependencies: ["WrappBuilder", "wrapp-module-fixture"],
+            dependencies: [
+                "WrappBuilder", "wrapp-module-fixture",
+                .product(name: "WineKit", package: "wine"), .product(name: "DOSBoxKit", package: "dosbox"),
+                .product(name: "ScummVMKit", package: "scummvm"), .product(name: "BigFishKit", package: "big-fish"),
+            ],
             swiftSettings: swiftSettings
         ),
     ]

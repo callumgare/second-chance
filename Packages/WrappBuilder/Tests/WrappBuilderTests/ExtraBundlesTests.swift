@@ -51,14 +51,14 @@ struct ExtraBundlesTests {
             == folder.standardizedFileURL)
         let provider = GameInfoProvider()
         let before = provider.allGames().count
-        ExtraBundles.addGames(shippedRoot: bundlesRoot, modules: try shippedModules(), environment: environment(folder), to: provider)
+        ExtraBundles.addGames(shippedRoot: bundlesRoot, modules: try shippedModules(), places: shippedPlaces, environment: environment(folder), to: provider)
         #expect(provider.allGames().count == before)
     }
 
     @Test func itsGameJoinsTheCatalogue() throws {
         let folder = try bundleCopy(id: "test/ski-draft")
         let provider = GameInfoProvider()
-        ExtraBundles.addGames(shippedRoot: bundlesRoot, modules: try shippedModules(), environment: environment(folder), to: provider)
+        ExtraBundles.addGames(shippedRoot: bundlesRoot, modules: try shippedModules(), places: shippedPlaces, environment: environment(folder), to: provider)
         let game = provider.gameInfo(for: "ski-draft")
         #expect(game.programID == "test/ski-draft")
         #expect(game.title == "SkiFree")

@@ -17,7 +17,7 @@ COPY module:nancy-drew:/assets/nancy-drew.icns /Resources/nancy-drew.icns
 APP --icon=/Resources/nancy-drew.icns
 LAUNCH --mount=type=store,source=scummvm-saves,target=scummvm:saves/
 LAUNCH --mount=type=store,source=scummvm-settings,target=scummvm:settings/
-LAUNCH /SharedSupport/game/ nancy:nancy1
+LAUNCH scummvm:/SharedSupport/game/ nancy:nancy1
 
 # The CD edition: the discs' data, copied as they are. Disc 1's files win
 # a name both discs have.

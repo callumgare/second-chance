@@ -20,14 +20,15 @@ public nonisolated enum GameCatalogSource {
 
     /// The game each bundle describes, in the order lists show them: by
     /// series, then `series-order`, then id. Its engine, program and
-    /// graphics are its default edition's planned launch's.
-    public static func games(from bundles: [ProgramBundle], modules: [ModuleFolder]) throws -> [GameInfo] {
+    /// graphics are its default edition's planned launch's; where its program
+    /// is, as its module's kit says (`places`).
+    public static func games(from bundles: [ProgramBundle], modules: [ModuleFolder], places: PathPlaces) throws -> [GameInfo] {
         try bundles
             .sorted { ($0.manifest.series ?? "", $0.manifest.seriesOrder ?? .max, $0.manifest.id)
                 < ($1.manifest.series ?? "", $1.manifest.seriesOrder ?? .max, $1.manifest.id) }
             .map { bundle in
                 gameInfo(bundle.manifest, launch: try defaultLaunch(of: bundle, modules: modules),
-                         steamLaunch: try launch(of: bundle, edition: { $0.source == .steam }, modules: modules))
+                         steamLaunch: try launch(of: bundle, edition: { $0.source == .steam }, modules: modules), places: places)
             }
     }
 
@@ -56,7 +57,8 @@ public nonisolated enum GameCatalogSource {
 
     /// The game a manifest describes, as today's code knows games, with its
     /// default edition's launch.
-    public static func gameInfo(_ manifest: Manifest, launch: RecordedLaunch?, steamLaunch: RecordedLaunch? = nil) -> GameInfo {
+    public static func gameInfo(_ manifest: Manifest, launch: RecordedLaunch?, steamLaunch: RecordedLaunch? = nil,
+                                places: PathPlaces) -> GameInfo {
         let editions = manifest.editions
         let disc = editions.first { $0.source == .disc }
         let steamEdition = editions.first { $0.source == .steam }
@@ -70,8 +72,9 @@ public nonisolated enum GameCatalogSource {
             return GameInfo.SteamApp(appID: appID, installDir: folder, exe: steamExe)
         }
         let launcher = launch?.launcher()
-        // Today's paths are from the root of the drive the program's on.
-        let exe = launcher == .wine || launcher == .dosbox ? launch.map { String($0.path.dropFirst(2)) } : nil
+        // Today's paths are from the root of the drive the program's on, as
+        // the program's module says; a program on no drive has none.
+        let exe = launch.flatMap { places.legacyProgramPath(of: $0.program) }
         return GameInfo(
             id: manifest.name,
             title: manifest.title,

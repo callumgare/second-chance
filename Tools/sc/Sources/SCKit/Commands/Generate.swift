@@ -1,6 +1,7 @@
 import ArgumentParser
 import Foundation
 import WrappBuilder
+import WrappBuilderTool
 
 struct GenerateCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -27,7 +28,7 @@ struct GenerateCommand: AsyncParsableCommand {
             throw SCError("Some bundles have problems; fix them first.")
         }
         let modules = try ModuleLoader(root: session.repo.modules)
-        let games = try GameCatalogSource.games(from: bundles, modules: try loadModules(session))
+        let games = try GameCatalogSource.games(from: bundles, modules: try loadModules(session), places: ModuleKits.places)
         let files = [(GameCatalogSource.path, GameCatalogSource.source(for: games))]
             + (try ModuleDataSource.generatedFiles(modules: modules)).map { ($0.path, $0.source) }
             + [(EmitVocabularySource.path, EmitVocabularySource.source(

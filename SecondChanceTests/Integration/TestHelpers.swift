@@ -854,10 +854,8 @@ extension WrappInfo {
     /// with no settings, or a launch whose program isn't in it (Steam's).
     static func gameExe(at wrappPath: URL) -> URL? {
         guard let launch = settings(at: wrappPath)?.launch else { return nil }
-        let layout = WrappLayout(app: wrappPath)
         // Steam's and Big Fish's launches name the program they start.
-        let program = launch.options["steam.exe"] ?? launch.options["big-fish.exe"] ?? launch.program
-        return layout.location(program.hasPrefix("scummvm:") ? launch.path : program)
+        return WrappLayout(app: wrappPath).location(launch.startedProgram, places: .shipped)
     }
 
     /// The game's engine from the wrapp's AppSettings.plist.

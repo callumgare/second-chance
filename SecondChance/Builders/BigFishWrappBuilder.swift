@@ -612,19 +612,18 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
             }
 
             // What the game is, as the build's events and the legacy settings say it.
-            let runsInScummVM = composition.launcher == .scummvm
-            func drivePath(_ program: String?) -> String? {
-                program.flatMap { $0.split(separator: ":", maxSplits: 1).last.map { String($0.dropFirst(2)) } }
-            }
-            let gameExePath = runsInScummVM ? "/SharedSupport/game" : drivePath(launch.options["big-fish.exe"]) ?? ""
-            if !runsInScummVM {
+            // A program on a drive is announced; a ScummVM game's folder,
+            // which isn't, is the older keys' name for it all the same.
+            let onDrive = launch.legacyProgramPath(places: helper.places)
+            let gameExePath = onDrive ?? launch.shownPath(places: helper.places)
+            if onDrive != nil {
                 await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
             }
 
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: gameInfo, source: .bigFish,
                 gameExePath: gameExePath, installerDir: (gameExePath as NSString).deletingLastPathComponent, composition: composition,
-                bigFishLaunchFile: runsInScummVM ? nil : drivePath(launch.program), bigFishSKU: installed.sku.description,
+                bigFishLaunchFile: helper.places.legacyProgramPath(of: launch.program), bigFishSKU: installed.sku.description,
                 bigFishTrial: trial ? true : nil, edition: "big-fish",
                 launch: launch, app: plan.app, input: input
             )
@@ -970,7 +969,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
     /// installed the game in, so every later step, and the launch, name the
     /// game where the bundle says.
     private func linkInstalledGame(_ step: PlannedStep, folder: URL, wrappPath: URL) throws {
-        guard let into = step.option("into"), let link = WrappLayout(app: wrappPath).location(into) else {
+        guard let into = step.option("into"), let link = WrappLayout(app: wrappPath).location(into, places: helper.places) else {
             throw WrappBuildError.buildRecipeProblem("\(step.origin): BIG-FISH.INSTALL's --into isn't in the app")
         }
         guard folder.standardizedFileURL != link.standardizedFileURL else { return }

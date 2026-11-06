@@ -115,7 +115,7 @@ public nonisolated struct WineExecutor: ModuleExecutor {
             try await Winetricks(wine: wine, script: winetricks, tools: buildTools(context.tree)).install(verb)
         case "MOUNT":
             // A folder of the tree's given a drive, kept for later steps and at launch.
-            guard step.arguments.count == 2, let folder = WrappLayout(app: context.tree).location(step.arguments[0]),
+            guard step.arguments.count == 2, let folder = context.location(of: step.arguments[0]),
                   let letter = step.arguments[1].lowercased().first, step.arguments[1].count <= 2 else {
                 throw StepFailure.recipe("\(step.origin): WINE.MOUNT takes a folder in the prefix and a drive letter")
             }
@@ -189,8 +189,7 @@ public nonisolated struct WineExecutor: ModuleExecutor {
     /// as links, the first disc's files winning. Each gets a CD-ROM drive
     /// from D: in order, kept for the game, which may check for its disc.
     func keepDiscs(_ step: PlannedStep, in context: any StepContext) async throws {
-        let layout = WrappLayout(app: context.tree)
-        guard let intoPath = step.option("into"), let into = layout.location(intoPath) else {
+        guard let intoPath = step.option("into"), let into = context.location(of: intoPath) else {
             throw StepFailure.recipe("\(step.origin): WINE.KEEP-DISCS keeps the discs in a folder of the prefix (--into)")
         }
         let wine = Wine(wrapp: context.tree)
@@ -214,13 +213,13 @@ public nonisolated struct WineExecutor: ModuleExecutor {
         }
         context.substep(String(localized: "Getting the discs ready"))
         try await wine.drives.setKind(.cdrom, of: letters)
-        if kept.count > 1, let combinedPath = step.option("combined"), let combined = layout.location(combinedPath) {
+        if kept.count > 1, let combinedPath = step.option("combined"), let combined = context.location(of: combinedPath) {
             try Self.combine(kept, into: combined)
         }
         // The copies stay, still mounted, for the game as well as its
         // installer: some games check their disc is in the drive.
         for (index, disc) in kept.enumerated() {
-            let relative = "../drive_c/" + disc.path.dropFirst(layout.driveC.path.count + 1)
+            let relative = "../drive_c/" + disc.path.dropFirst(WrappLayout(app: context.tree).driveC.path.count + 1)
             try wine.drives.mount(relative, as: Self.driveLetter(forDisc: index))
             logger.notice("Mounted disk-\(index + 1) as \(Self.driveLetter(forDisc: index)): (cdrom)")
         }

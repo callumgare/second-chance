@@ -20,12 +20,19 @@ let package = Package(
     platforms: [.macOS(.v15)],
     products: [
         .library(name: "ScummVMExecutor", targets: ["ScummVMExecutor"]),
+        // What every process that handles a scummvm: path uses of it.
+        .library(name: "ScummVMKit", targets: ["ScummVMKit"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),
         .package(path: "../../WrappKit"),
     ],
     targets: [
+        .target(
+            name: "ScummVMKit",
+            dependencies: [.product(name: "WrappModules", package: "WrappKit")],
+            swiftSettings: swiftSettings
+        ),
         .target(
             name: "ScummVMExecutor",
             dependencies: [

@@ -65,6 +65,13 @@ struct ModuleSteps {
         return Dictionary(loaded.map { ($0.manifest.id, $0.declarations) }, uniquingKeysWith: { first, _ in first })
     }
 
+    /// The path types the shipped and added modules declare (`build: path-types:`).
+    nonisolated static func pathTypes() -> PathTypeRegistry {
+        guard let modules = Bundle.main.resourceURL?.appendingPathComponent("Modules"),
+              let loaded = try? ModuleLoader(root: modules, added: AddedModules.folder()).loadAll().get() else { return PathTypeRegistry([]) }
+        return PathTypeRegistry(modules: loaded)
+    }
+
     /// The shipped modules' folders, by id, for what an executor reads of
     /// its own module's.
     nonisolated static func moduleFolders() -> [String: URL] {
@@ -85,6 +92,7 @@ struct ModuleSteps {
         let plan = BuildPlan(edition: "", stages: [])
         let configuration = RunnerConfiguration(executors: Self.executors(), emitter: emitter,
                                                 fetch: { _, _, _ in throw StepFailure.recipe("\(step.origin): this step fetches nothing") },
+                                                pathTypes: Self.pathTypes(), places: .shipped,
                                                 moduleFolders: Self.moduleFolders())
         do {
             try await PlanRunner(plan: plan, configuration: configuration).runStep(step, stage: "", index: 0, in: wrappPath)

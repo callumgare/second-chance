@@ -34,9 +34,9 @@ nancy-drew modules' instructions are carried out by their executors
 
 What a module adds to a build (its instructions, and the options and mount
 fields it adds to the core's) is data, its `module.yaml`'s `build:`
-([below](#what-a-module-declares)). Its path types (`wine:`, `scummvm:`) are
-still Swift, in `PathTypeRegistry` in WrappKit, since the app reads them too
-([wrappfile.md](wrappfile.md#what-modules-add)). A module's `BuildModule`
+([below](#what-a-module-declares)), its path types (`wine:`, `scummvm:`)
+included. Where a path of its type is in the app is its kit's Swift
+(`ModulePaths`, [wrappfile.md](wrappfile.md#path-types)). A module's `BuildModule`
 only prepares its engine, for a module with one; its instructions are
 carried out by its executor ([below](#executors)) or, until it has one, by
 today's builders. An addition needs something to carry it out, so for now
@@ -106,6 +106,8 @@ and checked against `module.schema.json`.
 
 ```yaml
 build:
+  path-types:                  # the paths it handles, written wine:C:/…
+    wine: { roles: [location, program], short-form: "^[A-Za-z]:([/\\\\].*)?$" }
   instructions:                # its own, by name in upper case: WINE.KEEP-DISCS is KEEP-DISCS
     KEEP-DISCS:
       options:                 # each a kind, or { kind, role }
@@ -120,6 +122,18 @@ build:
     LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, cursor-lock: flag, window: value }
 ```
 
+- **`path-types`** are the kinds of path it handles, by name (never one
+  letter, so a drive is never a type): their `roles`, `location` (a place in
+  the app or the engine) and `program` (what `RUN` and `LAUNCH` start), and
+  an optional `short-form`, a regular expression on the whole path that it
+  claims in those roles in a stage that uses it (wine's and dosbox's `C:/…`).
+  Where two modules' short forms match, the one the stage used last takes it
+  ([wrappfile.md](wrappfile.md#path-types)). Where a path of the type is in
+  the app, how a message describes it, and the path from its drive's root
+  that older settings name a program by are the module's kit's Swift, a
+  `ModulePaths` (`WinePaths` in `WineKit`); `PathPlaces.shipped`
+  (SecondChanceKit) and `ModuleKits.places` (`wrapp-builder`, `sc`) are the
+  shipped modules' table. A module whose folder changes needs a new release.
 - **An instruction's `options`** are each a kind: `value` (`--into=…`),
   `flag` (`--patch`) or `repeated` (`--mount=…`, as many as needed). Written
   as `{ kind, role }`, the role says what the value is, where it isn't text:

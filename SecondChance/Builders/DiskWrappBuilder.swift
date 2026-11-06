@@ -123,18 +123,18 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             }
             await emitter.finish()
             try await Blocking.run { try WrappAssembler.layIn(template, into: wrappPath) }
-            if launch.launcher() == .scummvm {
-                await bus.publishWrappBuild(.gameExeDetected(path: "/SharedSupport/game", gameInfo: gameInfo))
-            } else if !installer.installed {
-                // An install restored from a layer, which never said.
-                await bus.publishWrappBuild(.gameExeDetected(path: String(launch.path.dropFirst(2)), gameInfo: gameInfo))
+            // A program on a drive was announced by its install, unless that
+            // was restored from a layer, which never said; any other (a
+            // ScummVM game's folder) is announced now.
+            let onDrive = launch.legacyProgramPath(places: helper.places)
+            if onDrive == nil || !installer.installed {
+                await bus.publishWrappBuild(.gameExeDetected(path: launch.shownPath(places: helper.places), gameInfo: gameInfo))
             }
 
             // ── Shared tail: configure → sign → save → notify ──────────────
             // The settings' older keys, from the recorded launch.
-            let inPrefix = launch.launcher() != .scummvm
-            let gameExePath = inPrefix ? String(launch.path.dropFirst(2)) : ""
-            let installerDir = inPrefix ? installerRunner.installerDirectoryPath(in: WrappLayout(app: wrappPath).driveC) : ""
+            let gameExePath = onDrive ?? ""
+            let installerDir = onDrive != nil ? installerRunner.installerDirectoryPath(in: WrappLayout(app: wrappPath).driveC) : ""
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: gameInfo, source: .disk,
                 gameExePath: gameExePath, installerDir: installerDir,

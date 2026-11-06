@@ -33,12 +33,17 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     /// `--wine.mouse=grab-early`, whose wrapp works it out as it did then;
     /// `currentFormat` for one that says it.
     public var format: Int?
+    /// The module that starts it, which the build worked out from the path
+    /// type that claimed its program: nil for one recorded before it was
+    /// (its program's prefix says, `launcher()`), and for a bare program in
+    /// the app, which the core starts.
+    public var module: ModuleID?
 
     /// The format a build records now.
     public static let currentFormat = 2
 
     private enum CodingKeys: String, CodingKey {
-        case program, arguments, environment, options, fallback, mounts, format, volumes
+        case program, arguments, environment, options, fallback, mounts, format, module, volumes
     }
 
     /// A launch a build before stores recorded (unreleased, but in apps built
@@ -59,6 +64,7 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
         options = try container.decodeIfPresent([String: String].self, forKey: .options) ?? [:]
         fallback = try container.decodeIfPresent(String.self, forKey: .fallback)
         format = try container.decodeIfPresent(Int.self, forKey: .format)
+        module = try container.decodeIfPresent(ModuleID.self, forKey: .module)
         if let mounts = try container.decodeIfPresent([Mount].self, forKey: .mounts) {
             self.mounts = mounts
         } else {
@@ -80,6 +86,7 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
         try container.encodeIfPresent(fallback, forKey: .fallback)
         try container.encode(mounts, forKey: .mounts)
         try container.encodeIfPresent(format, forKey: .format)
+        try container.encodeIfPresent(module, forKey: .module)
     }
 
     /// A store, where the program sees it
@@ -115,8 +122,9 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
 
     public init(program: String, arguments: [String] = [], environment: [String: String] = [:],
                 options: [String: String] = [:], fallback: String? = nil, mounts: [Mount] = [],
-                format: Int? = nil) {
+                format: Int? = nil, module: ModuleID? = nil) {
         self.format = format
+        self.module = module
         self.program = program
         self.arguments = arguments
         self.environment = environment
@@ -125,14 +133,47 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
         self.mounts = mounts
     }
 
-    /// The module that starts it: its program's path type's.
-    public func launcher(_ types: PathTypeRegistry = .shipped) -> ModuleID? {
-        types.split(program)?.type.module
+    /// The module that starts it: as the build recorded, else, for a launch
+    /// recorded before it was, its program's prefix, which every type then
+    /// was named after its module by (`wine:`, `scummvm:`, `steam://`). Nil
+    /// for a bare program in the app, which the core starts.
+    public func launcher() -> ModuleID? {
+        if let module { return module }
+        return Self.prefix(of: program).map { ModuleID(rawValue: $0) }
     }
 
     /// The program without its type's prefix: `C:/Nancy Drew/Game.exe`.
     public var path: String {
-        PathTypeRegistry.shipped.split(program)?.rest ?? program
+        guard let prefix = Self.prefix(of: program) else { return program }
+        return String(program.dropFirst(prefix.count + 1))
+    }
+
+    /// A full form's type, before its colon; nil for a bare path, or a
+    /// one-letter one, which is a drive.
+    static func prefix(of fullForm: String) -> String? {
+        guard let colon = fullForm.firstIndex(of: ":") else { return nil }
+        let prefix = String(fullForm[..<colon])
+        return prefix.count > 1 && !prefix.contains("/") ? prefix : nil
+    }
+
+    /// The program the launch starts: a launcher names it in an option of
+    /// its own (`--steam.exe`, `--big-fish.exe`), else it's the program.
+    public var startedProgram: String { options["steam.exe"] ?? options["big-fish.exe"] ?? program }
+
+    /// The started program's path from its drive's root (`/Nancy Drew/Game.exe`),
+    /// which older settings name it by, as its module says (`places`); nil
+    /// for one on no drive (a ScummVM game's folder, `steam://`).
+    public func legacyProgramPath(places: PathPlaces) -> String? {
+        places.legacyProgramPath(of: startedProgram)
+    }
+
+    /// What the build's events name the program by: its path from its
+    /// drive's root, else the path without its type (a folder without its
+    /// last slash: `/SharedSupport/game`).
+    public func shownPath(places: PathPlaces) -> String {
+        if let legacy = legacyProgramPath(places: places) { return legacy }
+        let path = startedProgram == program ? self.path : startedProgram
+        return path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
     }
 
     /// What a Wine program draws with, as its launch declares

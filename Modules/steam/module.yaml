@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "steam"
-release: 6
+release: 7
 native: "steam"                              # its Swift: the Steam client, SteamRuntime, SteamBuild
 versions:
   - { version: "1" }                         # Steam updates itself, so the version is the module's own
@@ -15,6 +15,9 @@ updates:
   # disc, so a wrapp with another Steam is built afresh rather than moved.
   - { id: "steam", fresh-build: true }
 build:
+  # steam://rungameid/<id> — a game Steam starts.
+  path-types:
+    steam: { roles: [program] }
   instructions:
     # Installs Steam's client in the prefix, from the client store when it has
     # one (--client-store=client).

@@ -40,6 +40,10 @@ let package = Package(
         .package(path: "../GameCatalog"),
         .package(path: "../WrappKit"),
         .package(path: "../Modules/wine"),
+        // The other shipped modules' kits: where their path types' paths are.
+        .package(path: "../Modules/dosbox"),
+        .package(path: "../Modules/scummvm"),
+        .package(path: "../Modules/big-fish"),
     ],
     targets: [
         // Second Chance's own shared code: the loading and log windows,
@@ -59,6 +63,9 @@ let package = Package(
                 .product(name: "WrappFormat", package: "WrappKit"),
                 .product(name: "WrappModules", package: "WrappKit"),
                 .product(name: "KeyNotation", package: "WrappKit"),
+                .product(name: "DOSBoxKit", package: "dosbox"),
+                .product(name: "ScummVMKit", package: "scummvm"),
+                .product(name: "BigFishKit", package: "big-fish"),
             ],
             swiftSettings: swiftSettings
         ),

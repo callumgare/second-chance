@@ -60,6 +60,35 @@ struct WrappfileFormatterTests {
         """)
     }
 
+    @Test("A bare LAUNCH /… in a stage that uses scummvm, or is built from one that does, becomes scummvm:/…")
+    func migratesScummVMLaunches() {
+        let text = """
+        FROM scratch AS scummvm
+        USE scummvm
+        LAUNCH --mount=type=store,source=s,target=scummvm:saves/
+        LAUNCH /SharedSupport/game/ nancy:nancy6
+
+        FROM scummvm AS disc
+        LAUNCH /SharedSupport/game/ nancy:nancy6
+
+        FROM scratch AS other
+        LAUNCH /MacOS/tool
+        """
+        #expect(WrappfileFormatter.format(text, migrate: true) == """
+        FROM scratch AS scummvm
+        USE scummvm
+        LAUNCH --mount=type=store,source=s,target=scummvm:saves/
+        LAUNCH scummvm:/SharedSupport/game/ nancy:nancy6
+
+        FROM scummvm AS disc
+        LAUNCH scummvm:/SharedSupport/game/ nancy:nancy6
+
+        FROM scratch AS other
+        LAUNCH /MacOS/tool
+
+        """)
+    }
+
     @Test("Every shipped Wrappfile is formatted and migrated, and parses the same as written")
     func shippedAreFormatted() throws {
         var files: [URL] = []

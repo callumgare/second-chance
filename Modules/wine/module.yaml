@@ -33,6 +33,10 @@ updates:
   # functions' steps in it.
   - { id: "wine-prefix", when-changed: ["stages/prefix"] }
 build:
+  # wine:C:/… — a path on a drive of the game's Windows (its prefix), and a
+  # program Wine runs; written C:/… (any drive letter) in a stage that USEs wine.
+  path-types:
+    wine: { roles: [location, program], short-form: "^[A-Za-z]:([/\\\\].*)?$" }
   instructions:
     # Installs a winetricks verb.
     WINETRICKS: { arguments: { count: 1 }, layer: suggested }

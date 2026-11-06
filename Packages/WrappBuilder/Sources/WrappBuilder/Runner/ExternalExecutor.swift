@@ -219,6 +219,7 @@ public nonisolated final class ExternalExecutor: ModuleExecutor {
         switch method {
         case "tree": return try path(context.tree(ofStage: try decode(Named.self).name))
         case "file": return try path(context.file(try decode(Named.self).name))
+        case "location": return try path(context.location(of: try decode(Named.self).name))
         case "moduleFile":
             let file = try decode(ModuleFile.self)
             return try path(context.moduleFile(file.module, file.path))

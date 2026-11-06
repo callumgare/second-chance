@@ -312,16 +312,12 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
     return config
 }
 
-/// A Wine or DOSBox launch's program as a path from the root of its C:
-/// drive (`/Nancy Drew/Game.exe`), as the runtimes find it, or for Steam's
-/// or Big Fish's launch the program it starts (`--steam.exe`,
-/// `--big-fish.exe`); nil for another.
+/// The program a launch starts (for Steam's or Big Fish's, the one it names,
+/// `--steam.exe`, `--big-fish.exe`) as a path from the root of its drive
+/// (`/Nancy Drew/Game.exe`), as its module says and the runtimes find it;
+/// nil for one on no drive.
 func drivePath(of launch: RecordedLaunch) -> String? {
-    let program = launch.options["steam.exe"] ?? launch.options["big-fish.exe"] ?? launch.program
-    for prefix in ["wine:C:", "dosbox:C:"] where program.hasPrefix(prefix) {
-        return String(program.dropFirst(prefix.count))
-    }
-    return nil
+    launch.legacyProgramPath(places: .shipped)
 }
 
 /// The `.bfg` a Big Fish launch has Big Fish's DRM start, as a path from the

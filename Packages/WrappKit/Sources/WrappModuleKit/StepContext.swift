@@ -20,6 +20,12 @@ public nonisolated protocol StepContext: Sendable {
     /// Another stage's tree, by name, to read from.
     func tree(ofStage name: String) -> URL?
 
+    /// Where a place in full form is in the step's tree: a bare `/…` the
+    /// core's, a typed one (`wine:C:/…`) wherever its type's module says;
+    /// nil for one with no place in the app. How an executor finds a path a
+    /// step names, rather than knowing any type's meaning itself.
+    func location(of fullForm: String) -> URL?
+
     /// A file the plan reads, by its full form (`bundle:assets/disc.iss`,
     /// `module:nancy-drew:/assets/x.au3`), where it is on this Mac.
     func file(_ fullForm: String) -> URL?

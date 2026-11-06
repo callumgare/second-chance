@@ -45,7 +45,7 @@ public nonisolated struct NancyDrewExecutor: ModuleExecutor {
         guard step.instruction == "CONFIGURE-INI" else {
             throw StepFailure.recipe("\(step.origin): the nancy-drew module has no instruction \(step.instruction)")
         }
-        guard let path = step.arguments.first, let folder = WrappLayout(app: context.tree).location(path) else {
+        guard let path = step.arguments.first, let folder = context.location(of: path) else {
             throw StepFailure.recipe("\(step.origin): NANCY-DREW.CONFIGURE-INI names the game's folder in the app")
         }
         guard let table = context.moduleFile("nancy-drew", "ini.yaml") else {

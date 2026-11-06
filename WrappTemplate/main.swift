@@ -295,7 +295,8 @@ func main() {
     }
     // The files beside the program its launch keeps in a store (`files=`).
     let filesMounts = FilesMount.mounts(of: config.launch, app: WrappLayout(app: config.appPath),
-                                        userFiles: UserFilesLayout(appSupport: UserFilesLayout.appSupport(), bundleID: config.bundleId))
+                                        userFiles: UserFilesLayout(appSupport: UserFilesLayout.appSupport(), bundleID: config.bundleId),
+                                        places: .shipped)
     for mount in filesMounts {
         do {
             for line in try mount.connect() { mainLogger.notice("[User files] \(mount.folder.lastPathComponent): \(line)") }

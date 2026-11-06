@@ -25,14 +25,14 @@ public nonisolated struct WrappfileChecker {
     /// test gives its own.
     let declarations: @Sendable (ModuleFolder) -> ModuleDeclarations
 
-    /// `pathTypes` are the shipped modules' unless a test gives its own.
+    /// `pathTypes` are those `modules` declare unless a test gives its own.
     public init(manifest: Manifest, bundleFolder: URL, modules: [ModuleFolder],
-                pathTypes: PathTypeRegistry = .shipped,
+                pathTypes: PathTypeRegistry? = nil,
                 declarations: @escaping @Sendable (ModuleFolder) -> ModuleDeclarations = { $0.declarations }) {
         self.manifest = manifest
         self.bundleFolder = bundleFolder
         self.modules = Dictionary(modules.map { ($0.manifest.id.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
-        self.pathTypes = pathTypes
+        self.pathTypes = pathTypes ?? PathTypeRegistry(modules: modules)
         self.declarations = declarations
     }
 
@@ -50,7 +50,11 @@ public nonisolated struct WrappfileChecker {
         /// its own; an INPUT goes in its own, at its top.
         var functionFrames = 1
 
-        var moduleIDs: Set<ModuleID> { Set(aliases.values.map(ModuleID.init(rawValue:))) }
+        /// The stage's modules in the order it used them, those it was built
+        /// from first: of short forms that more than one claims, the last's
+        /// wins.
+        var order: [String] = []
+        var moduleIDs: [ModuleID] { order.map(ModuleID.init(rawValue:)) }
 
         func declared(_ name: String) -> Declared? {
             for frame in frames.reversed() {
@@ -123,6 +127,7 @@ public nonisolated struct WrappfileChecker {
             }
             var scope = globals
             scope.aliases = [:]
+            scope.order = []
             scope.frames.append([:])
             switch stage.from {
             case .scratch:
@@ -135,6 +140,7 @@ public nonisolated struct WrappfileChecker {
             case .stage(let name):
                 if let inherited = scopes[name] {
                     scope.aliases = inherited.aliases
+                    scope.order = inherited.order
                 } else {
                     found.errors.append("line \(stage.line): FROM \(name), but no stage before it is called that")
                 }
@@ -492,7 +498,7 @@ public nonisolated struct WrappfileChecker {
             copyFrom = scopes[from.lowercased()]
         }
         func check(_ word: Word, _ role: InstructionSpec.Role) {
-            let modules: Set<ModuleID>
+            let modules: [ModuleID]
             let pathRole: PathType.Role
             switch role {
             case .location: (modules, pathRole) = (scope.moduleIDs, .location)
@@ -548,7 +554,7 @@ public nonisolated struct WrappfileChecker {
 
     /// What's wrong with `path` in `role`, in a stage with `modules`; nil
     /// for nothing, or for a path that can't be told yet.
-    func pathProblem(_ path: String, as role: PathType.Role, modules: Set<ModuleID>, inFunction: Bool) -> String? {
+    func pathProblem(_ path: String, as role: PathType.Role, modules: [ModuleID], inFunction: Bool) -> String? {
         if path.hasPrefix("${") { return nil }
         if let (type, _) = pathTypes.split(path) {
             if !type.roles.contains(role) {
@@ -560,23 +566,24 @@ public nonisolated struct WrappfileChecker {
             return nil
         }
         if inFunction { return nil }
-        guard let form = PathTypeRegistry.shortForm(of: path) else { return nil }
-        if form == .folder, role == .location {
-            // A bare path is in the app: `/` is its Contents/, `/../` its top level, and nothing higher.
-            return Self.leavesTheApp(path) ? "it goes above the app's top level" : nil
+        return Self.shortFormProblem(path, as: role, modules: modules, types: pathTypes)
+    }
+
+    /// What's wrong with `path`, not in full form, in `role` in a stage with
+    /// `modules`: a bare `/…` (the core's, in the app) that goes above the
+    /// app, or a short form only a module the stage doesn't use claims. When
+    /// several of its modules claim one, the one it used last takes it.
+    static func shortFormProblem(_ path: String, as role: PathType.Role, modules: [ModuleID],
+                                 types: PathTypeRegistry) -> String? {
+        if path.hasPrefix("/") {
+            // `/` is the app's Contents/, `/../` its top level, and nothing higher.
+            return leavesTheApp(path) ? "it goes above the app's top level" : nil
         }
-        let claiming = pathTypes.claiming(form, as: role, among: modules)
-        switch claiming.count {
-        case 1:
-            return nil
-        case 0:
-            let uses = modules.map(\.rawValue).sorted().joined(separator: ", ")
-            let what = form == .driveLetter ? "\(path.prefix(2)) paths" : "a folder as a \(role.rawValue)"
-            return "no module of this stage handles \(what) (it uses \(uses.isEmpty ? "none" : uses))"
-        default:
-            let names = claiming.map(\.name)
-            return "both \(names.joined(separator: " and ")) take \(path.prefix(2)) paths here; write \(names.map { "\($0):\(path.prefix(2))/…" }.joined(separator: " or "))"
-        }
+        if types.claiming(path, as: role, among: modules) != nil { return nil }
+        let elsewhere = types.types.filter { $0.claims(path, as: role) }.map(\.module.rawValue)
+        guard !elsewhere.isEmpty else { return nil }
+        let uses = modules.map(\.rawValue).joined(separator: ", ")
+        return "it's a path \(Array(Set(elsewhere)).sorted().joined(separator: " or ")) takes, which the stage doesn't use (it uses \(uses.isEmpty ? "none" : uses))"
     }
 
     /// Whether a bare `/…` path's `..`s take it above the app's top level
@@ -729,6 +736,9 @@ public nonisolated struct WrappfileChecker {
             let dependencyID = Self.splitConstraint(dependency).id.lowercased()
             if !scope.aliases.values.contains(dependencyID) { addModule(dependencyID, as: nil, to: &scope) }
         }
+        // Used now: after what it needs, and after any earlier use of it.
+        scope.order.removeAll { $0 == id }
+        scope.order.append(id)
     }
 
     func moduleFunction(_ name: String, of module: ModuleFolder) -> WrappfileFunction? {

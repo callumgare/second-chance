@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "scummvm"
-release: 7
+release: 8
 native: "scummvm"                            # its Swift: Packages/Modules/scummvm (KEEP-DATA), ScummVMRuntime, ScummVMBuild
 versions:
   # ScummVM's own Mac build, prepared on the Mac that builds
@@ -31,6 +31,11 @@ versions:
             - "https://web.archive.org/web/20260710213756id_/https://downloads.scummvm.org/frs/scummvm/2026.3.0/scummvm-2026.3.0-macosx.dmg"
 runtime: { save-warning: false }
 build:
+  # scummvm:/SharedSupport/game/ — the folder of a game's data in the app,
+  # as a program; scummvm:saves/ and scummvm:settings/, the stores a launch
+  # mounts, as locations. No short form: a bare /… is the core's.
+  path-types:
+    scummvm: { roles: [program, location] }
   instructions:
     # The engine data its game needs (SCUMMVM.KEEP-DATA nancy.dat), out of
     # every file ScummVM's app has: the rest is taken out of the app. What

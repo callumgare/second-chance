@@ -95,9 +95,9 @@ public nonisolated enum BuildModules {
 
     /// What's wrong across modules rather than in one: two whose ids differ
     /// only in case (a module's name is case-insensitive), and the path
-    /// types they register.
-    public static func problems(across modules: [ModuleFolder], pathTypes: PathTypeRegistry = .shipped) -> [String] {
-        var problems = pathTypes.problems
+    /// types they declare.
+    public static func problems(across modules: [ModuleFolder]) -> [String] {
+        var problems = PathTypeRegistry(modules: modules).problems
         let ids = modules.map(\.manifest.id)
         for (lowered, same) in Dictionary(grouping: ids, by: { $0.lowercased() }) where same.count > 1 {
             problems.append("modules \(same.sorted().joined(separator: " and ")) differ only in case (\(lowered))")
