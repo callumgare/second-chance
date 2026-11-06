@@ -113,8 +113,9 @@ struct CleanCommand: AsyncParsableCommand {
         discussion: """
         layers: the layer cache, the Wine prefix among it (start the next build from scratch; \
         wine-prefixes is another name for it). \
-        build: DerivedData, the main checkout's and every worktree's; one a running process uses (a build, \
-        or something run from it) is left alone. wrapps: the wrapps dir. test-results: reports and result bundles. \
+        build: DerivedData, the main checkout's and every worktree's, and the folders Xcode's window built \
+        them into in ~/Library/Developer/Xcode/DerivedData; one a running process uses (a build, or something \
+        run from it) is left alone. wrapps: the wrapps dir. test-results: reports and result bundles. \
         steam-session: the saved Steam sign-in (signs every Steam wrapp out, like Sign Out of Steam). \
         steam-client: the cached Steam client (the next Steam build downloads Steam's update again). \
         engines: the engine store, the engines builds prepared (the next build that needs one prepares it \
@@ -250,14 +251,15 @@ struct CleanCommand: AsyncParsableCommand {
                 try FileManager.default.removeItem(at: url)
             }
             let shown = urls.count == 1 ? session.repo.display(urls[0])
-                : target == .build ? "DerivedData in \(urls.count) checkouts"
+                : target == .build ? "\(urls.count) DerivedData folders"
                 : "\(urls.count) items in \(session.repo.display(urls[0].deletingLastPathComponent()))"
             rows.append([target.rawValue, shown, ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)])
         }
         await ui.table(headers: ["Deleted", "Path", "Freed"], rows: rows)
     }
 
-    /// Every checkout's DerivedData: the main checkout's and each worktree's.
+    /// Every checkout's DerivedData: the main checkout's and each worktree's,
+    /// and the folders Xcode's window built them into (`XcodeDerivedData`).
     /// Outside a git repo (a runtime copy), just this one's.
     static func derivedData(_ repo: Repo) async -> [URL] {
         guard let main = try? await Worktrees.mainCheckout(of: repo.root),
@@ -266,7 +268,11 @@ struct CleanCommand: AsyncParsableCommand {
         }
         let checkouts = WorktreeEntry.parse(listing).map(\.path)
         let all = checkouts.contains(repo.root.standardizedFileURL) ? checkouts : [repo.root] + checkouts
-        return all.map { $0.appendingPathComponent("DerivedData") }
+        let projects = (try? await Worktrees.git(["ls-files", "--", "*.xcodeproj/project.pbxproj"], in: main)) ?? ""
+        let names = Set(projects.split(separator: "\n").map {
+            (($0 as NSString).deletingLastPathComponent as NSString).lastPathComponent.replacingOccurrences(of: ".xcodeproj", with: "")
+        })
+        return all.map { $0.appendingPathComponent("DerivedData") } + XcodeDerivedData.folders(checkouts: all, projects: names)
     }
 
     /// What deleting them all would free: APFS clones count once, and not at

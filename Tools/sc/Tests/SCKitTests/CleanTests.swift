@@ -56,4 +56,27 @@ struct CleanTests {
             FolderUsers.User(pid: 102, name: "Second Chance"),
         ])
     }
+
+    @Test("Xcode's folders for a checkout, or named after the repo's project with nothing to say whose, are this repo's")
+    func xcodeFolders() {
+        typealias Folder = XcodeDerivedData.Folder
+        let folders = [
+            Folder(name: "SecondChance-avrtzuliojkaijeesdwswiqtzgev", workspace: "/r/SecondChance.xcodeproj"),
+            Folder(name: "SecondChance-bkutabmyyevjmfcwoduprowglxnw", workspace: "/r/.claude/worktrees/gone/SecondChance.xcodeproj"),
+            Folder(name: "WrappKit-cekormqixxpmmpgfnvmcsoxdibkk", workspace: "/elsewhere/WrappKit"),
+            Folder(name: "WrappKit-dmjlvkpttjlfipebsznwwzlydbuc", workspace: "/w/Packages/WrappKit"),
+            Folder(name: "SecondChance-esrlfglaptyvdwcqmbymzjresplr", workspace: nil),
+            Folder(name: "Other-fngaudspblvwvgdanonrpsorwbvh", workspace: nil),
+            Folder(name: "SecondChance-x", workspace: nil),
+            Folder(name: "ModuleCache.noindex", workspace: nil),
+            Folder(name: "Sibling-ghsqkfjqiuvmhufcmtixhijkalzr", workspace: "/r2/Sibling.xcodeproj"),
+        ]
+        let ours = XcodeDerivedData.ours(folders, checkouts: [URL(fileURLWithPath: "/r"), URL(fileURLWithPath: "/w")], projects: ["SecondChance"])
+        #expect(ours == [
+            "SecondChance-avrtzuliojkaijeesdwswiqtzgev",
+            "SecondChance-bkutabmyyevjmfcwoduprowglxnw",
+            "WrappKit-dmjlvkpttjlfipebsznwwzlydbuc",
+            "SecondChance-esrlfglaptyvdwcqmbymzjresplr",
+        ])
+    }
 }

@@ -33,7 +33,7 @@ nearest command's help.
 ./sc setup                             # Once per clone: tools, git hooks, completions, Wrappfile highlighting
 ./sc worktree add <name>               # A worktree in .claude/worktrees, sharing .local and cloning caches
 ./sc worktree remove <name>            # Remove one (and its build output) once it's merged
-./sc clean build                       # Delete every checkout's DerivedData, worktrees' too, leaving any in use
+./sc clean build                       # Delete every checkout's DerivedData, worktrees' and Xcode's too, leaving any in use
 ./sc clean layers                      # Start the next build from scratch: no cached Wine prefix
 ./sc clean engines                     # Prepare engines afresh, from their downloads
 ./sc clean downloads                   # Fetch (and check) AutoIt, the patches, engines' files and Big Fish's installer afresh
@@ -420,11 +420,18 @@ checkout's is in reach, then the worktree with all its build output.
 `--delete-branch` deletes its branch too.
 
 `sc clean build` deletes the DerivedData of the main checkout and of every
-worktree, wherever it was run from. One that a running process names on its
-command line is left alone with a warning: an xcodebuild given it as
-`-derivedDataPath` (and the compilers it starts), the app `sc app run`
-launched from it, a GUI-session job's script in its `sc-jobs`. Xcode's own
-window builds elsewhere, in `~/Library/Developer/Xcode/DerivedData`. The
+worktree, wherever it was run from, and the folders Xcode's own window built
+them into. Those are in `~/Library/Developer/Xcode/DerivedData`, Xcode's
+default (a per-user setting, so the repo can't change it), one per checkout
+opened, and Xcode never removes one with its checkout. A folder there is this
+repo's when its `info.plist` names a workspace in a checkout (a removed
+worktree's too, while it was under the main checkout), or, with no
+`info.plist`, when it's named after one of the repo's Xcode projects
+(`XcodeDerivedData`); Xcode's shared caches and other projects' are left
+alone. A folder that a running process names on its command line is left
+alone with a warning: an xcodebuild given it as `-derivedDataPath` (and the
+compilers it starts), the app `sc app run` launched from it, a GUI-session
+job's script in its `sc-jobs`. The
 sizes `sc clean` shows, for every target, are what deleting would free, not
 what `du` says: it reads each file's APFS private size and clone family
 (`DiskUsage`), so a clone counts only once its whole family goes, and not at
