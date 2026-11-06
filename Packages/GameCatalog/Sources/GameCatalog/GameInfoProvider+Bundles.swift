@@ -10,6 +10,15 @@ nonisolated extension GameInfoProvider {
     /// Every game a bundle describes, in the order lists show them.
     static let bundledGames: [GameInfo] = [
         GameInfo(
+            id: "iji",
+            title: "Iji",
+            diskCount: 1,
+            graphics: .direct3D,
+            internalGameExePath: "/Iji/iji.exe",
+            program: "freeware/iji",
+            displayName: "Iji"
+        ),
+        GameInfo(
             id: "laser-tank",
             title: "LaserTank",
             diskCount: 1,

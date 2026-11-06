@@ -149,7 +149,8 @@ nonisolated public struct WindowControl: Sendable {
     /// A helper from before keys (protocol 1) answers with an error.
     @discardableResult
     public func press(_ key: String) -> Bool {
-        report(socket.request("key \(key)"), for: "key")
+        // Held long enough for a game that polls the keyboard each frame.
+        report(socket.request("key \(key) hold=150"), for: "key")
     }
 
     @discardableResult

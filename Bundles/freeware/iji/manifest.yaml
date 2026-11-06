@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "freeware/iji"
+version: 1
+title: "Iji"
+display-name: "Iji"
+
+volumes:
+  saves:
+    display-name: "settings and saved games"
+
+editions:
+  - id: "download"
+    source: "download"
+    build:
+      target: "download"
+      inputs:
+        game:
+          type: "download"
+          urls: # the author's; then the 2025 Wayback copy of the URL it had
+            - "https://www.remargames.se/daniel/games/iji.zip"
+            - "https://web.archive.org/web/20250112211618id_/http://remar.se/daniel/games/iji.zip"
+          sha256: "f536a16239993543b3b73c14bb7da26cedf6046e00995835ecfc7db8313fbe8f"
+          size: 46824928
+          unpack: "zip"
+          install: "none"
+    licence: "freeware-licensed" # Remar Games lets anyone share it, for free, with credit
+    licence-from: "Remar Games' licence, in the download"
+    licence-file: "source code/LEGAL.txt" # its own words, saved into the app
+
+tests:
+  scenario: "wine/quits-with-keys"
+  parameters:
+    # The test quits it from its own menu; the relaunch checks the app's Quit,
+    # which holds F12 (--wine.quit-key). Escape at its first
+    # screen's prompt runs it windowed; its main menu shows by itself after a
+    # minute's loading, then Up (to Quit), Return, Return (Yes).
+    first-keys: "escape"
+    quit-keys: "up return return"
+  window: "windowed"
+
+notes:
+  about: "Daniel Remar's 2008 action platformer, in its 1.8 release (2021), freeware. A Game Maker 7 game: Direct3D 8."
+  music: "MP3s played through Windows' media stack; the author's optional high-quality soundtrack (ijimusic.zip) isn't included."
+  checked: "2026-11-04: the author's URL gives the file with this sha256; the 2025 Wayback capture of remar.se's URL is the same file (CDX digest = its SHA-1)."

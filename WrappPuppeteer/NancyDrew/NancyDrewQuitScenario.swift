@@ -790,6 +790,17 @@ struct NancyDrewQuitScenario {
             let shotPath = "\(context.directory)/attempt.png"
             guard let state = context.game.state(), state.size.width > 0,
                   let pixels = context.game.capture(to: shotPath) else {
+                // No window to capture: the game may have gone. Its own
+                // process, not the wrapp's, which stays up to show a failed
+                // quit's alert and would keep this loop polling to its timeout.
+                if !ProcessControl.isAlive(gamePid) {
+                    if ended {
+                        logger.notice("✅ Game exited")
+                        return nil
+                    }
+                    logger.error("❌ The game exited before the scenario's goal was reached")
+                    return "The game quit before the scenario reached its goal"
+                }
                 Thread.sleep(forTimeInterval: 0.2)
                 continue
             }
@@ -925,17 +936,20 @@ struct NancyDrewQuitScenario {
                         }
                         remembered.acted = true
                         remembered.actedAt = Date()
-                    case .key(let name):
-                        logger.notice("  ✓ \(handler.id): found its \(handler.when), pressing \(name)...")
-                        guard context.game.press(name) else {
-                            forceQuit(app)
-                            return "Couldn't press \(name) in the program (its helper may predate keys)"
+                    case .key(let keys):
+                        // Several keys, space-separated, are pressed in turn
+                        // (a program's own menu, for one that ignores ⌘Q).
+                        for name in keys.split(separator: " ").map(String.init) {
+                            logger.notice("  ✓ \(handler.id): found its \(handler.when), pressing \(name)...")
+                            let before = keyProbe(context)
+                            guard context.game.press(name) else {
+                                forceQuit(app)
+                                return "Couldn't press \(name) in the program (its helper may predate keys)"
+                            }
+                            waitForChange(from: before, after: name, context: context)
                         }
                         remembered.acted = true
                         remembered.actedAt = Date()
-                        // A frame or two for the program to take it before
-                        // anything after it in the handler.
-                        Thread.sleep(forTimeInterval: 1.5)
                     case .quit:
                         logger.notice("  ✓ \(handler.id): found its \(handler.when), quitting the program as its app's Quit does...")
                         guard context.game.quitApp() else {
@@ -953,7 +967,7 @@ struct NancyDrewQuitScenario {
                         // Parked against the left edge, clear of the centred
                         // menu text and of the bottom-right corner.
                         context.game.move(to: CGPoint(x: 20, y: state.size.height / 2))
-                        if !ProcessControl.isRunning(app, helperPid: gamePid) {
+                        if !ProcessControl.isAlive(gamePid) {
                             logger.notice("✅ Game exited successfully")
                             return nil
                         }
@@ -982,6 +996,39 @@ struct NancyDrewQuitScenario {
     /// A check a handler asks for (`check: menu`): the menu, fully drawn,
     /// is what every run reaches, so its frame is checked the first time
     /// it's found, and again after switching away from the game and back.
+    /// The game's picture now, for telling when a key has taken effect.
+    private func keyProbe(_ context: Context) -> ImageFingerprint? {
+        let path = "\(context.directory)/key-probe.png"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        guard context.game.capture(to: path) != nil else { return nil }
+        return ImageFingerprint(imageAt: path)
+    }
+
+    /// Wait until the picture differs from `before`: the program has taken the
+    /// key, and a screen it opens has come up, before the next key is pressed
+    /// (Iji's title screen takes seconds to open, and keys sent meanwhile are
+    /// lost). A key that changes little (a menu's cursor) is waited on for at
+    /// most `keyChangeWait`, then the next goes anyway.
+    private func waitForChange(from before: ImageFingerprint?, after key: String, context: Context) {
+        let started = Date()
+        guard let before else {
+            Thread.sleep(forTimeInterval: 1.5)
+            return
+        }
+        while Date().timeIntervalSince(started) < Self.keyChangeWait {
+            Thread.sleep(forTimeInterval: 0.5)
+            if let now = keyProbe(context), now.distance(to: before) > SplashScreen.matchDistance {
+                // A moment more for it to finish drawing.
+                Thread.sleep(forTimeInterval: 0.5)
+                logger.notice("    \(key) took effect after \(String(format: "%.1f", Date().timeIntervalSince(started)))s")
+                return
+            }
+        }
+        logger.notice("    no visible change \(Int(Self.keyChangeWait))s after \(key); going on")
+    }
+
+    static let keyChangeWait: TimeInterval = 10
+
     private func runCheck(_ check: String, state: ControlledWindowState, shotPath: String, switchedAway: inout Bool,
                           gamePid: Int32, app: NSRunningApplication, context: Context) -> Outcome {
         guard check == "menu" else {

@@ -1,0 +1,4 @@
+# Its main menu, which shows by itself after a minute's loading behind its title card.
+kind: "text"
+tags: ["menu"]
+text: { strings: ["MAIN MENU", "Load game"] }

@@ -547,6 +547,20 @@ that wasn't 0. The game's exit is noticed the moment it happens (a
 `DispatchSource` process source in `GameMonitor`), so the time since the last
 Wine error is exact.
 
+### A game that ignores the app's Quit
+
+Wine passes the app's Quit (⌘Q, the menu, a logout) on to a game as
+`WM_QUERYENDSESSION`, and some games ignore it. Iji, a Game Maker game, also
+ignores its window closing (`SC_CLOSE`, which is all Alt+F4 does) and Alt+F4
+itself, but quits on F12 held down. A launch that says `--wine.quit-key=f12`
+(`RecordedLaunch.quitKey`) sets `QUIT_KEY`, and then the quit watch, once it
+has reported `quit requested`, holds that key down in the game's window for
+3 s instead and cancels the quit; the game quits itself, and its exit counts
+as asked for. The keys it knows are `f1`–`f12`, `escape`, `return`, `q` and
+`x`. A logout the game holds up this way is cancelled, as macOS does whenever
+an app turns it down. Option-F4 does nothing in Wine's Mac driver, which
+doesn't take Option for Alt unless the prefix says so.
+
 ### Which games get it
 
 Every Wine game. Only a Direct3D game's first frame counts, though: cnc-ddraw
@@ -729,7 +743,7 @@ macOS 26 doesn't leave the surface undersized.
 | `move <x> <y>` | `ok`: a mouse move alone (to park the game's drawn cursor) |
 | `down <x> <y>`, `up <x> <y>` `[button=]` | `ok`: a press, or a release, alone |
 | `drag <x> <y> <x2> <y2> [steps=<n>] [hold=<ms>]` | `ok`: a press at the start, `steps` moves (10) along the line with the button down, a release at the end |
-| `key <name>[+<mod>…] [hold=<ms>]` | `ok`: modifiers down, the key down, held 60 ms, up, modifiers up, each with its own virtual keycode (US layout), which is what Wine and SDL read. Names: `a`–`z`, `0`–`9`, punctuation, `return`, `escape`, `tab`, `space`, `delete`, the arrows `left` `right` `up` `down`, `f1`–`f12`, `home`, `end`, `pageup`, `pagedown`; modifiers `cmd`, `shift`, `opt`, `ctrl` |
+| `key [<mod>+…]<name> [hold=<ms>]` | `ok`: modifiers down, the key down, held 60 ms, up, modifiers up, each with its own virtual keycode (US layout), which is what Wine and SDL read. Names: `a`–`z`, `0`–`9`, punctuation, `return`, `escape`, `tab`, `space`, `delete`, the arrows `left` `right` `up` `down`, `f1`–`f12`, `home`, `end`, `pageup`, `pagedown`; modifiers `cmd`, `shift`, `opt`, `ctrl` |
 | `type <text>` | `ok`: each character as its key, with shift where it needs it, 40 ms apart; the text percent-encoded (`Hi%20there`) |
 | `focus` | `ok`: the app made active and the game window key |
 | `quit` | `ok`: the app is asked to quit as its Quit menu item (Wine's ⌘⌥Q) does, with `-[NSApplication terminate:]`, not waited for, since a hang would be inside it |

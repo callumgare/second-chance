@@ -37,7 +37,7 @@
 //    move <x> <y>     -> ok             mouse moved only
 //    down|up <x> <y> [button=]   -> ok  a press or a release alone
 //    drag <x> <y> <x2> <y2> [steps=<n>] [hold=<ms>] -> ok   press, moves along the line, release
-//    key <name>[+<mod>...] [hold=<ms>] -> ok   key down, held (60 ms), up, with the key's own
+//    key [<mod>+...]<name> [hold=<ms>] -> ok   key down, held (60 ms), up, with the key's own
 //                                       keycode: a-z, 0-9, return, escape, tab, space, delete,
 //                                       left, right, up, down, f1-f12, home, end, pageup,
 //                                       pagedown, or a punctuation character; mods cmd, shift,

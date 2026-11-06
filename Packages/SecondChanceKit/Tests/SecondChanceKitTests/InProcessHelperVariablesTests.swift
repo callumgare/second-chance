@@ -95,4 +95,14 @@ struct InProcessHelperVariablesTests {
         #expect(variables("windowed")["NATIVE_MACOS_FULLSCREEN_EXE"] == nil)
         #expect(variables("fullscreen")["NATIVE_MACOS_FULLSCREEN_FORCE"] == "1")
     }
+
+    @Test("--wine.quit-key has the quit watch hold that key when the app is asked to quit")
+    func theLaunchNamesAQuitKey() {
+        func key(_ options: [String: String]) -> String? {
+            let launch = RecordedLaunch(program: "wine:C:/Iji/iji.exe", options: options, format: RecordedLaunch.currentFormat)
+            return Wine.inProcessHelperVariables(gameExe: "iji.exe", graphicsAPI: .direct3D, launch: launch, environment: [:])["QUIT_KEY"]
+        }
+        #expect(key(["wine.quit-key": "f12"]) == "f12")
+        #expect(key([:]) == nil)
+    }
 }

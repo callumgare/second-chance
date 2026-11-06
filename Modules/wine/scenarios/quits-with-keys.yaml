@@ -1,0 +1,21 @@
+# For a Wine program that ignores ⌘Q and quits only from its own menu: on its
+# first screen (its bundle's `running` needles) it presses the bundle's
+# `first-keys`, if any; once its bundle's `menu` needles show, it presses the
+# `quit-keys` in turn and expects the program to end. A screen still showing
+# 6 s after its keys (the program wasn't yet reading the keyboard) gets them
+# again (docs/testing.md#scenarios).
+goal: "program-ends"
+timeout: 240
+parameters:
+  first-keys: ""   # keys, space-separated, that take its first screen on towards the menu
+  quit-keys: ""    # keys, space-separated, that quit it from the menu
+handlers:
+  - id: "first-screen"
+    when: "running"
+    if: "first-keys"
+    retry-after: 6
+    do: [{ key: "${first-keys}" }]
+  - id: "menu"
+    when: "menu"
+    retry-after: 6
+    do: [{ key: "${quit-keys}" }, "expect-end"]

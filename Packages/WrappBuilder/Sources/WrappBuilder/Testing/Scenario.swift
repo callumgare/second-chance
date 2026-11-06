@@ -62,7 +62,8 @@ public nonisolated struct Scenario: Sendable, Equatable {
         /// it to end: for a program with nothing to click to quit.
         case quit
         /// Press a key (the helper's names: `escape`, `return`, `f5`,
-        /// `cmd+q`…), as a program waiting at a keyboard prompt needs.
+        /// `cmd+q`…), as a program waiting at a keyboard prompt needs, or
+        /// several, space-separated, in turn.
         case key(String)
     }
 

@@ -22,6 +22,11 @@
 //    applicationShouldTerminate:], which Wine passes on to the game's windows.
 //    The wrapp can't see those, as they go to the game's process, not to it.
 //
+//  With QUIT_KEY set (a launch's --wine.quit-key), a quit request holds that
+//  key down in the game's window for kQuitKeyHoldSeconds instead, and the
+//  quit itself is cancelled: for a game that ignores Wine's quit, its window
+//  closing and Alt+F4, but quits on a key held down, as Iji does on F12.
+//
 //  Armed by QUIT_WATCH_EXE, in the process running that .exe.
 //
 //  Built into in_process_helpers.dylib by WrappTemplate/setup-wine.sh; see
@@ -52,8 +57,74 @@ static void reportingFlushBuffer(id self, SEL _cmd) {
 
 static IMP gWineShouldTerminate;
 
+/// How long the quit key is held: long enough for a game that wants it held
+/// (Iji quits on F12 held for about a second).
+static const double kQuitKeyHoldSeconds = 3;
+
+/// A quit key's virtual keycode (US layout); -1 for a name it doesn't know.
+static int quitKeyCode(const char *name) {
+    static const struct { const char *name; int code; } keys[] = {
+        {"f1", 122}, {"f2", 120}, {"f3", 99}, {"f4", 118}, {"f5", 96}, {"f6", 97}, {"f7", 98},
+        {"f8", 100}, {"f9", 101}, {"f10", 109}, {"f11", 103}, {"f12", 111},
+        {"escape", 53}, {"return", 36}, {"q", 12}, {"x", 7},
+    };
+    for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
+        if (strcasecmp(name, keys[i].name) == 0) return keys[i].code;
+    }
+    return -1;
+}
+
+/// The game's window: the biggest visible one of Wine's.
+static NSWindow *gameWindowForKeys(void) {
+    Class wineWindow = NSClassFromString(@"WineWindow");
+    NSWindow *best = nil;
+    CGFloat bestArea = 0;
+    for (NSWindow *window in NSApp.windows) {
+        if (!window.visible || (wineWindow && ![window isKindOfClass:wineWindow])) continue;
+        CGFloat area = window.frame.size.width * window.frame.size.height;
+        if (area > bestArea) {
+            best = window;
+            bestArea = area;
+        }
+    }
+    return best;
+}
+
+static void postQuitKey(NSEventType type, unsigned short code, NSInteger windowNumber) {
+    NSEvent *event = [NSEvent keyEventWithType:type location:NSZeroPoint modifierFlags:0
+                                     timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:windowNumber
+                                       context:nil characters:@"" charactersIgnoringModifiers:@""
+                                     isARepeat:NO keyCode:code];
+    if (event) [NSApp postEvent:event atStart:NO];
+}
+
+/// Hold the launch's quit key in the game's window, on the main thread,
+/// where applicationShouldTerminate: is called: down now, up later, so the
+/// run loop goes on delivering events meanwhile. NO when there is no key or
+/// no window to hold it in.
+static BOOL holdQuitKey(void) {
+    const char *name = getenv("QUIT_KEY");
+    if (!name || !*name) return NO;
+    int code = quitKeyCode(name);
+    NSWindow *window = gameWindowForKeys();
+    if (code < 0 || !window) {
+        helperReport("QuitWatch", "warning", code < 0 ? "quit key %s isn't one it knows; quitting as Wine does"
+                                                      : "no game window to hold the quit key %s in; quitting as Wine does", name);
+        return NO;
+    }
+    NSInteger windowNumber = window.windowNumber;
+    [window makeKeyAndOrderFront:nil];
+    postQuitKey(NSEventTypeKeyDown, (unsigned short)code, windowNumber);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kQuitKeyHoldSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        postQuitKey(NSEventTypeKeyUp, (unsigned short)code, windowNumber);
+    });
+    helperReport("QuitWatch", "notice", "holding %s for %.0f s, the game's own quit, rather than quitting", name, kQuitKeyHoldSeconds);
+    return YES;
+}
+
 static NSApplicationTerminateReply reportingShouldTerminate(id self, SEL _cmd, NSApplication *sender) {
     helperReport("QuitWatch", "notice", "quit requested");
+    if (holdQuitKey()) return NSTerminateCancel;
     return ((NSApplicationTerminateReply (*)(id, SEL, NSApplication *))gWineShouldTerminate)(self, _cmd, sender);
 }
 

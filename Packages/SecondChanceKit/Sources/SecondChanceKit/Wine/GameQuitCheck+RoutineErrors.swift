@@ -26,6 +26,9 @@ nonisolated extension GameQuitCheck {
         // Hz display (the emulated modes are 60 Hz). A game asking for its own
         // mode names the display instead.
         "NtUserChangeDisplaySettings Changing (null) display settings",
+        // A game's music played through Windows' media stack, stopped as the
+        // game quits: Iji logs it on every quit from its own menu.
+        ":err:quartz:send_buffer Failed to get a sample",
     ]
 
     /// What Steam logs as it starts, as well, for a game launched through it (the steam module's).

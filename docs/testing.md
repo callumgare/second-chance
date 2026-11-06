@@ -796,12 +796,21 @@ handlers:
   point of the window), `{ check: "menu" }` (the picture's bars, and
   switching away and back, below), `expect-end` (the click before it
   should end the game: once it has, only that handler runs again),
-  `{ key: "escape" }` (press a key, by the in-process helper's names, then
-  wait a moment: for a program whose first screen waits for a key, as Iji's
-  does) and `quit` (ask the program to quit as its app's Quit does, and
-  expect it to end). A key's name may be a parameter (`"${first-key}"`): the
-  wine module's `starts-and-quits` presses its `first-key`, when a bundle sets
-  one, before it quits.
+  `{ key: "escape" }` (press a key, by the in-process helper's names, held
+  150 ms; several, space-separated, in turn, each waiting until the picture
+  changes, up to 10 s, so a key isn't lost while a screen it opened is still
+  coming up) and `quit` (ask
+  the program to quit as its app's Quit does, and expect it to end). A key's
+  name may be a parameter (`"${first-key}"`). The wine module's
+  `starts-and-quits` presses a bundle's `first-key` before it quits (a first
+  screen that waits for a key). For a program that ignores ⌘Q and quits only
+  from its own menu, its `quits-with-keys` presses the bundle's `first-keys`
+  on its first screen (`running` needles), then, once its `menu` needles
+  show, its `quit-keys`, and expects it to end; a screen still showing 6 s
+  after its keys gets them again (the program wasn't reading the keyboard
+  yet). Iji's are `escape` at its windowed-or-fullscreen prompt, then
+  `up return return` at a main menu that shows by itself after a minute's
+  loading, which no key skips.
 - **`retry-after`** is how long a screen still showing after its handler
   clicked it waits before another click; **`once`** runs a handler once;
   **`repeat-where-last-seen`** clicks where its needle was last found when

@@ -460,6 +460,10 @@ app keeps no Wine.
   ([wine-in-process-helpers.md](wine-in-process-helpers.md#native-fullscreen)).
   Left out, native fullscreen works as it always has. Any other value is
   refused when planning. ScummVM and DOSBox games are always fullscreen.
+- **`--wine.quit-key=<key>`** makes the app's Quit hold that key down in the
+  program for 3 s, for one that ignores Wine's quit but quits on a key of its
+  own, as Iji does on F12
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#a-game-that-ignores-the-apps-quit)).
 - **A Steam launch is `steam://rungameid/<app id>`**, with no arguments, and
   names the program Steam starts, `--steam.exe=<its path in Wine>`, which the
   app finds the game's process by; as Steam starts a Windows game in the

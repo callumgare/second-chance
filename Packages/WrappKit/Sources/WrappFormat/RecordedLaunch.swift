@@ -167,6 +167,10 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     /// fullscreen whether or not it asks to be.
     public var forcesFullscreen: Bool { options["wine.window"] == "fullscreen" }
 
+    /// `--wine.quit-key=<key>`: the key the app's Quit holds down in a
+    /// program that ignores Wine's quit but quits on a key of its own.
+    public var quitKey: String? { options["wine.quit-key"] }
+
     /// Whether the wrapp arms cursor lock: when its launch says
     /// `--wine.cursor-lock`, or, recorded before it could, when the program
     /// may draw through cnc-ddraw (`inferred`).

@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 16
+release: 17
 native: "wine"                               # its Swift: Packages/Modules/wine (WineKit, WineExecutor), WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -70,6 +70,7 @@ build:
     # A launch's: what the program draws with (direct-draw, direct-3d or
     # unknown), the log and line that say a non-zero exit was a clean quit,
     # cursor-lock, for a game cnc-ddraw draws, which would swallow its first
-    # click, and window (fullscreen or windowed), overriding what the program
-    # asks for when the wrapp gets it wrong.
-    LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, cursor-lock: flag, window: value }
+    # click, window (fullscreen or windowed), overriding what the program
+    # asks for when the wrapp gets it wrong, and quit-key, a key the app's
+    # Quit holds down in a program that ignores Wine's quit.
+    LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, cursor-lock: flag, window: value, quit-key: value }

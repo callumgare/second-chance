@@ -1,0 +1,19 @@
+# Iji: the author's zip, copied in as it comes, nothing to install. A Game
+# Maker 7 game: it draws with Direct3D 8 (it imports ddraw.dll too, only to
+# ask about display modes), and keeps its settings and saves loose in its own
+# folder, so a files mount keeps just those beside the program. It ignores
+# Wine's quit and its window closing, but quits on F12 held down, so the
+# app's Quit holds F12.
+
+INPUT game
+STORE saves
+CONST install-dir = "C:/Iji"
+
+FROM --module=wine@10 prefix AS download
+COPY --from=${input.game} . ${const.install-dir}/ # the zip's files: the game, its music, its manual and its source
+# Game Maker 7 loads every sound through DirectMusic, and Wine's own
+# synthesiser takes 1.5 s over each (err:dmsynth ... WaitForMultipleObjects):
+# Iji sat on "Loading, please wait" for over 6 minutes. Microsoft's own.
+WINE.WINETRICKS directmusic
+LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="*.ini;*.sav;*.cfg" \
+    --wine.graphics=direct-3d --wine.window=windowed --wine.quit-key=f12 "${const.install-dir}/iji.exe"

@@ -1,0 +1,4 @@
+# The question Iji asks first: fullscreen or windowed.
+kind: "text"
+tags: ["running"]
+text: { strings: ["Press Enter to run Iji", "windowed mode"] }
