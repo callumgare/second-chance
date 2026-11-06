@@ -144,11 +144,14 @@ struct LogStoreTests {
     @Test("Empty messages with no error are not stored")
     func emptyAppendSkipped() {
         let store = LogStore.shared
-        let label = "au.gare.callum.second-chance.Test.Empty"
-        let (before, _) = store.snapshot()
+        // Its own label, counted alone: the store is the whole test host's,
+        // and anything else logging meanwhile would change the total.
+        let label = "au.gare.callum.second-chance.Test.Empty-\(UUID().uuidString)"
         store.append(level: "notice", label: label, message: "")
-        let (after, _) = store.snapshot()
-        #expect(after.count == before.count)
+        #expect(store.snapshot().0.filter { $0.label == label }.isEmpty)
+        // And a message under the same label is stored, so the filter is sound.
+        store.append(level: "notice", label: label, message: "not empty")
+        #expect(store.snapshot().0.filter { $0.label == label }.map(\.message) == ["not empty"])
     }
 
     // MARK: - Formatter
