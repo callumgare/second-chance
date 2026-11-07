@@ -16,22 +16,24 @@
 import Foundation
 
 nonisolated public struct WindowsExecutable: Sendable {
-    private let bytes: Data
-    private let sections: [Section]
+    let bytes: Data
+    let sections: [Section]
     /// Where the optional header's data directories start, and how many there are.
-    private let directories: Int
-    private let directoryCount: Int
+    let directories: Int
+    let directoryCount: Int
     /// The address the image prefers to be loaded at, which its absolute
     /// addresses (an import slot's, in a `call [slot]`) assume.
     public let imageBase: Int
     /// PE32+, a 64-bit image: its import tables' entries are 8 bytes.
     private let is64: Bool
 
-    private struct Section: Sendable {
+    struct Section: Sendable {
         let name: String
         let virtualAddress: Int
         let size: Int
         let rawOffset: Int
+        /// How much of the section the file holds.
+        let rawSize: Int
     }
 
     /// Mapped rather than read in, since an installer can be hundreds of MB,
@@ -77,7 +79,7 @@ nonisolated public struct WindowsExecutable: Sendable {
             let nameBytes = (0..<8).compactMap { bytes.u8(at: header + $0) }.prefix { $0 != 0 }
             let name = String(decoding: nameBytes.map(UInt8.init), as: UTF8.self)
             sections.append(Section(name: name, virtualAddress: virtualAddress, size: max(virtualSize, rawSize),
-                                    rawOffset: rawOffset))
+                                    rawOffset: rawOffset, rawSize: rawSize))
         }
         self.bytes = bytes
         self.sections = sections
@@ -203,9 +205,12 @@ nonisolated public struct WindowsExecutable: Sendable {
         return start..<min(start + size, bytes.count)
     }
 
-    private struct ResourceEntry {
+    struct ResourceEntry {
         /// Nil for an entry with a name rather than a number.
         let id: Int?
+        /// For a named entry, where its name is, from the start of the
+        /// resource section.
+        let nameOffset: Int?
         /// From the start of the resource section.
         let offset: Int
         let isDirectory: Bool
@@ -213,7 +218,7 @@ nonisolated public struct WindowsExecutable: Sendable {
 
     /// The entries of the resource directory at `offset`: named ones first,
     /// then numbered ones.
-    private func resourceEntries(at offset: Int, root: Int) -> [ResourceEntry] {
+    func resourceEntries(at offset: Int, root: Int) -> [ResourceEntry] {
         guard let named = bytes.u16(at: offset + 12), let numbered = bytes.u16(at: offset + 14) else { return [] }
         var entries: [ResourceEntry] = []
         for index in 0..<min(named + numbered, 4096) {
@@ -221,6 +226,7 @@ nonisolated public struct WindowsExecutable: Sendable {
             guard let name = bytes.u32(at: entry), let target = bytes.u32(at: entry + 4) else { break }
             entries.append(ResourceEntry(
                 id: name & 0x8000_0000 == 0 ? name : nil,
+                nameOffset: name & 0x8000_0000 == 0 ? nil : name & 0x7FFF_FFFF,
                 offset: target & 0x7FFF_FFFF,
                 isDirectory: target & 0x8000_0000 != 0))
         }
@@ -269,7 +275,7 @@ nonisolated public struct WindowsExecutable: Sendable {
     // MARK: - Reading
 
     /// The RVA of data directory `index`, if the program has one there.
-    private func directory(_ index: Int) -> Int? {
+    func directory(_ index: Int) -> Int? {
         guard index < directoryCount, let rva = bytes.u32(at: directories + index * 8), rva != 0 else { return nil }
         return rva
     }
@@ -299,7 +305,7 @@ nonisolated public struct WindowsExecutable: Sendable {
     }
 
     /// UTF-16LE from `offset` to its NUL, or to `end`.
-    private func utf16String(from offset: Int, before end: Int) -> String {
+    func utf16String(from offset: Int, before end: Int) -> String {
         var units: [UInt16] = []
         var position = offset
         while position + 2 <= end, units.count < 4096, let unit = bytes.u16(at: position), unit != 0 {
