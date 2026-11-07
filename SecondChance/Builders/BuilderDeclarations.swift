@@ -31,7 +31,7 @@ nonisolated enum BuilderDeclarations {
         // The scummvm module's executor.
         "scummvm": ["KEEP-DATA": []],
         // The basilisk module's executor.
-        "basilisk": ["SETUP": [], "CDROM": []],
+        "basilisk": ["SETUP": [], "CDROM": [], "RUN": ["automation", "screen", "limit"], "STARTUP": []],
         // GameInstallerRunner, and its patch steps.
         "installer": ["RUN": ["from", "into", "answer-file", "automation", "creates", "patch", "mount"]],
         // HerDownloadWrappBuilder.

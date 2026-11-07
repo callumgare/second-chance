@@ -35,6 +35,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `getDisk1Path()`              | `DISK_1_PATH`                           | NSOpenPanel (disk/ISO)         |
 /// | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH`                         | Ejects disc 1; main window, answered by disc 2 going in, or NSOpenPanel |
 /// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe, .dmg or .app) |
+/// | `getMacROM(rejected:)`        | `MAC_ROM_PATH`                          | Main window, then NSOpenPanel  |
 /// | `steamGameFromEnvironment`    | `STEAM_GAME_SLUG`                       | nil: asked after sign-in       |
 /// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | main window, the owned games   |
 /// | `getSteamLaunchMode(for:)`    | `SECOND_CHANCE_INPUTS`'s `launch-mode`, or `STEAM_LAUNCH_MODE` (`steam`/`direct`) | main window, two choices |
@@ -314,6 +315,53 @@ class WrappBuildInput {
         viewModel?.chosenInstaller = url
         return url
     }
+
+    /// A classic Mac's ROM, for a game the basilisk module runs: the file
+    /// `MAC_ROM_PATH` names, or one the person chooses, told first what it
+    /// is and where one can be had. nil when there's no one to ask (a
+    /// headless build without `MAC_ROM_PATH`); throws when they cancel. The
+    /// file is the caller's to check (`MacROMs`); `rejected` is a file that
+    /// wasn't one, asked about again; with `asking` false, only
+    /// `MAC_ROM_PATH` is looked at.
+    @MainActor
+    func getMacROM(rejected: URL? = nil, asking: Bool = true) async throws -> URL? {
+        if rejected == nil, let path = environment["MAC_ROM_PATH"] {
+            return URL(fileURLWithPath: path)
+        }
+        guard asking, viewModel != nil, environment["NON_INTERACTIVE"] != "true" else { return nil }
+        let detail = rejected == nil
+            ? String(localized: """
+                To run Mac games, Second Chance needs the contents of the ROM chip from an old Mac: a Quadra 650 \
+                or 800 works best. Second Chance keeps it, so it's asked for only once.
+                """)
+            : String(localized: """
+                That file isn't the ROM of a Mac that Second Chance can run. Choose the ROM of a Quadra 650 or \
+                800, or a Centris 650.
+                """)
+        for _ in 0..<20 {
+            let question = Question(
+                title: String(localized: "This Game Needs a Mac's ROM"), detail: detail,
+                actions: [.init(title: String(localized: "Cancel"), role: .cancel),
+                          .init(title: String(localized: "Find One at the Internet Archive")),
+                          .init(title: String(localized: "Choose the ROM File…"), role: .primary)])
+            guard let answer = await ask(question), answer.action != 0 else { throw WrappBuildError.userCancelled }
+            if answer.action == 1 {
+                if let page = URL(string: Self.macROMPage) { NSWorkspace.shared.open(page) }
+                continue
+            }
+            let panel = NSOpenPanel()
+            panel.message = String(localized: "Choose the ROM file of an old Mac.")
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = false
+            panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            if let url = await runOpenPanel(panel) { return url }
+        }
+        throw WrappBuildError.userCancelled
+    }
+
+    /// Where a Mac's ROM can be had: the Internet Archive's copy of a
+    /// Quadra 800's.
+    static let macROMPage = "https://archive.org/details/800_20250604"
 
     /// The Steam game `STEAM_GAME_SLUG` names, or nil when it isn't set.
     /// Read before Steam starts, so the install can go in with Steam's

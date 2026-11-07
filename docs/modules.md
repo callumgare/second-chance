@@ -250,6 +250,7 @@ Swift, its **kit**:
 | `Packages/Modules/wine` (`WineModule`) | `WineKit`, `WineExecutor` | The kit is the Wine library every process that runs a Windows program uses — `Wine`, `WineCommand`, the registry, server, desktop and drives ([wrapp-build.md](wrapp-build.md#running-wine)) — which `SecondChanceKit` links. The executor carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS`, `MOUNT` and `KEEP-THREAD-HANDLES` ([below](#the-wine-modules-patches)), runs `wine:` programs for `RUN`, and has `Winetricks` and the winetricks script as a package resource. It also carries out the `setup` steps `USE wine` plans, `HELPERS` (the in-process helpers laid in the tree's `Frameworks/`) and `PREFIX` (wineboot's). Beside them, `InProcessHelpers/` and `build-in-process-helpers.sh` ([wine-in-process-helpers.md](wine-in-process-helpers.md)). |
 | `Packages/Modules/scummvm` (`ScummVMModule`) | `ScummVMExecutor` | Carries out `SCUMMVM.KEEP-DATA <file>…` ([below](#the-scummvm-modules-data)). ScummVM's engine is prepared by `ScummVMBuild` in `Packages/WrappBuilder` and started in the wrapp by `ScummVMRuntime`, which haven't moved into the package. |
 | `Packages/Modules/nancy-drew` (`NancyDrewModule`) | `NancyDrewExecutor` | Carries out `NANCY-DREW.CONFIGURE-INI <folder>`: every `.ini` in the folder given what the module's `ini.yaml` says, read through `moduleFile`, each file written back in the encoding it came in (`TextFile`, in `WindowsFormats`). |
+| `Packages/Modules/basilisk` (`BasiliskModule`) | `BasiliskExecutor`, `BasiliskKit` | Carries out `BASILISK.SETUP`, `CDROM`, `RUN` and `STARTUP` ([below](#the-basilisk-modules-mac)); given the in-process helpers and the engine's build tools (hfsutils) by whoever runs it. The kit places `basilisk:` paths (`BasiliskPaths`). Basilisk II is prepared by `BasiliskBuild` in `Packages/WrappBuilder` and started in the wrapp by `BasiliskRuntime`. |
 
 ### The scummvm module's data
 
@@ -429,13 +430,40 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
 - **The ROM**, which Apple never gave out, is no source of the package: it's the
   person's own, kept in the engine store as `roms/<sha256>.rom` (`MacROMs`, known
   by the checksum it starts with) and given to a build as the provided file
-  `module:basilisk:/rom`. A Debug build of Second Chance downloads one when none is
-  kept, once per Mac, as it would an engine (`WrappBuildHelper.ensureMacROM`); a
-  Release build never does, and fails a build that needs one with a plain message.
+  `module:basilisk:/rom`. When none is kept, the build takes the file `MAC_ROM_PATH`
+  names, or asks the person once (`WrappBuildInput.getMacROM`): a page saying what
+  it is, with a button to the Internet Archive's copy of a Quadra 800's and one
+  to choose the file, checked by its checksum (a file that isn't one is asked about
+  again). A Debug build of Second Chance downloads that copy instead of asking, once
+  per Mac, as it would an engine (`WrappBuildHelper.ensureMacROM`); a Release build
+  never downloads one, and a headless build with no `MAC_ROM_PATH` fails with a
+  plain message.
 - **`USE basilisk`** plans `BASILISK.SETUP`: the system disk copied to the app's
   `SharedSupport/basilisk/boot.hfv` and the ROM to `mac.rom` beside it.
   `BASILISK.CDROM ${input.disc-1}` keeps a disc's image in the app as the Mac's CD
   (`cdrom-<n>.iso`): a disc input built from an image gives it as `disc-1.image`.
+- **`BASILISK.RUN --automation=<script>`** does at build time what only the Mac
+  itself can, such as running Apple's Installer: it boots the tree's Mac with the
+  in-process helpers inserted, and `basilisk_mac.m` drives it by the script
+  (`BASILISK_MAC_AUTOMATION`), a line at a time, then shuts it down. A line is one
+  of puppet control's requests (`click 440 418`, `key cmd+option+w`,
+  [docs/wine-in-process-helpers.md](wine-in-process-helpers.md#puppet-control)),
+  `type <text>`, `wait <seconds>`, `wait-for <seconds> <text>`, which waits for the
+  text to be on the Mac's screen (Vision reading a picture of the window), or
+  `wait-gone <seconds> <text>`, for it to go. Basilisk II keeps its window when
+  the Mac restarts, so a restart is waited for by its screen: "Welcome to
+  Macintosh" coming and going. A request the window can't take yet (no window, or
+  none to take it) is tried again for 90 s. The
+  helper reports `automation finished` or `automation failed at line <n>` (with a
+  picture of the screen left in the temporary folder's `basilisk-automation/`),
+  and the step fails on the second, or when the Mac hasn't shut down in
+  `--limit` seconds (15 minutes). Its prefs are the wrapp's, silent. Its layer
+  is suggested: what it installs is kept, once per Mac.
+- **`BASILISK.STARTUP <basilisk:disk:…:item>`** moves an item on the startup disk
+  (an alias the script made) into `System Folder:Startup Items`, so the Mac opens
+  it at every boot. It changes the disk with the engine's hfsutils
+  (`build-tools/hfsutils`, `hmount`, `hrename`, `humount`, with a `HOME` of its
+  own, where they keep the mounted volume), never with code of ours.
 - **Its path type**, `basilisk:`, is a path on the emulated Mac in Mac OS's own form
   (`basilisk:Ingenious CD:Ingenious`); it has no place in the app (`BasiliskPaths`).
 - **In the wrapp** (`BasiliskRuntime`): the startup disk is the person's, a store
@@ -451,12 +479,17 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
   `basilisk_mac.m` (`BASILISK_MAC_EXE`), which:
   - gets the window drawing: Basilisk II presents only when the Mac's screen
     changes, and macOS drops what an occluded window presents (a background
-    login's always is), so it pictures the window once (and, in a background
-    login, twice a second) and sends SDL an "exposed" event for a full redraw;
+    login's always is), so it pictures the window until it counts as visible,
+    and sends SDL an "exposed" event for a full redraw. Never continually: each
+    picture stalls Basilisk II for most of a second (a picture twice a second
+    made the sound and video stutter), as does each of an automation's
+    `wait-for`s;
   - gives the Mac a first pointer position, without which the Finder never
     draws its desktop;
-  - shuts the Mac down when the wrapp quits (SIGUSR2): the power key, then
-    Return on Shut Down, so the disk is left clean.
+  - shuts the Mac down when the wrapp quits (SIGUSR2), or Basilisk II's own
+    Quit is chosen (⌘Q, which SDL alone would turn into the power key, leaving
+    the Mac asking "shut down now?"): the power key, then Return on Shut Down,
+    so the disk is left clean.
 
 ### The engine store
 

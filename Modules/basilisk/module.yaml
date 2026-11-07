@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "basilisk"
-release: 2
+release: 3
 native: "basilisk"                           # its Swift: Packages/Modules/basilisk (BasiliskExecutor, BasiliskKit), BasiliskRuntime, BasiliskBuild
 versions:
   # Basilisk II, a 68040 Mac (a Quadra 900 to Mac OS), and System 7.5.3, which
@@ -52,6 +52,22 @@ build:
     # BASILISK.CDROM ${input.disc-1}: the disc's image, kept in the app as the
     # Mac's CD (SharedSupport/basilisk/cdrom-<n>.iso, in the order given).
     CDROM: { arguments: { count: 1, roles: [input] }, layer: suggested }
+    # BASILISK.RUN --automation=<script>: the Mac booted and driven by the
+    # script, a line at a time (puppet control's requests, `type`, `wait`,
+    # `wait-for <seconds> <text on the screen>`), then shut down; what it
+    # changed on the startup disk stays. --screen as LAUNCH's, --limit in
+    # seconds (15 minutes unless said).
+    RUN:
+      options:
+        automation: { kind: value, role: file }
+        screen: value
+        limit: value
+      required: [automation]
+      layer: suggested
+    # BASILISK.STARTUP <basilisk:disk:folder:item>: the item (an alias RUN's
+    # script made) moved into the startup disk's System Folder:Startup Items,
+    # so the Mac opens it at every boot. With hfsutils, the Mac shut down.
+    STARTUP: { arguments: { count: 1, roles: [location] } }
   core-options:
     # The Mac's screen, <width>x<height>x<colour depth>: 640x480x8 unless said.
     LAUNCH: { screen: value }

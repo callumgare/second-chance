@@ -21,15 +21,30 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 ///   `mac.rom` beside it.
 /// - `BASILISK.CDROM <input>`: the disc's image to `cdrom-<n>.iso`, the
 ///   Mac's CD, numbered in the order the steps give them.
+/// - `BASILISK.RUN --automation=<script>`: the Mac booted and driven by the
+///   script (BasiliskRunning.swift), then shut down.
+/// - `BASILISK.STARTUP <basilisk:item>`: the item moved into the startup
+///   disk's Startup Items, with hfsutils.
 public nonisolated struct BasiliskExecutor: ModuleExecutor {
-    public static let handles = ["SETUP", "CDROM"]
+    public static let handles = ["SETUP", "CDROM", "RUN", "STARTUP"]
+    public static var revision: Int { 2 }
+
+    /// The in-process helpers (`in_process_helpers.dylib`), which drive the
+    /// Mac for `RUN`: the template's.
+    let helpers: URL?
+    /// The basilisk engine's build tools for a tree (hfsutils), in the
+    /// engine store.
+    let buildTools: @Sendable (URL) -> URL?
 
     /// The engine's System 7.5.3, as `BasiliskBuild.prepare` lays it in.
     static let systemDisk = "Contents/SharedSupport/basilisk/system.hfv"
     static let folder = "Contents/SharedSupport/basilisk"
     static let rom = "module:basilisk:/rom"
 
-    public init() {}
+    public init(helpers: URL? = nil, buildTools: @escaping @Sendable (URL) -> URL? = { _ in nil }) {
+        self.helpers = helpers
+        self.buildTools = buildTools
+    }
 
     public func keyInputs(for step: PlannedStep, in context: any StepContext) async throws -> KeyInputs {
         switch step.instruction {
@@ -73,6 +88,10 @@ public nonisolated struct BasiliskExecutor: ModuleExecutor {
                 return target
             }
             logger.notice("The disc is the Mac's CD: \(target.lastPathComponent)")
+        case "RUN":
+            try await runAutomation(step, in: context)
+        case "STARTUP":
+            try await addStartupItem(step, in: context)
         default:
             throw StepFailure.recipe("\(step.origin): the basilisk module has no instruction \(step.instruction)")
         }

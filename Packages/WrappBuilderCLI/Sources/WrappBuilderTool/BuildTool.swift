@@ -37,7 +37,11 @@ public nonisolated enum BuildTool {
             }),
             "nancy-drew": NancyDrewExecutor(),
             "scummvm": ScummVMExecutor(),
-            "basilisk": BasiliskExecutor(),
+            "basilisk": BasiliskExecutor(helpers: helpers, buildTools: { tree in
+                guard let engine = EngineInstall.installed(in: tree.appendingPathComponent("Contents")).first(where: { $0.module == "basilisk" })
+                else { return nil }
+                return EngineStore.standardRoot().appendingPathComponent("\(engine.hash)/\(EngineTree.buildTools)")
+            }),
         ]
     }
 

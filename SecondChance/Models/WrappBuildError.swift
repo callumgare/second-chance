@@ -310,8 +310,8 @@ enum WrappBuildError: LocalizedError, Equatable {
                 """)
         case .macROMNeeded:
             return String(localized: """
-                To run Mac games, Second Chance needs the ROM chip's contents from an old Mac \
-                (a Quadra 650 or 800 works best).
+                To run Mac games, Second Chance needs the contents of the ROM chip from an old Mac \
+                (a Quadra 650 or 800 works best). Try again, and choose its ROM file when Second Chance asks.
                 """)
         case .engineUnavailable:
             return String(localized: """

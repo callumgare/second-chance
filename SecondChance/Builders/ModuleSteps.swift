@@ -40,7 +40,9 @@ struct ModuleSteps {
         // program (docs/module-programs.md).
         let shipped: [String: any ModuleExecutor] = ["wine": WineExecutor(helpers: helpers, buildTools: wineBuildTools),
                                                      "nancy-drew": NancyDrewExecutor(), "scummvm": ScummVMExecutor(),
-                                                     "basilisk": BasiliskExecutor()]
+                                                     "basilisk": BasiliskExecutor(helpers: helpers, buildTools: {
+                                                         engineBuildTools("basilisk", for: $0)
+                                                     })]
         return shipped.merging(AddedModules.executors(addedModules())) { mine, _ in mine }
     }
 
@@ -53,10 +55,13 @@ struct ModuleSteps {
     }
 
     /// The `build-tools` of the Wine engine the tree has, in the engine store.
-    nonisolated static func wineBuildTools(for tree: URL) -> URL? {
-        guard let wine = EngineInstall.installed(in: tree.appendingPathComponent("Contents")).first(where: { $0.module == "wine" })
+    nonisolated static func wineBuildTools(for tree: URL) -> URL? { engineBuildTools("wine", for: tree) }
+
+    /// The `build-tools` of the engine of `module` the tree has, in the engine store.
+    nonisolated static func engineBuildTools(_ module: String, for tree: URL) -> URL? {
+        guard let engine = EngineInstall.installed(in: tree.appendingPathComponent("Contents")).first(where: { $0.module == module })
         else { return nil }
-        let tools = EngineStore.standardRoot().appendingPathComponent("\(wine.hash)/\(EngineTree.buildTools)")
+        let tools = EngineStore.standardRoot().appendingPathComponent("\(engine.hash)/\(EngineTree.buildTools)")
         return FileManager.default.fileExists(atPath: tools.path) ? tools : nil
     }
 

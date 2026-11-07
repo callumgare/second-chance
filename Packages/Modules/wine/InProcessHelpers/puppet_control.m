@@ -779,6 +779,14 @@ static NSString *handle(NSString *line) {
     return [@"error unknown request: " stringByAppendingString:line];
 }
 
+/// A request answered in this process, as one from a socket would be: what
+/// basilisk_mac.m's build-time automation drives the Mac's window with, in
+/// puppet control's own words (`click 450 420`, `key cmd+down`). Not on the
+/// main thread: requests wait on it.
+NSString *puppetControlRequest(NSString *line) {
+    return handle(line);
+}
+
 /// Answer one connection's request, then close it.
 static void *answer(void *arg) {
     int client = (int)(intptr_t)arg;

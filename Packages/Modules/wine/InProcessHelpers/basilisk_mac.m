@@ -17,30 +17,48 @@
 //    puppet control's `capture`, needing no permission) marks it visible;
 //    then an SDL "exposed" event, which Basilisk II answers with a full
 //    redraw, puts the Mac's current screen in it. The exposed event goes
-//    again whenever the window becomes visible or changes size. In such a
-//    login, what the window presents later still reaches the screen only
-//    when it's pictured, so it's pictured twice a second while Basilisk II
-//    runs; on the Mac's own screen it isn't.
+//    again whenever the window becomes visible or changes size. It isn't
+//    pictured again after that: each picture stalls Basilisk II for most of
+//    a second, which a picture twice a second made the game's sound and
+//    video stutter.
 //  - **The Mac's first pointer position.** The Finder doesn't draw its
 //    desktop until the Mac has one, which it gets only when the pointer
 //    moves over the window. So it's given one as an SDL event, where the
 //    person's pointer is if it's over the window, else in the middle; never
 //    once the person has moved the pointer there, and the person's pointer
 //    itself is never moved.
-//  - **Shutting the Mac down.** SIGUSR2 (the wrapp's, when it quits) raises
+//  - **Shutting the Mac down.** SIGUSR2 (the wrapp's, when it quits), and
+//    the app's own Quit (⌘Q, which SDL would turn into the power key alone,
+//    leaving the Mac asking "shut down now?"), raise
 //    the Mac's power key, as Basilisk II does for SIGTERM, then presses
 //    Return, Shut Down being the dialog's default, until the Mac has shut
 //    down and Basilisk II exits: its disk is left clean, the person's files
 //    on it safe. The wrapp ends it only if this hasn't in its time.
+//  - **A build's automation.** With BASILISK_MAC_AUTOMATION naming a script
+//    (the basilisk module's BASILISK.RUN), the Mac is driven by it once its
+//    window is up, a line at a time: puppet control's requests (`click 440
+//    418`, `key cmd+down`), `type <text>`, `wait <seconds>`, and `wait-for
+//    <seconds> <text>`, which waits for the text to be on the Mac's screen
+//    (read from a picture of the window by Vision), and `wait-gone
+//    <seconds> <text>`, for it to go. A request the window
+//    can't take yet, as while the Mac restarts, is tried again for a while.
+//    Then the Mac is shut down. How it went is a report line,
+//    `automation finished` or `automation failed at line <n>`, and a
+//    failure leaves a picture of the screen in BASILISK_MAC_AUTOMATION_PICTURES.
 
 #import <Cocoa/Cocoa.h>
+#import <ImageIO/ImageIO.h>
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
+#import <Vision/Vision.h>
 #import <dlfcn.h>
+#import <objc/runtime.h>
 #import <signal.h>
 #import <unistd.h>
 #import "helper_common.h"
 
 static const char *kHelper = "BasiliskMac";
+
+static void quitShutsDown(void);
 
 /// Basilisk II's window: its one titled, visible window.
 static NSWindow *macWindow(void) {
@@ -169,31 +187,6 @@ static void pictureWindow(CGWindowID windowID) {
 #pragma clang diagnostic pop
 }
 
-/// Whether this login is the one on the Mac's screen (not a background one,
-/// as a test user's is).
-static BOOL sessionOnConsole(void) {
-    CFDictionaryRef session = CGSessionCopyCurrentDictionary();
-    if (!session) return YES;
-    CFBooleanRef onConsole = CFDictionaryGetValue(session, kCGSessionOnConsoleKey);
-    BOOL result = !onConsole || CFBooleanGetValue(onConsole);
-    CFRelease(session);
-    return result;
-}
-
-/// In a login that isn't on the Mac's screen, what the window presents
-/// reaches the screen only when something takes a picture of it, so one is
-/// taken twice a second for as long as Basilisk II runs.
-static void keepPicturing(NSWindow *window) {
-    static dispatch_source_t timer;
-    if (timer) return;
-    helperReport(kHelper, "notice", "this login isn't on the Mac's screen: picturing the Mac's window twice a second to keep it drawn");
-    timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 500 * NSEC_PER_MSEC), 500 * NSEC_PER_MSEC, 100 * NSEC_PER_MSEC);
-    CGWindowID windowID = (CGWindowID)window.windowNumber;
-    dispatch_source_set_event_handler(timer, ^{ pictureWindow(windowID); });
-    dispatch_resume(timer);
-}
-
 /// Until macOS counts the window as visible: a picture of it now and then (a
 /// few tries, a while apart), the exposed event following from the change.
 static void showWindow(NSWindow *window, int tries) {
@@ -235,7 +228,7 @@ static void watchForWindow(int tries) {
         }];
         showWindow(window, 0);
         givePointer(window);
-        if (!sessionOnConsole()) keepPicturing(window);
+        quitShutsDown();
     });
 }
 
@@ -253,8 +246,12 @@ static void pressReturn(NSWindow *window) {
     }
 }
 
-/// SIGUSR2: shut the Mac down, as its power key and Return would.
+/// SIGUSR2, the app's Quit, or the end of an automation: shut the Mac
+/// down, as its power key and Return would. Once.
 static void startShutDown(void) {
+    static BOOL started = NO;
+    if (started) return;
+    started = YES;
     helperReport(kHelper, "notice", "shutting the Mac down");
     // Basilisk II turns SIGTERM into the Mac's power key, which asks "shut
     // down now?" with Shut Down as its default.
@@ -269,6 +266,225 @@ static void startShutDown(void) {
     }
 }
 
+/// The app's Quit (⌘Q, the Dock's Quit, puppet control's `quit`) shuts the
+/// Mac down as SIGUSR2 does, rather than asking the Mac "shut down now?"
+/// and waiting there, as SDL's own answer (the power key) would.
+static NSApplicationTerminateReply shutDownForQuit(id self, SEL _cmd, NSApplication *app) {
+    startShutDown();
+    return NSTerminateCancel;
+}
+
+static void quitShutsDown(void) {
+    id delegate = NSApp.delegate;
+    if (!delegate) {
+        helperReport(kHelper, "warning", "the app's Quit can't shut the Mac down: it has no app delegate");
+        return;
+    }
+    SEL selector = @selector(applicationShouldTerminate:);
+    Method method = class_getInstanceMethod([delegate class], selector);
+    if (method) method_setImplementation(method, (IMP)shutDownForQuit);
+    else class_addMethod([delegate class], selector, (IMP)shutDownForQuit, "Q@:@");
+    helperReport(kHelper, "notice", "the app's Quit shuts the Mac down");
+}
+
+#pragma mark - A build's automation
+
+/// puppet_control.m's requests, answered in this process.
+NSString *puppetControlRequest(NSString *line);
+
+/// A request the window can't take yet (the Mac restarting, its window
+/// made again) is tried again for this long.
+static const int kRetrySeconds = 90;
+
+/// The window pictured at full size, or NULL (no window, or no picture yet).
+/// Not on the main thread: it waits for ScreenCaptureKit.
+static CGImageRef copyWindowPicture(void) {
+    if (!canPictureOwnWindows()) return NULL;
+    __block CGWindowID windowID = 0;
+    __block NSSize size = NSZeroSize;
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        NSWindow *window = macWindow();
+        if (!window) return;
+        windowID = (CGWindowID)window.windowNumber;
+        size = window.frame.size;
+    });
+    if (!windowID) return NULL;
+    __block CGImageRef picture = NULL;
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
+    [SCShareableContent getCurrentProcessShareableContentWithCompletionHandler:^(SCShareableContent *content, NSError *error) {
+        SCWindow *found = nil;
+        for (SCWindow *window in content.windows) {
+            if (window.windowID == windowID) found = window;
+        }
+        if (!found) {
+            dispatch_semaphore_signal(done);
+            return;
+        }
+        SCContentFilter *filter = [[SCContentFilter alloc] initWithDesktopIndependentWindow:found];
+        SCStreamConfiguration *config = [SCStreamConfiguration new];
+        // Twice the Mac's pixels: the Mac's small bitmap fonts read better.
+        config.width = (size_t)size.width * 2;
+        config.height = (size_t)size.height * 2;
+        config.showsCursor = NO;
+        [SCScreenshotManager captureImageWithFilter:filter configuration:config
+                                  completionHandler:^(CGImageRef image, NSError *captureError) {
+            if (image) picture = CGImageRetain(image);
+            dispatch_semaphore_signal(done);
+        }];
+    }];
+#pragma clang diagnostic pop
+    dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC));
+    return picture;
+}
+
+/// The text Vision reads in `picture`, lines joined by newlines; loaded
+/// when first needed, so the dylib doesn't bring Vision into every program
+/// it's inserted into.
+static NSString *textIn(CGImageRef picture) {
+    static Class requestClass, handlerClass;
+    if (!requestClass) {
+        dlopen("/System/Library/Frameworks/Vision.framework/Vision", RTLD_LAZY);
+        requestClass = NSClassFromString(@"VNRecognizeTextRequest");
+        handlerClass = NSClassFromString(@"VNImageRequestHandler");
+    }
+    if (!requestClass || !handlerClass) return nil;
+    VNRecognizeTextRequest *request = [[requestClass alloc] init];
+    request.recognitionLevel = VNRequestTextRecognitionLevelAccurate;
+    request.usesLanguageCorrection = NO;
+    VNImageRequestHandler *handler = [[handlerClass alloc] initWithCGImage:picture options:@{}];
+    if (![handler performRequests:@[request] error:nil]) return nil;
+    NSMutableArray<NSString *> *lines = [NSMutableArray array];
+    for (VNRecognizedTextObservation *observation in request.results) {
+        NSString *line = [observation topCandidates:1].firstObject.string;
+        if (line) [lines addObject:line];
+    }
+    return [lines componentsJoinedByString:@"\n"];
+}
+
+/// Text compared as the Mac's screen reads: case, and the curly quotes,
+/// dashes and ™ the Mac draws that Vision reads loosely, aside.
+static NSString *comparable(NSString *text) {
+    NSMutableString *plain = [[text lowercaseString] mutableCopy];
+    NSDictionary *same = @{ @"’": @"'", @"‘": @"'", @"“": @"\"", @"”": @"\"",
+                            @"…": @"...", @"™": @"", @"–": @"-", @"—": @"-" };
+    for (NSString *from in same) [plain replaceOccurrencesOfString:from withString:same[from] options:0 range:NSMakeRange(0, plain.length)];
+    return [[plain componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
+            componentsJoinedByString:@""];
+}
+
+/// A picture of the screen left where BASILISK_MAC_AUTOMATION_PICTURES says,
+/// for whoever looks into a failure.
+static void keepPicture(const char *name) {
+    const char *folder = getenv("BASILISK_MAC_AUTOMATION_PICTURES");
+    if (!folder || !*folder) return;
+    CGImageRef picture = copyWindowPicture();
+    if (!picture) return;
+    NSURL *url = [NSURL fileURLWithPath:[NSString stringWithFormat:@"%s/%s.png", folder, name]];
+    CGImageDestinationRef destination = CGImageDestinationCreateWithURL((__bridge CFURLRef)url,
+                                                                        CFSTR("public.png"), 1, NULL);
+    if (destination) {
+        CGImageDestinationAddImage(destination, picture, NULL);
+        if (CGImageDestinationFinalize(destination)) helperReport(kHelper, "notice", "pictured the Mac's screen: %s", url.path.UTF8String);
+        CFRelease(destination);
+    }
+    CGImageRelease(picture);
+}
+
+/// `wait-for <seconds> <text>`: until the text is on the Mac's screen, or
+/// with `gone` (`wait-gone`), until it isn't. nil when so; else what was
+/// there instead.
+static NSString *waitForText(NSString *text, double seconds, BOOL gone) {
+    NSString *wanted = comparable(text);
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
+    NSString *last = @"(no picture of the window)";
+    do {
+        @autoreleasepool {
+            CGImageRef picture = copyWindowPicture();
+            if (picture) {
+                NSString *read = textIn(picture) ?: @"";
+                CGImageRelease(picture);
+                if ([comparable(read) containsString:wanted] != gone) return nil;
+                last = read.length ? [read stringByReplacingOccurrencesOfString:@"\n" withString:@" | "] : @"(no text)";
+            }
+        }
+        sleep(1);
+    } while ([deadline timeIntervalSinceNow] > 0);
+    return [NSString stringWithFormat:gone ? @"\"%@\" was still on the screen after %.0f s; it read: %@"
+                                           : @"\"%@\" wasn't on the screen in %.0f s; it read: %@", text, seconds, last];
+}
+
+/// One request through puppet control, tried again while the window can't
+/// take it. nil when done; else the error.
+static NSString *request(NSString *line) {
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:kRetrySeconds];
+    for (;;) {
+        NSString *reply = puppetControlRequest(line);
+        if ([reply hasPrefix:@"ok"]) return nil;
+        BOOL notYet = [reply hasPrefix:@"error no game window"] || [reply hasPrefix:@"error timed out"]
+            || [reply hasPrefix:@"error the event would not land"];
+        if (!notYet || [deadline timeIntervalSinceNow] <= 0) return reply;
+        sleep(1);
+    }
+}
+
+/// One line of the script: nil when done, else what went wrong.
+static NSString *runLine(NSString *line) {
+    NSRange space = [line rangeOfString:@" "];
+    NSString *command = space.location == NSNotFound ? line : [line substringToIndex:space.location];
+    NSString *rest = space.location == NSNotFound ? @"" :
+        [[line substringFromIndex:space.location + 1] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+    if ([command isEqualToString:@"wait"]) {
+        double seconds = rest.doubleValue;
+        if (seconds <= 0) return @"wait needs a number of seconds";
+        usleep((useconds_t)(seconds * 1e6));
+        return nil;
+    }
+    if ([command isEqualToString:@"wait-for"] || [command isEqualToString:@"wait-gone"]) {
+        NSRange gap = [rest rangeOfString:@" "];
+        double seconds = rest.doubleValue;
+        if (gap.location == NSNotFound || seconds <= 0) return [command stringByAppendingString:@" needs a number of seconds, then the text"];
+        return waitForText([rest substringFromIndex:gap.location + 1], seconds, [command isEqualToString:@"wait-gone"]);
+    }
+    if ([command isEqualToString:@"type"]) {
+        NSString *encoded = [rest stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.alphanumericCharacterSet];
+        return request([@"type " stringByAppendingString:encoded]);
+    }
+    return request(line);
+}
+
+/// The script, line by line, once the window is up; then the Mac shut down.
+static void runAutomation(NSString *path) {
+    NSError *error = nil;
+    NSString *script = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:&error];
+    if (!script) {
+        helperReport(kHelper, "error", "automation failed at line 0: can't read %s: %s", path.UTF8String,
+                     error.localizedDescription.UTF8String ?: "no error");
+        dispatch_async(dispatch_get_main_queue(), ^{ startShutDown(); });
+        return;
+    }
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSArray<NSString *> *lines = [script componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet];
+        int number = 0;
+        for (NSString *raw in lines) {
+            number++;
+            NSString *line = [raw stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+            if (line.length == 0 || [line hasPrefix:@"#"]) continue;
+            helperReport(kHelper, "notice", "automation line %d: %s", number, line.UTF8String);
+            NSString *problem = runLine(line);
+            if (problem) {
+                helperReport(kHelper, "error", "automation failed at line %d (%s): %s", number, line.UTF8String, problem.UTF8String);
+                keepPicture("automation-failed");
+                dispatch_async(dispatch_get_main_queue(), ^{ startShutDown(); });
+                return;
+            }
+        }
+        helperReport(kHelper, "notice", "automation finished");
+        dispatch_async(dispatch_get_main_queue(), ^{ startShutDown(); });
+    });
+}
+
 __attribute__((constructor))
 static void armBasiliskMac(void) {
     if (!processRunsExeNamedBy("BASILISK_MAC_EXE")) return;
@@ -279,4 +495,10 @@ static void armBasiliskMac(void) {
     dispatch_resume(shutDown);
     dispatch_async(dispatch_get_main_queue(), ^{ watchForWindow(0); });
     helperReport(kHelper, "notice", "armed in %s", getenv("BASILISK_MAC_EXE"));
+    const char *automation = getenv("BASILISK_MAC_AUTOMATION");
+    if (automation && *automation) {
+        NSString *path = @(automation);
+        // Once the window is up: the script's first request waits for it.
+        runAutomation(path);
+    }
 }

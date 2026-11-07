@@ -648,7 +648,7 @@ class WrappBuildHelper {
     /// An engine, by its module's id and version, from the engine store,
     /// which fetches and prepares it the first time a build on this Mac
     /// needs it: what the runner's `ENGINE` steps install.
-    func engine(_ id: String, version: String) async throws -> EngineStore.Engine {
+    func engine(_ id: String, version: String, input: WrappBuildInput? = nil) async throws -> EngineStore.Engine {
         guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
         let modules = try await Blocking.run { try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get() }
         guard let module = modules.first(where: { $0.manifest.id == id }) else {
@@ -657,7 +657,7 @@ class WrappBuildHelper {
         do {
             let engine = try await engines.engine(module, version: version) { step in logger.notice("[Engine] \(step)") }
             logger.notice("[Engine] \(engine.prepared ? "Prepared" : "Using the stored") \(id) \(engine.version) (\(engine.hash.prefix(12))…)")
-            if id == ModuleID.basilisk.rawValue { try await ensureMacROM() }
+            if id == ModuleID.basilisk.rawValue { try await ensureMacROM(input: input) }
             return engine
         } catch let error as DownloadError {
             logger.error("[Engine] Couldn't fetch \(id): \(error.description)")
@@ -667,16 +667,34 @@ class WrappBuildHelper {
     }
 
     /// The ROM the basilisk module's Mac boots, kept in the engine store
-    /// (`MacROMs`), where the build finds it (`module:basilisk:/rom`). A
-    /// Debug build downloads one when there's none, as it would an engine,
-    /// so development and test Macs need nothing by hand; a Release build
-    /// never does: the ROM is the person's own (docs/modules.md).
-    func ensureMacROM() async throws {
+    /// (`MacROMs`), where the build finds it (`module:basilisk:/rom`): the
+    /// file `MAC_ROM_PATH` names, or the person's, asked for once
+    /// (`WrappBuildInput.getMacROM`). A Debug build downloads one instead of
+    /// asking, as it would an engine, so development and test Macs need
+    /// nothing by hand; a Release build never does: the ROM is the person's
+    /// own (docs/modules.md).
+    func ensureMacROM(input: WrappBuildInput? = nil) async throws {
         let root = engines.root
         if MacROMs.kept(in: root) != nil { return }
         #if DEBUG
+        let asking = false
+        #else
+        let asking = true
+        #endif
+        var rejected: URL?
+        while let file = try await input?.getMacROM(rejected: rejected, asking: asking) {
+            do {
+                let kept = try await Blocking.run { try MacROMs.keep(file, in: root) }
+                logger.notice("[Engine] Kept the Mac ROM \(file.lastPathComponent): \(kept.lastPathComponent)")
+                return
+            } catch {
+                logger.warning("[Engine] \(file.path) isn't a Mac ROM this can use: \(error.localizedDescription)")
+                rejected = file
+            }
+        }
+        #if DEBUG
         // archive.org's "Macintosh Quadra 800 ROM", an F1ACAD13 ROM; only
-        // in a Debug build, so a released Second Chance never names it.
+        // in a Debug build, so a released Second Chance never downloads it.
         guard let url = URL(string: "https://archive.org/download/800_20250604/800.ROM") else { throw WrappBuildError.macROMNeeded }
         logger.notice("[Engine] No Mac ROM kept: a Debug build downloads the development copy")
         do {
@@ -689,7 +707,7 @@ class WrappBuildHelper {
             throw WrappBuildError.engineUnavailable
         }
         #else
-        logger.error("[Engine] No Mac ROM is kept in \(MacROMs.folder(in: root).path)")
+        logger.error("[Engine] No Mac ROM is kept in \(MacROMs.folder(in: root).path), and none was given")
         throw WrappBuildError.macROMNeeded
         #endif
     }

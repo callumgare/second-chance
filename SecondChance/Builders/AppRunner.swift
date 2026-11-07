@@ -47,7 +47,7 @@ enum AppRunner {
                 default: nil
                 }
             },
-            engine: { module, version in try await helper.engine(module, version: version) },
+            engine: { module, version in try await helper.engine(module, version: version, input: input) },
             pathTypes: ModuleSteps.pathTypes(), places: helper.places,
             moduleFolders: ModuleSteps.moduleFolders())
         // Layers (docs/wrapp-build.md#the-layer-cache): the store builds

@@ -198,10 +198,10 @@
     "Another game is using Steam, and only one game can use it at a time. Quit it and try again." : {
 
     },
-    "Answer the question in Steam's window, and the game will carry on starting." : {
+    "Another game's app, or another build, is using something this build needs. Building carries on by itself once it's closed." : {
 
     },
-    "Applying game patches" : {
+    "Answer the question in Steam's window, and the game will carry on starting." : {
 
     },
     "Ask me each time" : {
@@ -270,6 +270,12 @@
     "Choose Where to Save…" : {
 
     },
+    "Choose the ROM File…" : {
+
+    },
+    "Choose the ROM file of an old Mac." : {
+
+    },
     "Choose where to save the app for %@. Your Applications folder is a good place: you'll find it there with your other apps." : {
 
     },
@@ -315,7 +321,7 @@
     "Copy the game's files but don't run its installer, for testing a wrapp's set-up without waiting for an install." : {
 
     },
-    "Copying disc 2" : {
+    "Copying disc %lld" : {
 
     },
     "Couldn't find the files copied from the game disc. Try again." : {
@@ -403,6 +409,9 @@
 
     },
     "Files" : {
+
+    },
+    "Find One at the Internet Archive" : {
 
     },
     "Game" : {
@@ -674,9 +683,6 @@
     "Reset Debug Settings" : {
 
     },
-    "Restarting Steam to install %@" : {
-
-    },
     "Rosetta, which the games need, couldn't be installed. Check that your Mac is connected to the internet, then try again." : {
 
     },
@@ -783,6 +789,9 @@
 
     },
     "Sending a failure report…" : {
+
+    },
+    "Setting up the game's Mac" : {
 
     },
     "Setting up the game's display" : {
@@ -953,6 +962,9 @@
     "That file isn't a copy of a game disc. Choose the game's disc instead." : {
 
     },
+    "That file isn't the ROM of a Mac that Second Chance can run. Choose the ROM of a Quadra 650 or 800, or a Centris 650." : {
+
+    },
     "The app for %@ is already up to date" : {
 
     },
@@ -1044,6 +1056,9 @@
     "These games are free: their makers give them away. Second Chance downloads the one you pick." : {
 
     },
+    "This Game Needs a Mac's ROM" : {
+
+    },
     "This Mac doesn't have Rosetta, which the games need. Install it with: softwareupdate --install-rosetta --agree-to-license" : {
 
     },
@@ -1111,6 +1126,12 @@
     "To install the game again, download it again." : {
 
     },
+    "To run Mac games, Second Chance needs the contents of the ROM chip from an old Mac (a Quadra 650 or 800 works best). Try again, and choose its ROM file when Second Chance asks." : {
+
+    },
+    "To run Mac games, Second Chance needs the contents of the ROM chip from an old Mac: a Quadra 650 or 800 works best. Second Chance keeps it, so it's asked for only once." : {
+
+    },
     "Try Again" : {
 
     },
@@ -1127,9 +1148,6 @@
 
     },
     "Updating Steam…" : {
-
-    },
-    "Updating the game's Windows files" : {
 
     },
     "Use Steam's window, or scan its QR code with the Steam app on your phone." : {

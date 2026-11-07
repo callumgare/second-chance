@@ -18,6 +18,7 @@ let swiftSettings: [SwiftSetting] = [
 
 let package = Package(
     name: "BasiliskModule",
+    defaultLocalization: "en",
     platforms: [.macOS(.v15)],
     products: [
         .library(name: "BasiliskExecutor", targets: ["BasiliskExecutor"]),
