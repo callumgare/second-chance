@@ -584,6 +584,42 @@ the shipped programs it reaches; when it's more than minor and tests can't
 show it's harmless, prototype it, keep porting with it, and propose it in
 the report.
 
+### Which fix: a newer engine, then winetricks, then our own
+
+When a fault is the engine's (a Wine bug, a ScummVM engine's), choose the fix
+in this order, the user's rule (2026-11-07), and say in "Decisions" why each
+earlier one didn't do:
+
+1. **A newer version of the engine that fixes it**, even one the module
+   doesn't offer yet: read the engine's history for the code at fault (Wine's
+   GitLab, ScummVM's GitHub) and find the first release with the fix. Adding
+   that version to the module is the fix. Keeping engines current is wanted
+   anyway, and later ports will need it. Prefer a stable release; when only a
+   development release has it, say so in the report, and still prefer it to
+   a patch of ours.
+2. **A winetricks verb** (or the engine's own setting, a DLL override, a
+   registry value) that does what's needed: less code of ours, and tried by
+   everyone else who uses it. One that nearly does is built on: run it and
+   adjust after it in the Wrappfile, or a function that runs it and more,
+   rather than rewritten. Use the latest winetricks: the wine module's copy
+   (`Packages/Modules/wine/Sources/WineExecutor/Resources/winetricks`) is
+   updated as any module change is.
+3. **Our own patch** (the wine module's `WINE.KEEP-THREAD-HANDLES` kind,
+   [docs/modules.md](../../../docs/modules.md#the-wine-modules-patches)) only
+   when neither of those is there or workable.
+
+**Adding an engine version** is a change to what other programs get. Add it
+beside the existing one (a module's `versions:`), so nothing moves until a
+bundle asks for it, then try every shipped program that would take it,
+running each one's integration test (`sc test integration <slug>`) in a test
+account: all of them when the module's default moves to it. A program that
+breaks on it, or that you know is touchy about its engine (a game that
+needed a workaround tied to that engine's code, as Icy Tower's msvcrt patch
+is, or one whose timing was tuned), is pinned to the version it has
+(`FROM --module=wine@10 …`), with a comment saying why, and listed in the
+report. The rest move. The newer version's own regressions found that way go
+in the log and the report.
+
 ## 7. How far it got: the ladder
 
 Report the highest rung reached, with evidence for each:
