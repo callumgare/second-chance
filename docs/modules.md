@@ -556,12 +556,28 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
     can be reached to leave it;
   - shuts the Mac down when the wrapp quits (SIGUSR2), or Basilisk II's own
     Quit is chosen (⌘Q, which SDL alone would turn into the power key, leaving
-    the Mac asking "shut down now?"): the power key, then Return on Shut Down,
-    so the disk is left clean.
+    the Mac asking "shut down now?" with a beep), as Special ▸ Shut Down does,
+    asking nothing: the Mac's Finder is sent its Shut Down Apple event
+    (`FNDR` `shut`), so each application is asked to quit (one with unsaved
+    work asks the person, who may cancel it), the disk is put away marked
+    clean, and the Mac powers off, which Basilisk II answers by exiting.
+    The Mac sends it itself, at task time: a few bytes of 68k, written into
+    the end of the ROM's `.Sony` driver (whose start Basilisk II overwrites
+    with its own drivers, so nothing runs the rest), are put in low memory's
+    `jGNEFilter`, which the next `GetNextEvent` or `WaitNextEvent` any
+    application makes calls; the filter takes itself out, calls the Apple
+    Event Manager, and leaves `AESend`'s result beside its code for the
+    helper to log. No trap may be run from a host thread or from Basilisk
+    II's interrupt handling, hence the filter; and the Finder's event rather
+    than `ShutDwnPower`, which, called from the filter, powers off without
+    asking the applications to quit. Where the filter can't be set up, the
+    send fails, or no application asks for an event in 5 s, it's the power
+    key and Return on Shut Down instead.
   - with `LAUNCH --basilisk.shut-down=with-program` (`BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM`),
-    shuts the Mac down the same way once the program it opened has quit, so the
-    app closes with it rather than leaving the player at the Finder, and never
-    while the program is open, in front or behind the Finder. Which
+    shuts the Mac down the same way (as the end of a build's automation does)
+    once the program it opened has quit, so the app closes with it rather
+    than leaving the player at the Finder, and never while the program is
+    open, in front or behind the Finder. Which
     applications are open is read four times a second from the Mac's own
     memory (Basilisk II exports `RAMBaseHost` and `RAMSize`), which costs
     Basilisk II nothing, where a picture would stall it: the Process Manager's

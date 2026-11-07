@@ -96,9 +96,10 @@ when the game does.
 
 **Basilisk II** (`BasiliskRuntime`) runs a classic Mac program on an emulated
 68k Mac: [modules.md](modules.md#the-basilisk-modules-mac) has its prefs and disks.
-A quit shuts the emulated Mac down, as its power key and Return would, so the
-disk with the person's files is left clean, and ends Basilisk II only if the Mac
-hasn't shut down in 20 s. The in-process helper `basilisk_mac.m`, inserted on every
+A quit shuts the emulated Mac down, as its Special ▸ Shut Down does, asking
+nothing first (its programs are asked to quit), so the disk with the person's
+files is left clean, and ends Basilisk II only if the Mac hasn't shut down in
+20 s. The in-process helper `basilisk_mac.m`, inserted on every
 launch, does that, and gets the window drawing, which Basilisk II and macOS leave
 stale until the window is pictured and redrawn
 ([modules.md](modules.md#the-basilisk-modules-mac)).

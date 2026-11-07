@@ -34,7 +34,7 @@ final class BasiliskRuntime: GameStarting {
     var stopsOnQuit: Bool { true }
 
     /// The wrapp is quitting while the Mac still runs: the Mac is shut down
-    /// as its power key and Return would (SIGUSR2 to `basilisk_mac.m`), so
+    /// as its Special ▸ Shut Down does (SIGUSR2 to `basilisk_mac.m`), so
     /// its disk, the person's files on it, is left clean and Basilisk II
     /// exits. Only a Mac that hasn't shut down in 20 s is ended, never left
     /// running behind the app (the next launch marks its disk clean).

@@ -34,11 +34,15 @@
 //    leave it. It starts windowed.
 //  - **Shutting the Mac down.** SIGUSR2 (the wrapp's, when it quits), and
 //    the app's own Quit (⌘Q, which SDL would turn into the power key alone,
-//    leaving the Mac asking "shut down now?"), raise
-//    the Mac's power key, as Basilisk II does for SIGTERM, then presses
-//    Return, Shut Down being the dialog's default, until the Mac has shut
-//    down and Basilisk II exits: its disk is left clean, the person's files
-//    on it safe. The wrapp ends it only if this hasn't in its time.
+//    leaving the Mac asking "shut down now?"), shut the Mac down as its
+//    Special ▸ Shut Down does, asking nothing: a few bytes of 68k put in
+//    the Mac's GetNextEvent filter (jGNEFilter) have the Mac send its
+//    Finder the Shut Down Apple event at the next event an application asks
+//    for, so its applications are asked to quit, its disk is left clean,
+//    the person's files on it safe, and it powers off, which Basilisk II
+//    answers by exiting. Where that can't be set up or sent, or the Mac
+//    asks for no event, it's the power key instead, as Basilisk II makes
+//    SIGTERM, and Return on the dialog's Shut Down. The wrapp ends Basilisk II only if this hasn't in its time.
 //  - **Shutting down with the program.** With
 //    BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM=1 (`LAUNCH
 //    --basilisk.shut-down=with-program`), once the program the Mac opened
@@ -328,24 +332,257 @@ static void pressReturn(NSWindow *window) {
     }
 }
 
-/// SIGUSR2, the app's Quit, or the end of an automation: shut the Mac
-/// down, as its power key and Return would. Once.
-static void startShutDown(void) {
-    static BOOL started = NO;
-    if (started) return;
-    started = YES;
-    helperReport(kHelper, "notice", "shutting the Mac down");
-    // Basilisk II turns SIGTERM into the Mac's power key, which asks "shut
-    // down now?" with Shut Down as its default.
+/// The fallback: the Mac's power key, as Basilisk II makes SIGTERM, which
+/// asks "shut down now?" (with a beep), Shut Down being its default; then
+/// Return once the dialog may be up, again every two seconds, while the
+/// process lasts. The wrapp ends it if the Mac never shuts down.
+static void shutDownByPowerKey(void) {
     kill(getpid(), SIGTERM);
-    // Return once the dialog may be up, again every two seconds, while the
-    // process lasts; the wrapp ends it if the Mac never shuts down.
     for (int i = 0; i < 8; i++) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 + 2 * i) * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             NSWindow *window = macWindow();
             if (window) pressReturn(window);
         });
     }
+}
+
+static const volatile uint8_t *macMemory(uint32_t *size);
+
+/// A big-endian long of the Mac's, read or written in place in host memory.
+static uint32_t readMacLong(const volatile uint8_t *p) {
+    return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
+}
+
+/// Written as one host store (jGNEFilter is read by the Mac's CPU, on
+/// Basilisk II's own thread, as one load: half an address must never be
+/// seen). 0x29A isn't 4-aligned; arm64 (LSE2, every Apple silicon Mac) and
+/// x86_64 store a long within 16 bytes in one go.
+static void writeMacLong(volatile uint8_t *p, uint32_t value) {
+    uint32_t big = CFSwapInt32HostToBig(value);
+    __atomic_store((uint32_t *)(uintptr_t)p, &big, __ATOMIC_SEQ_CST);
+}
+
+/// Low memory's jGNEFilter: the routine GetNextEvent and WaitNextEvent call
+/// with each event they return, in the application asking, at task time.
+static const uint32_t kJGNEFilter = 0x29A;
+
+/// Where the shut-down filter goes: the end of the ROM's own .Sony driver
+/// (the ROM resource 'DRVR' 4), whose start Basilisk II overwrites with
+/// its own drivers, icons and patches (rom_patches.cpp, sony_offset up to
+/// +0xd00 and a little), so nothing ever runs the rest, and no Mac program
+/// writes to ROM. Found as Basilisk II finds it (find_rom_resource: the
+/// ROM's resource list from its header's 0x1a), and believed only if the
+/// driver there is Basilisk II's (its header's Open at 0x18, ".Sony" at
+/// 0x12) and long enough. 0 when not.
+static uint32_t filterPlaceInROM(const uint8_t *rom, uint32_t romSize, uint32_t length) {
+    if (romSize < 0x40000) return 0;
+    uint32_t mapEntry = readMacLong(rom + 0x1a);
+    if (mapEntry > romSize - 4) return 0;
+    uint32_t entry = readMacLong(rom + mapEntry);
+    for (int n = 0; entry != 0 && n < 4096; n++) {
+        if (entry > romSize - 22) return 0;
+        uint32_t data = readMacLong(rom + entry + 12);
+        BOOL isSony = memcmp(rom + entry + 16, "DRVR", 4) == 0 && rom[entry + 20] == 0 && rom[entry + 21] == 4;
+        if (isSony) {
+            if (data < 8 || data > romSize - 0x20) return 0;
+            uint32_t size = readMacLong(rom + data - 8);   // the resource's length, in its header
+            BOOL basilisks = rom[data + 8] == 0x00 && rom[data + 9] == 0x18 && memcmp(rom + data + 0x12, "\005.Sony", 6) == 0;
+            if (!basilisks || size < 0x2000 || size > 0x20000 || data + size > romSize) return 0;
+            return (data + size - 0x80 - length) & ~1u;
+        }
+        entry = readMacLong(rom + entry + 8);
+    }
+    return 0;
+}
+
+/// 68k code, a word at a time, big-endian.
+typedef struct {
+    uint16_t words[128];
+    int count;
+} M68kCode;
+
+static void op(M68kCode *code, uint16_t word) {
+    if (code->count < 128) code->words[code->count++] = word;
+}
+
+static void op32(M68kCode *code, uint32_t value) {
+    op(code, (uint16_t)(value >> 16));
+    op(code, (uint16_t)value);
+}
+
+/// A Pascal call into the Apple Event Manager (_Pack8, A816, with its
+/// selector in D0, whose high byte is the parameters' size in words), its
+/// OSErr left in D0.
+static void callPack8(M68kCode *code, uint16_t selector) {
+    op(code, 0x303C); op(code, selector);           // move.w #selector,d0
+    op(code, 0xA816);                               // _Pack8
+    op(code, 0x301F);                               // move.w (sp)+,d0
+}
+
+/// Where the filter keeps its status, a word ahead of its code: what AESend
+/// said (an OSErr), or kFilterNotRun until the filter has run.
+static const uint16_t kFilterNotRun = 0x5555;
+
+/// The 68k filter, chained in front of `previous`: it puts `previous` back
+/// in jGNEFilter, so it runs once, then sends the Finder its Shut Down
+/// Apple event ('FNDR' 'shut', the Finder's own suite, which is what its
+/// Special ▸ Shut Down does: each application asked to quit, then the Mac
+/// shut down), with no reply waited for, and leaves AESend's result (or
+/// the error that stopped it before) in the status word at `status`, all
+/// with every register it changes saved; then it goes on to `previous` as
+/// if it had never been there. In Pascal's calling convention: a result
+/// word, then the parameters in order.
+static void shutDownFilter(M68kCode *code, uint32_t previous, uint32_t status) {
+    op(code, 0x21FC); op32(code, previous); op(code, (uint16_t)kJGNEFilter);   // move.l #previous,(jGNEFilter).w
+    op(code, 0x48E7); op(code, 0xE0E0);             // movem.l d0-d2/a0-a2,-(sp)
+    // -4(a6) the Finder's signature, -12(a6) the target's AEAddressDesc,
+    // -20(a6) the Apple event, -28(a6) the (empty) reply.
+    op(code, 0x4E56); op(code, 0xFFE4);             // link a6,#-28
+    op(code, 0x2D7C); op32(code, 0x4D414353); op(code, 0xFFFC);   // move.l #'MACS',-4(a6)
+    // AECreateDesc(typeApplSignature, &signature, 4, &target)
+    op(code, 0x4267);                               // clr.w -(sp)
+    op(code, 0x2F3C); op32(code, 0x7369676E);           // move.l #'sign',-(sp)
+    op(code, 0x486E); op(code, 0xFFFC);             // pea -4(a6)
+    op(code, 0x2F3C); op32(code, 4);                // move.l #4,-(sp)
+    op(code, 0x486E); op(code, 0xFFF4);             // pea -12(a6)
+    callPack8(code, 0x0825);
+    op(code, 0x6600); int failed1 = code->count; op(code, 0);   // bne.w done
+    // AECreateAppleEvent('FNDR', 'shut', &target, kAutoGenerateReturnID,
+    // kAnyTransactionID, &event)
+    op(code, 0x4267);                               // clr.w -(sp)
+    op(code, 0x2F3C); op32(code, 0x464E4452);           // move.l #'FNDR',-(sp)
+    op(code, 0x2F3C); op32(code, 0x73687574);           // move.l #'shut',-(sp)
+    op(code, 0x486E); op(code, 0xFFF4);             // pea -12(a6)
+    op(code, 0x3F3C); op(code, 0xFFFF);             // move.w #-1,-(sp)
+    op(code, 0x42A7);                               // clr.l -(sp)
+    op(code, 0x486E); op(code, 0xFFEC);             // pea -20(a6)
+    callPack8(code, 0x0B14);
+    op(code, 0x6600); int failed2 = code->count; op(code, 0);   // bne.w done
+    // AESend(&event, &reply, kAENoReply, kAENormalPriority,
+    // kAEDefaultTimeout, no idle proc, no filter proc)
+    op(code, 0x4267);                               // clr.w -(sp)
+    op(code, 0x486E); op(code, 0xFFEC);             // pea -20(a6)
+    op(code, 0x486E); op(code, 0xFFE4);             // pea -28(a6)
+    op(code, 0x2F3C); op32(code, 1);                // move.l #kAENoReply,-(sp)
+    op(code, 0x4267);                               // clr.w -(sp)
+    op(code, 0x2F3C); op32(code, 0xFFFFFFFF);       // move.l #kAEDefaultTimeout,-(sp)
+    op(code, 0x42A7); op(code, 0x42A7);             // clr.l -(sp) twice
+    callPack8(code, 0x0D17);
+    int done = code->count;                         // done:
+    code->words[failed1] = (uint16_t)(2 * (done - failed1));
+    code->words[failed2] = (uint16_t)(2 * (done - failed2));
+    op(code, 0x33C0); op32(code, status);           // move.w d0,(status).l
+    op(code, 0x4E5E);                               // unlk a6
+    op(code, 0x4CDF); op(code, 0x0707);             // movem.l (sp)+,d0-d2/a0-a2
+    if (previous) {
+        op(code, 0x2F3C); op32(code, previous);     // move.l #previous,-(sp)
+    }
+    op(code, 0x4E75);                               // rts (on to previous)
+}
+
+/// Room for the status word and the filter.
+static const uint32_t kFilterRoom = 0x100;
+
+/// Shut the Mac down as its Special ▸ Shut Down does, asking nothing first:
+/// the Mac's Finder is sent its Shut Down event, so the applications are
+/// asked to quit (one with unsaved work asks the person, and may stop it),
+/// the disks are put away marked clean, and the Mac powers off, which
+/// Basilisk II answers by exiting. Sent by the shut-down filter (above)
+/// put in the Mac's jGNEFilter, so it happens at the next event any
+/// application asks for, at task time, where the Apple Event Manager may be
+/// called; never from Basilisk II's interrupt handling, or from a thread of
+/// the host, where no trap may run. (ShutDwnPower itself, called from
+/// there, powered off at once without asking the applications to quit:
+/// SimpleText's unsaved document was lost without a word.) NO if it can't
+/// be set up (no memory or ROM of the Mac's to put it in, or the Mac in
+/// 24-bit mode).
+static BOOL shutDownDirectly(void) {
+    uint32_t size = 0;
+    volatile uint8_t *memory = (volatile uint8_t *)macMemory(&size);
+    uint8_t **romHost = (uint8_t **)dlsym(RTLD_DEFAULT, "ROMBaseHost");
+    uint32_t *romMac = (uint32_t *)dlsym(RTLD_DEFAULT, "ROMBaseMac");
+    uint32_t *romSize = (uint32_t *)dlsym(RTLD_DEFAULT, "ROMSize");
+    if (!memory || !romHost || !romMac || !romSize || !*romHost) {
+        helperReport(kHelper, "warning", "can't shut the Mac down directly: its memory or ROM can't be found");
+        return NO;
+    }
+    if (memory[0xCB2] == 0) {   // MMU32Bit: in 24-bit mode the ROM isn't at ROMBaseMac
+        helperReport(kHelper, "warning", "can't shut the Mac down directly: it runs in 24-bit mode");
+        return NO;
+    }
+    uint32_t place = filterPlaceInROM(*romHost, *romSize, kFilterRoom);
+    if (!place) {
+        helperReport(kHelper, "warning", "can't shut the Mac down directly: no room for it in the ROM's .Sony driver");
+        return NO;
+    }
+    uint32_t previous = readMacLong(memory + kJGNEFilter);
+    uint32_t status = *romMac + place;
+    uint32_t filter = status + 4;
+    M68kCode code = { .count = 0 };
+    shutDownFilter(&code, previous, status);
+    if ((uint32_t)code.count * 2 + 4 > kFilterRoom) {
+        helperReport(kHelper, "warning", "can't shut the Mac down directly: the filter doesn't fit");
+        return NO;
+    }
+    volatile uint8_t *statusHost = *romHost + place;
+    statusHost[0] = (uint8_t)(kFilterNotRun >> 8);
+    statusHost[1] = (uint8_t)kFilterNotRun;
+    for (int i = 0; i < code.count; i++) {
+        statusHost[4 + 2 * i] = (uint8_t)(code.words[i] >> 8);
+        statusHost[4 + 2 * i + 1] = (uint8_t)code.words[i];
+    }
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    writeMacLong(memory + kJGNEFilter, filter);
+    helperReport(kHelper, "notice", "shutting the Mac down directly: its Finder to be sent Shut Down at its next event"
+                 " (filter at 0x%08x, before it 0x%08x)", filter, previous);
+    // The Mac takes it within a tick or so: the filter puts the old one back
+    // as it runs, and says how AESend went. If it couldn't send, or no
+    // application asks for an event for a while, it's the power key instead.
+    __block int checks = 0;
+    __block void (^check)(void);
+    void (^checkOnce)(void) = ^{
+        uint16_t said = (uint16_t)(statusHost[0] << 8 | statusHost[1]);
+        uint32_t now = readMacLong(memory + kJGNEFilter);
+        if (said != kFilterNotRun) {
+            if (said == 0) {
+                helperReport(kHelper, "notice", "the Mac's Finder was sent Shut Down (%.2f s)", checks * 0.05);
+            } else {
+                helperReport(kHelper, "warning", "the Finder couldn't be sent Shut Down (error %d): shutting the Mac down by its power key",
+                             (int16_t)said);
+                shutDownByPowerKey();
+            }
+            check = nil;
+            return;
+        }
+        if (++checks < 100) {   // 5 s for the Mac to run it and AESend to return
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC), dispatch_get_main_queue(), check);
+            return;
+        }
+        if (now == filter) {
+            writeMacLong(memory + kJGNEFilter, previous);
+            helperReport(kHelper, "warning", "the Mac asked for no event in 5 s: shutting it down by its power key");
+        } else {
+            helperReport(kHelper, "warning", "the shut-down filter ran but left no word (jGNEFilter 0x%08x): shutting the Mac down by its power key", now);
+        }
+        check = nil;
+        shutDownByPowerKey();
+    };
+    check = checkOnce;
+    dispatch_async(dispatch_get_main_queue(), check);
+    return YES;
+}
+
+/// SIGUSR2, the app's Quit, or the end of an automation: shut the Mac
+/// down, as Special ▸ Shut Down does (shutDownDirectly), or, when that
+/// can't be set up, by its power key and Return. Once.
+static void startShutDown(void) {
+    static BOOL started = NO;
+    if (started) return;
+    started = YES;
+    helperReport(kHelper, "notice", "shutting the Mac down");
+    if (shutDownDirectly()) return;
+    helperReport(kHelper, "notice", "shutting the Mac down by its power key");
+    shutDownByPowerKey();
 }
 
 /// The app's Quit (⌘Q, the Dock's Quit, puppet control's `quit`) shuts the
