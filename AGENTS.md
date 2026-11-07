@@ -684,8 +684,10 @@ direct assignment.
   Code hangs beyond `kill -9` until VS Code quits
   ([docs/failure-reports.md](docs/failure-reports.md#testing-a-crash-from-a-terminal-in-vs-code)).
 - **Second Chance has an Info.plist file; the other targets don't.**
-  `SecondChance/Info.plist` holds only Sparkle's keys, which `INFOPLIST_KEY_`
-  build settings can't express, and Xcode merges it with the generated keys.
+  `SecondChance/Info.plist` holds only the keys `INFOPLIST_KEY_` build
+  settings can't express — Sparkle's, and `SourceCheckout`, the checkout a
+  Debug build came from (`$(SECOND_CHANCE_SOURCE_CHECKOUT)`, set for Debug
+  only; Icon Lab reads it) — and Xcode merges it with the generated keys.
   Other keys still go in build settings. The file is excluded from the
   target's synchronized folder, so it isn't copied in as a resource.
 - **Bundled resources**: the `WrappTemplate.app` template (the launcher alone), `winetricks` (the wine module's package's resource, `WineModule_WineExecutor.bundle`) and AutoIt are bundled. Test

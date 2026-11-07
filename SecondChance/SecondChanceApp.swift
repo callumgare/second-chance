@@ -251,6 +251,13 @@ struct SecondChanceApp: App {
         Settings {
             SettingsView()
         }
+
+        // Debug ▸ Icon Lab… (a tool for designing the bundles' icons)
+        Window("Icon Lab", id: IconLabWindow.id) {
+            IconLabWindow(host: .shared)
+        }
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
     }
 
     /// Forget the Steam sign-in every wrapp shares (docs/steam.md). The next

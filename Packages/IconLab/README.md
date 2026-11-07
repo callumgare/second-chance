@@ -3,9 +3,14 @@
 Icon Lab designs the icons the program bundles ship: it finds pictures of a
 program (catalogues, its own files), cuts out their parts, suggests designs
 and renders them as Icon Composer `.icon`s. It's a tool for us, not something
-a player sees. This package is its engine and API; the page (a React app) and
-the window that hosts it come later; the page's source is in
-`Tools/icon-lab/web`.
+a player sees. This package is its engine and API; the page (a React app) is
+built from `Tools/icon-lab/web`. Second Chance opens it with Debug ▸ Icon
+Lab… (`SecondChance/IconLab/`): a web view whose `iconlab://` scheme handler
+answers the page and its API through `IconLabAPI.handle`, with one engine for
+the app's life. Its data is in `~/Library/Application Support/SecondChance/Icon
+Lab` (`SECOND_CHANCE_ICON_LAB_DATA` names another); a Debug build reads the
+checkout's `.env`, `icon-extract` build and `built-apps/`, and offers to move
+the standalone lab's `.local/tools/icon-lab/data` in when its own is empty.
 
 Where things are:
 

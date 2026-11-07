@@ -9,5 +9,9 @@
 	<string>k+ixrc/bdv9dwC2WxKTh0aAEnQXt3/KaaC2SmQ7/Tbk=</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<!-- The checkout a Debug build was built from, for Icon Lab's keys, tools and data (IconLabPaths.sourceCheckout).
+	     Empty in a Release build, which sets no SECOND_CHANCE_SOURCE_CHECKOUT. -->
+	<key>SourceCheckout</key>
+	<string>$(SECOND_CHANCE_SOURCE_CHECKOUT)</string>
 </dict>
 </plist>
