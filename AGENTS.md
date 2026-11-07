@@ -6,6 +6,20 @@ Guidance for AI coding agents working on the Second Chance codebase.
 
 Second Chance is a native macOS app (Swift/SwiftUI) that wraps pre-Unity Nancy Drew PC games to run on modern Macs via [Wine](https://www.winehq.org/) and [ScummVM](https://www.scummvm.org/). The user points the app at a game installer (CD, Her Interactive download, or Steam) and it produces a standalone `.app` bundle containing the Wine/ScummVM engine plus the installed game.
 
+**Where it's going: any old program, not only Nancy Drew, and not only
+games.** Second Chance is becoming a way to run any program that no longer
+runs on a Mac, mostly older ones (Windows, DOS and classic Mac OS
+programs), as a wrapp. Games may stay the main kind, but they aren't the
+only one, so code, names, docs and text people see avoid game-specific
+words where a general one will do: "program" or "app" rather than "game",
+"engine" rather than "game engine", "saves" or "app data" rather than "game
+saves". Nancy Drew's own module, bundles and code keep their words. The
+exception is `README.md` and the other docs written for the people who use
+it, which still
+present Second Chance as being for the Nancy Drew games while the
+transition is under way: leave their framing alone until it's decided to
+change it.
+
 Read `README.md` (what the app does, for the people who use it) and
 `CONTRIBUTING.md` (how it fits together and how to work on it, for people)
 before making non-trivial changes.
@@ -280,6 +294,33 @@ The rules that keep it working:
   installed into a wrapp's `Contents/Frameworks` beside the launcher's
   files, and a launcher framework there could collide with one
   (`check-static-linking.sh` checks).
+
+### The builder stands on its own
+
+Building wrapps from Wrappfiles is meant to be split out of Second Chance
+one day, so other programs can build and run wrapps with it. That covers
+the builder (`Packages/WrappBuilder/`), its command-line tool
+(`Packages/WrappBuilderCLI/`), what both are written against
+(`Packages/WrappKit/`), and the modules (their data in `Modules/`, their
+Swift in `Packages/Modules/`). Keep them independent of Second Chance now,
+so the split is a move rather than a rewrite:
+
+- **Nothing in them depends on Second Chance.** They don't import
+  `SecondChanceKit`, `SecondChanceReporting` or an app's code, and they
+  don't read its settings. Where they keep things (layers, engines,
+  downloads, stores) is the host's to choose. Today's defaults name Second
+  Chance's folders: don't add more, and take a location as a parameter
+  where you touch one.
+- **Second Chance watches and steers them through generic means**: hooks,
+  functions it calls, the events a build publishes (`BuildEvent`), and
+  options. Add one when another program using the builder could use it
+  too, such as an inventory of a cache, a progress event or a lock's
+  state. Something only Second Chance could want (its screens, the words
+  people read, its reports) goes in Second Chance, built on the generic
+  one.
+- **The words people read are the app's.** The builder's text is for logs and
+  its command line. Second Chance turns ids and events into what a person
+  reads.
 
 ### Key abstractions
 

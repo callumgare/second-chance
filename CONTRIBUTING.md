@@ -5,6 +5,11 @@ Good luck (and also thank you very much for considering helping out).
 This is the guide to working on Second Chance's code. If you only want to play the games, the [README](README.md) is
 all you need.
 
+Second Chance started with the Nancy Drew games, and the [README](README.md) still presents it that way, but the aim is
+to run any program that no longer runs on a Mac, mostly older ones and not only games. So the code, its names and these
+docs avoid game-specific words where a general one fits ("program" rather than "game"); [AGENTS.md](AGENTS.md) has
+more on this.
+
 ## How it fits together
 
 There are two main parts:
@@ -21,7 +26,10 @@ in `Packages/SecondChanceKit/`, which has two modules: `SecondChanceKit`, and `S
 everything that uses Sentry. WrappPuppeteer, the tool the
 integration tests drive games with, uses `SecondChanceKit` too. Each game Second Chance knows is described by a program bundle in `Bundles/`
 ([docs/program-bundles.md](docs/program-bundles.md)), and the list made from them is a package of its own,
-`Packages/GameCatalog/`, which the developer CLI uses as well.
+`Packages/GameCatalog/`, which the developer CLI uses as well. The code that builds wrapps from those bundles
+(`Packages/WrappBuilder/`, `Packages/WrappKit/`, and the modules in `Modules/` and `Packages/Modules/`) is kept
+independent of Second Chance so it can be split out one day; [AGENTS.md](AGENTS.md#the-builder-stands-on-its-own) has
+the rules.
 [docs/wrapp-build.md](docs/wrapp-build.md) walks through a build step by step, and [AGENTS.md](AGENTS.md) has the
 architecture, code conventions, and the gotchas that have caught people out. Read it before making a non-trivial
 change — it's written for AI coding agents, but it's just as useful for people.
