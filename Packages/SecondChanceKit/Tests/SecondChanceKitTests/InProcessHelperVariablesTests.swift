@@ -99,6 +99,23 @@ struct InProcessHelperVariablesTests {
         #expect(variables("fullscreen")["NATIVE_MACOS_FULLSCREEN_FORCE"] == "1")
     }
 
+    @Test("--wine.display-mode arms mode scaling whatever the game draws with, which places a scaled GDI picture")
+    func theLaunchSetsADisplayMode() {
+        func scaling(_ options: [String: String], _ graphics: GameGraphicsAPI) -> String? {
+            let launch = RecordedLaunch(program: "wine:C:/Game.exe", options: options, format: RecordedLaunch.currentFormat)
+            return Wine.inProcessHelperVariables(gameExe: "Game.exe", graphicsAPI: graphics, launch: launch,
+                                                 environment: [:])["EMULATED_MODE_SCALING_EXE"]
+        }
+        #expect(scaling([:], .directDraw) == nil)
+        #expect(scaling(["wine.display-mode": "800x600"], .directDraw) == "Game.exe")
+        #expect(scaling(["wine.display-mode": "800x600"], .unknown) == "Game.exe")
+        // Its off switch still turns it off.
+        let launch = RecordedLaunch(program: "wine:C:/Game.exe", options: ["wine.display-mode": "800x600"],
+                                    format: RecordedLaunch.currentFormat)
+        #expect(Wine.inProcessHelperVariables(gameExe: "Game.exe", graphicsAPI: .unknown, launch: launch,
+                                              environment: ["SECOND_CHANCE_MODE_SCALING": "0"])["EMULATED_MODE_SCALING_EXE"] == nil)
+    }
+
     @Test("--wine.quit-key gives the quit watch its keys in canonical form, as written")
     func theLaunchNamesAQuitKey() {
         func key(_ options: [String: String]) -> String? {

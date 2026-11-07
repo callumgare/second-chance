@@ -209,6 +209,39 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     /// fullscreen whether or not it asks to be.
     public var forcesFullscreen: Bool { options["wine.window"] == "fullscreen" }
 
+    /// `--wine.display-mode=<width>x<height>`: the display mode the wrapp
+    /// sets in the program's Wine session before starting it, which Wine
+    /// emulates (the prefix's `EmulateModeset`) and scales the program's
+    /// windows up from, for a program made for that screen that never sets
+    /// the mode itself (Bioscopia's Director projector). Nil without one, or
+    /// with one that isn't two sizes (planning refuses that).
+    public var displayMode: DisplayMode? { options["wine.display-mode"].flatMap(DisplayMode.init(parsing:)) }
+
+    /// A display mode's size, `800x600`.
+    public struct DisplayMode: Sendable, Equatable, CustomStringConvertible {
+        public var width: Int
+        public var height: Int
+
+        /// The sizes planning accepts: the smallest screen of any Windows
+        /// program, up to the largest a display has.
+        public static let sizes = 320...8192
+
+        public init(width: Int, height: Int) {
+            self.width = width
+            self.height = height
+        }
+
+        /// `<width>x<height>`, each in `sizes`; nil for anything else.
+        public init?(parsing text: String) {
+            let parts = text.split(separator: "x", omittingEmptySubsequences: false)
+            guard parts.count == 2, let width = Int(parts[0]), let height = Int(parts[1]),
+                  Self.sizes.contains(width), Self.sizes.contains(height) else { return nil }
+            self.init(width: width, height: height)
+        }
+
+        public var description: String { "\(width)x\(height)" }
+    }
+
     /// `--wine.quit-key=<keys>`, as written: the keys the app's Quit
     /// presses in a program that ignores Wine's quit but quits on a key of
     /// its own (docs/wrappfile.md#key-sequences).

@@ -46,7 +46,8 @@ nonisolated extension Wine {
     /// (only in a game that may draw through cnc-ddraw: `GameGraphicsAPI`),
     /// mode scaling scales a Direct3D game's picture up to the display when
     /// Wine is emulating the display mode the game switched to (only in a game
-    /// that may draw with Direct3D), quit watch tells the wrapp when the game
+    /// that may draw with Direct3D, or whose launch sets a display mode, whose
+    /// GDI picture it puts where the mouse is), quit watch tells the wrapp when the game
     /// first drew and whether it was asked to quit, and puppet control (only when WrappPuppeteer
     /// started the wrapp) lets it see and click the game. Every Mac-driver
     /// process loads them, so each is told which one is the game (by the
@@ -112,7 +113,10 @@ nonisolated extension Wine {
         // SECOND_CHANCE_MODE_SCALING=0 leaves mode scaling unarmed, so a game
         // that switches the display mode draws into a corner of its window —
         // for comparison. The prefix's EmulateModeset (WineManager) stays on.
-        if environment["SECOND_CHANCE_MODE_SCALING"] != "0", graphicsAPI.mayUseDirect3D {
+        // A launch that sets a display mode (--wine.display-mode) gets it
+        // whatever the game draws with: Wine scales a GDI game's picture up
+        // but draws it off-centre, which the helper puts right.
+        if environment["SECOND_CHANCE_MODE_SCALING"] != "0", graphicsAPI.mayUseDirect3D || launch?.displayMode != nil {
             env["EMULATED_MODE_SCALING_EXE"] = gameExe
         }
         // Quit watch only reports, so it has no off switch: what it says

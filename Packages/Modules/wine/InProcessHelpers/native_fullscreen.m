@@ -112,6 +112,7 @@ static void debugLog(const char *format, ...) {
 @interface NSWindow (WineWindowMethods)
 - (BOOL)isFullscreen;
 - (BOOL)closing;
+- (BOOL)disabled;
 - (void)adjustFeaturesForState;
 - (void)adjustFullScreenBehavior:(NSWindowCollectionBehavior)behavior;
 @end
@@ -311,7 +312,10 @@ static void adjustWineWindowLevels(void) {
 // when it asks for a window again:
 //
 // - A window covering the screen that Direct3D draws into is a Direct3D
-//   game in fullscreen mode. Its request lasts as long as the window.
+//   game in fullscreen mode. Its request lasts as long as the window. So is
+//   one covering the screen that shows a GDI picture win32u scaled up from an
+//   emulated display mode (windowShowsScaledPicture, emulated_mode_scaling.m):
+//   a program drawing with GDI in the mode its launch set.
 // - Any other window is cnc-ddraw's (or a program's own): it asks for
 //   fullscreen while the game has a display mode set through cnc-ddraw
 //   (ddraw_mode_watch.m), and for a window otherwise -- a DirectDraw game
@@ -354,7 +358,7 @@ static unsigned long fullscreenRequest(NSWindow *window) {
     // come to cover the screen too, and draws with OpenGL, when cnc-ddraw
     // remembers it at the size of the Space.
     BOOL wineLetsGo = (window.collectionBehavior & NSWindowCollectionBehaviorFullScreenPrimary) != 0;
-    if (windowFlag(window, &kCoversScreenKey) || (!wineLetsGo && wineCoversScreen(window) && direct3DDrawsInto(window))) {
+    if (windowFlag(window, &kCoversScreenKey) || (!wineLetsGo && wineCoversScreen(window) && (direct3DDrawsInto(window) || windowShowsScaledPicture(window)))) {
         return kCoversScreenRequest;
     }
     return ddrawModeRequest();
@@ -470,9 +474,43 @@ static void helperToggle(NSWindow *window, ToggleCause cause) {
     gToggling = was;
 }
 
+/// Whether Wine counts `window` as maximized (its `maximized` ivar): Wine's
+/// -toggleFullScreen: does nothing for such a window. NO if it can't tell.
+static BOOL wineMaximized(NSWindow *window) {
+    Ivar ivar = class_getInstanceVariable(window.class, "maximized");
+    const char *type = ivar ? ivar_getTypeEncoding(ivar) : NULL;
+    if (!type || (strcmp(type, "c") != 0 && strcmp(type, "B") != 0)) return NO;
+    return *((uint8_t *)(__bridge void *)window + ivar_getOffset(ivar)) != 0;
+}
+
+/// Wine's -toggleFullScreen:, but AppKit's for a window covering the screen
+/// that this file adopted and Wine counts as maximized.
+///
+/// Wine moves a window into or out of a Space only if it isn't disabled (a
+/// modal dialog of its own is up) and isn't maximized. A Director projector
+/// maximizes its stage window, which covers the screen anyway (Bioscopia's),
+/// so the toggle did nothing and the window never reached its Space, while
+/// this file asked again every half second. Such a window is already the
+/// size of the Space, so being maximized changes nothing there.
+static void wineToggleFullScreen(NSWindow *window, SEL selector, id sender) {
+    BOOL disabled = [window respondsToSelector:@selector(disabled)] && [(id)window disabled];
+    if (windowFlag(window, &kCoversScreenKey) && !disabled && wineMaximized(window)) {
+        static BOOL reported = NO;
+        if (!reported) {
+            reported = YES;
+            helperReport("NativeFullscreen", "notice", "the window is maximized, which Wine won't move into or out of a Space: "
+                         "moving it as AppKit does");
+        }
+        IMP appKit = class_getMethodImplementation([NSWindow class], selector);
+        ((void (*)(id, SEL, id))appKit)(window, selector, sender);
+        return;
+    }
+    ((void (*)(id, SEL, id))gWineToggleFullScreen)(window, selector, sender);
+}
+
 static void playerAwareToggleFullScreen(NSWindow *self, SEL _cmd, id sender) {
     if (gToggling != kToggleNone) {
-        ((void (*)(id, SEL, id))gWineToggleFullScreen)(self, _cmd, sender);
+        wineToggleFullScreen(self, _cmd, sender);
         return;
     }
     BOOL entering = !(self.styleMask & NSWindowStyleMaskFullScreen);
@@ -481,8 +519,20 @@ static void playerAwareToggleFullScreen(NSWindow *self, SEL _cmd, id sender) {
         objc_setAssociatedObject(self, &kFrameBeforeKey, [NSValue valueWithRect:self.frame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     gToggling = kTogglePlayer;
-    ((void (*)(id, SEL, id))gWineToggleFullScreen)(self, _cmd, sender);
+    wineToggleFullScreen(self, _cmd, sender);
     gToggling = kToggleNone;
+}
+
+static IMP gWineValidateMenuItem;
+
+/// Wine's -validateMenuItem:, but with Enter and Exit Full Screen (and their
+/// key) left on for the window wineToggleFullScreen() moves although Wine
+/// counts it as maximized, which Wine's turns off.
+static BOOL validateMenuItemForMaximized(NSWindow *self, SEL _cmd, NSMenuItem *item) {
+    BOOL valid = ((BOOL (*)(id, SEL, NSMenuItem *))gWineValidateMenuItem)(self, _cmd, item);
+    if (valid || item.action != @selector(toggleFullScreen:) || !windowFlag(self, &kCoversScreenKey)) return valid;
+    BOOL disabled = [self respondsToSelector:@selector(disabled)] && [(id)self disabled];
+    return !disabled && wineMaximized(self);
 }
 
 /// Watch for the player's -toggleFullScreen: on Wine's windows. Main thread.
@@ -494,6 +544,9 @@ static void installToggleWatch(void) {
     gWineToggleFullScreen = replaceOwnMethod(wineWindow, @selector(toggleFullScreen:), (IMP)playerAwareToggleFullScreen);
     if (!gWineToggleFullScreen) {
         helperReport("NativeFullscreen", "warning", "WineWindow has no -toggleFullScreen:; the player's fullscreen changes go unreported");
+    }
+    if (classDefinesMethod(wineWindow, @selector(validateMenuItem:))) {
+        gWineValidateMenuItem = replaceOwnMethod(wineWindow, @selector(validateMenuItem:), (IMP)validateMenuItemForMaximized);
     }
 }
 
@@ -517,7 +570,8 @@ static unsigned long gCandidateRequest = 0;
 /// window arrives. cnc-ddraw's transient helper windows and Wine's hidden
 /// IME/message windows never qualify. The second are Direct3D games' windows,
 /// which only the overrides above let into a Space, taken once Direct3D draws
-/// into them (direct3DDrawsInto).
+/// into them (direct3DDrawsInto), or once win32u shows a GDI picture scaled
+/// up from an emulated mode in them (windowShowsScaledPicture).
 ///
 /// Main thread only: AppKit state is not safe to read from the watcher thread.
 static NSWindow *findGameWindow(BOOL overridesInstalled) {
@@ -529,7 +583,8 @@ static NSWindow *findGameWindow(BOOL overridesInstalled) {
         if (window.parentWindow) continue;
         BOOL eligible = (window.collectionBehavior & NSWindowCollectionBehaviorFullScreenPrimary) ||
                         (overridesInstalled && (windowFlag(window, &kAdoptedKey) ||
-                                                (wineCoversScreen(window) && direct3DDrawsInto(window))));
+                                                (wineCoversScreen(window) && (direct3DDrawsInto(window) ||
+                                                                               windowShowsScaledPicture(window)))));
         if (!eligible) continue;
 
         // Normally exactly one window qualifies; prefer the largest just to keep

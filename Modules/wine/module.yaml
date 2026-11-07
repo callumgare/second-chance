@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 28
+release: 29
 native: "wine"                               # its Swift: Packages/Modules/wine (WineKit, WineExecutor), WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -128,5 +128,8 @@ build:
     # fullscreen-setting, where the program keeps its own fullscreen
     # setting (file=,format=,offset=,bytes=,fullscreen=,windowed=), set to
     # the player's choice when they last changed it with the window's
-    # fullscreen button.
-    LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, mouse: value, window: value, quit-key: value, quit-confirm-key: value, fullscreen-setting: value }
+    # fullscreen button, and display-mode (800x600), the display mode set in
+    # the program's Wine session before it starts, for a program made for
+    # that screen that never sets it itself: Wine emulates it and scales the
+    # program's windows up.
+    LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, mouse: value, window: value, quit-key: value, quit-confirm-key: value, fullscreen-setting: value, display-mode: value }

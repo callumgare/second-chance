@@ -37,6 +37,11 @@
 //  two win32u calls are skipped while the game is in the background, so its
 //  picture is still right when the player comes back to it.
 //
+//  A program drawing with GDI is scaled up by win32u itself, but its picture
+//  is shown off-centre from where the mouse is; that's put right here too
+//  (see "A GDI picture scaled up"), for a launch that sets a display mode
+//  (--wine.display-mode) as much as for a game that switches to one.
+//
 //  Armed by EMULATED_MODE_SCALING_EXE, in the process running that .exe.
 //
 //  Built into in_process_helpers.dylib by WrappTemplate/setup-wine.sh; see
@@ -322,6 +327,7 @@ static IMP gWineCheckTransparency;
 
 @interface NSWindow (WineWindowMethods)
 - (void)checkTransparency;
+- (BOOL)isFullscreen;
 @end
 
 /// The OpenGL view filling part of a borderless window's content -- or a
@@ -348,6 +354,9 @@ static void blackenBackgroundBesideGLView(NSWindow *window) {
 static void checkTransparencyKeepingBlack(NSWindow *self, SEL _cmd) {
     ((void (*)(id, SEL))gWineCheckTransparency)(self, _cmd);
     blackenBackgroundBesideGLView(self);
+    if (self.isOpaque && windowShowsScaledPicture(self) && ![self.backgroundColor isEqual:NSColor.blackColor]) {
+        self.backgroundColor = NSColor.blackColor;
+    }
 }
 
 static void blackOutsideGLView(NSView *self, SEL _cmd, CGImageRef image) {
@@ -377,6 +386,102 @@ static void blackOutsideGLView(NSView *self, SEL _cmd, CGImageRef image) {
     if (painted) CGImageRelease(painted);
 }
 
+// MARK: - A GDI picture scaled up
+//
+// A program that draws with GDI (a Director projector, Bioscopia's) is scaled
+// up by win32u itself: its window surface is drawn at the emulated mode's
+// size and stretched into one at the display's (win32u's scaled_surface).
+// Wine's Mac window covers the display, and inside its content view the
+// window's client view is centred where the scaled picture belongs, which is
+// where the mouse is mapped to (map_window_rects_virt_to_raw). But the
+// content view's layer shows the stretched surface from its own top left:
+// on a 1920x1080 display, the client view is at 240-1680 while the 800x600
+// picture is drawn across 0-1440, so every click lands 240 points to the
+// left of what it was aimed at, and past the picture the rest of the surface
+// shows, white. (Seen with Wine 10.0 and 11.21, on Bioscopia, 2026-11-07.)
+//
+// So for such a window, after -[WineContentView updateLayer] has given the
+// layer its image, this file crops the image to the client view's size and
+// moves the layer to the client view's place, and makes the window's
+// background, which the bars beside the picture show, black.
+
+static IMP gWineUpdateLayer;
+static BOOL gArmed = NO;
+static char kReportedCentringKey;   // the client frame last reported for the window, as an NSValue
+
+/// The rect Wine's window surface covers in its content view: WineContentView's
+/// surfaceRect, which -updateLayer places the surface's layer at.
+static BOOL wineSurfaceRect(NSView *content, CGRect *rect) {
+    Ivar ivar = class_getInstanceVariable(content.class, "surfaceRect");
+    const char *type = ivar ? ivar_getTypeEncoding(ivar) : NULL;
+    if (!type || strncmp(type, "{CGRect=", 8) != 0) return NO;
+    *rect = *(CGRect *)((uint8_t *)(__bridge void *)content + ivar_getOffset(ivar));
+    return YES;
+}
+
+/// Where the scaled picture belongs in `window`'s content view: its client
+/// view's frame, when that is a part of the content view off its top left.
+/// NO unless the window shows a scaled GDI picture: borderless, counted by
+/// Wine as covering the screen or in a fullscreen Space, with no OpenGL or
+/// Metal view drawing into it
+/// (whose own placement is right, emulatedModeScaling's OpenGL part above).
+static BOOL scaledPictureFrame(NSWindow *window, NSRect *frame) {
+    if (!gArmed || !window || (window.styleMask & NSWindowStyleMaskTitled)) return NO;
+    // Wine stops counting the window as covering the screen once native
+    // fullscreen has put it in a Space, where it still does.
+    BOOL inSpace = (window.styleMask & NSWindowStyleMaskFullScreen) != 0;
+    BOOL coversScreen = [window respondsToSelector:@selector(isFullscreen)] && [(id)window isFullscreen];
+    if (!inSpace && !coversScreen) return NO;
+    NSView *content = window.contentView;
+    if (!content || content.subviews.count != 1) return NO;
+    if ([content respondsToSelector:@selector(hasGLDescendant)] && [content hasGLDescendant]) return NO;
+    NSView *client = content.subviews.firstObject;
+    if (![NSStringFromClass(client.class) isEqualToString:NSStringFromClass(content.class)]) return NO;
+    NSRect clientFrame = client.frame;
+    if (NSEqualPoints(clientFrame.origin, NSZeroPoint) || !NSContainsRect(content.bounds, clientFrame)) return NO;
+    if (clientFrame.size.width < 1.0 || clientFrame.size.height < 1.0) return NO;
+    *frame = clientFrame;
+    return YES;
+}
+
+int windowShowsScaledPicture(NSWindow *window) {
+    NSRect frame;
+    return scaledPictureFrame(window, &frame);
+}
+
+static void centredUpdateLayer(NSView *self, SEL _cmd) {
+    ((void (*)(id, SEL))gWineUpdateLayer)(self, _cmd);
+    NSWindow *window = self.window;
+    NSRect picture;
+    if (!window || window.contentView != self || !scaledPictureFrame(window, &picture)) return;
+    CALayer *layer = self.layer;
+    CGImageRef image = (__bridge CGImageRef)layer.contents;
+    CGRect surface;
+    if (!image || CFGetTypeID(image) != CGImageGetTypeID() || !wineSurfaceRect(self, &surface)) return;
+
+    // The picture starts at the image's top left; the image is in pixels.
+    CGFloat scale = layer.contentsScale > 0 ? layer.contentsScale : 1.0;
+    CGRect crop = CGRectMake(0, 0, picture.size.width * scale, picture.size.height * scale);
+    if (CGImageGetWidth(image) > crop.size.width + 0.5 || CGImageGetHeight(image) > crop.size.height + 0.5) {
+        CGImageRef cropped = CGImageCreateWithImageInRect(image, crop);
+        if (cropped) {
+            layer.contents = (__bridge id)cropped;
+            CGImageRelease(cropped);
+        }
+    }
+    layer.position = CGPointMake(surface.origin.x + picture.origin.x, surface.origin.y + picture.origin.y);
+    if (window.isOpaque && ![window.backgroundColor isEqual:NSColor.blackColor]) window.backgroundColor = NSColor.blackColor;
+
+    NSValue *now = [NSValue valueWithRect:picture];
+    if ([objc_getAssociatedObject(window, &kReportedCentringKey) isEqual:now]) return;
+    objc_setAssociatedObject(window, &kReportedCentringKey, now, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    os_log(gLog, "[EmulatedMode] placing the scaled picture at %.0f,%.0f, %.0fx%.0f, in a %.0fx%.0f window",
+           picture.origin.x, picture.origin.y, picture.size.width, picture.size.height, self.bounds.size.width, self.bounds.size.height);
+    helperReport("EmulatedMode", "notice", "placing the program's scaled picture at %.0f,%.0f, %.0fx%.0f, in its %.0fx%.0f window",
+                 picture.origin.x, picture.origin.y, picture.size.width, picture.size.height,
+                 self.bounds.size.width, self.bounds.size.height);
+}
+
 __attribute__((constructor))
 static void emulatedModeScalingInit(void) {
     gLog = os_log_create("com.secondchance.gamewrapper", "EmulatedMode");
@@ -403,6 +508,14 @@ static void emulatedModeScalingInit(void) {
     } else {
         helperReport("EmulatedMode", "warning", "no -[WineContentView setColorImage:]; bars beside a scaled picture are grey");
     }
+    Class contentView = NSClassFromString(@"WineContentView");
+    Ivar surfaceRect = contentView ? class_getInstanceVariable(contentView, "surfaceRect") : NULL;
+    if (contentView && surfaceRect && class_getInstanceMethod(contentView, @selector(updateLayer))) {
+        gWineUpdateLayer = replaceOwnMethod(contentView, @selector(updateLayer), (IMP)centredUpdateLayer);
+    } else {
+        helperReport("EmulatedMode", "warning", "no -[WineContentView updateLayer] or surfaceRect; a GDI program's scaled picture "
+                     "stays off-centre, and clicks miss it");
+    }
 
     Class wineWindow = NSClassFromString(@"WineWindow");
     Method checkTransparency = class_getInstanceMethod(wineWindow, @selector(checkTransparency));
@@ -424,5 +537,6 @@ static void emulatedModeScalingInit(void) {
                      "a game switched away from may come back with its picture misplaced");
     }
 #endif
+    gArmed = YES;
     helperReport("EmulatedMode", "notice", "armed in %s", getenv("EMULATED_MODE_SCALING_EXE"));
 }

@@ -118,6 +118,12 @@ final class WineRuntime: GameStarting {
         LogContext.enterStage("Starting Wine")
         let started = await WineDesktop.start(config.wine, timeout: .infinity, logger: logger, outputLogger: outputLogger)
         desktop.withLock { $0 = started }
+        // A launch that says --wine.display-mode has the session in that mode
+        // before the game looks at the screen. It needs the desktop: Wine's
+        // displays are registered by it.
+        if let mode = config.launch.displayMode {
+            await WineDisplayMode.set(mode, in: config.wine, logger: logger)
+        }
         return .ready
     }
 

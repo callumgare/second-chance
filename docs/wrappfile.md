@@ -477,6 +477,17 @@ app keeps no Wine.
   DirectDraw game setting a display mode) and stays a window otherwise. Any
   other value is refused when planning. ScummVM and DOSBox games are always
   fullscreen.
+- **`--wine.display-mode=<width>x<height>`** has the app set that display
+  mode in the program's Wine session before starting it (`800x600`), for a
+  program made for that screen that never sets the mode itself: Wine emulates
+  the mode, leaving the Mac's display alone, and scales the program's windows
+  up to fill it, the shape kept. Bioscopia's Director projector covers
+  whatever screen it finds with its window and draws its 800x600 stage small
+  in the middle; started in 800x600, its window is the stage, scaled up and
+  put in a fullscreen Space
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#a-display-mode-the-launch-sets)).
+  Each size is 320 to 8192; anything else is refused when planning. Only a
+  game the wine module starts gets it, not one Steam or Big Fish starts.
 - **`--wine.quit-key=<keys>`** makes the app's Quit press those keys in the
   program, written in the [key notation](#key-sequences), for one that
   ignores Wine's quit but quits on a key of its own: Iji's is

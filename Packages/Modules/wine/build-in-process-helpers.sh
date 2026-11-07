@@ -16,7 +16,8 @@ IFS=$'\n\t'
 # display_below_notch.m (shows Wine a notched display without the notch's
 # strip, so a game in a fullscreen Space gets matching mouse positions),
 # cursor_lock.m (cnc-ddraw's cursor lock), emulated_mode_scaling.m (scales a
-# Direct3D game's picture up when Wine emulates the display mode it asked for),
+# Direct3D game's picture up when Wine emulates the display mode it asked for,
+# and puts a GDI program's picture Wine scaled where the mouse is),
 # quit_watch.m (tells the wrapp when the game first drew and whether it was
 # asked to quit, so an exit before then reads as a failure),
 # cocoa_start_wait.m (lets every Wine process's driver wait for Cocoa to

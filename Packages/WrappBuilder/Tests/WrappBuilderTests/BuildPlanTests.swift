@@ -188,6 +188,23 @@ struct BuildPlanTests {
         #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.mouse=locked") }
     }
 
+    @Test("--wine.display-mode is recorded as a width and height, and anything else is refused when planning")
+    func displayMode() throws {
+        func plan(_ options: String) throws -> BuildPlan {
+            let (planner, _, bundle) = try planner("""
+            FROM --module=wine@10 prefix AS only
+            LAUNCH --wine.graphics=unknown \(options) C:/Game/Game.exe
+            """)
+            return try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
+                                    conditions: BuildConditions(arch: "arm64", macos: 15))
+        }
+        #expect(try plan("--wine.display-mode=800x600").launch?.displayMode == RecordedLaunch.DisplayMode(width: 800, height: 600))
+        #expect(try plan("").launch?.displayMode == nil)
+        for bad in ["800", "800x", "x600", "800*600", "100x100", "800x600x32", "wide"] {
+            #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.display-mode=\(bad)") }
+        }
+    }
+
     @Test("--wine.quit-confirm-key is recorded beside a quit key, and refused without one")
     func quitConfirmKey() throws {
         func plan(_ options: String) throws -> BuildPlan {

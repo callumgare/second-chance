@@ -1058,6 +1058,11 @@ public nonisolated struct BuildPlanner {
                 if let window = options["wine.window"], !["fullscreen", "windowed"].contains(window) {
                     throw PlanError(description: "\(origin): --wine.window=\(window): it's fullscreen or windowed, or left out for what the program asks for")
                 }
+                if let mode = options["wine.display-mode"], RecordedLaunch.DisplayMode(parsing: mode) == nil {
+                    let sizes = RecordedLaunch.DisplayMode.sizes
+                    throw PlanError(description: "\(origin): --wine.display-mode=\(mode): it's a width and height, each "
+                                    + "\(sizes.lowerBound) to \(sizes.upperBound): 800x600")
+                }
                 if options["wine.quit-confirm-key"] != nil, options["wine.quit-key"] == nil {
                     throw PlanError(description: "\(origin): --wine.quit-confirm-key is pressed on a second Quit after --wine.quit-key's: name the quit key too")
                 }

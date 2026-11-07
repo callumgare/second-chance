@@ -193,6 +193,17 @@ unsigned long ddrawModeRequest(void);
 /// notch when display_below_notch.m is showing it that, else the whole display.
 CGSize wineMainDisplaySize(void);
 
+// ## A program's picture scaled up by win32u (emulated_mode_scaling.m)
+
+/// Whether `window` shows a program's GDI picture that win32u has scaled up
+/// from an emulated display mode: it has no title bar and no OpenGL or Metal
+/// view, Wine counts it as covering the screen (or it's in a fullscreen
+/// Space), and its one subview, the client view where the picture belongs,
+/// is off its top left. Native fullscreen takes such a window into a Space,
+/// as it does a Direct3D game's. Main thread only; 0 in a process where
+/// emulated_mode_scaling.m isn't armed.
+int windowShowsScaledPicture(NSWindow *window);
+
 // ## Redirecting what winemac.so imports
 //
 // display_below_notch.m and virtual_pointer.m both wrap winemac.so's

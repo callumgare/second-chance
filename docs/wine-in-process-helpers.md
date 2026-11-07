@@ -10,7 +10,7 @@ wrapp does not have:
 | Native fullscreen | `Packages/Modules/wine/InProcessHelpers/native_fullscreen.m`, with `ddraw_mode_watch.m` | Puts the game window into a real macOS fullscreen Space when the game asks for fullscreen, and takes it out when it asks for a window | `NATIVE_MACOS_FULLSCREEN_EXE`, unless the launch says `--wine.window=windowed` ([below](#when-the-launch-says)) | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Display below the notch | `Packages/Modules/wine/InProcessHelpers/display_below_notch.m` | On a display with a notch, shows Wine only the part below it, so a game in a fullscreen Space gets mouse positions that match its picture | `NATIVE_FULLSCREEN_BELOW_NOTCH=1`, in every Wine process of a wrapp | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Cursor lock | `Packages/Modules/wine/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, when the launch asks for it (`--wine.mouse=grab-early`, [below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
-| Mode scaling | `Packages/Modules/wine/InProcessHelpers/emulated_mode_scaling.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
+| Mode scaling | `Packages/Modules/wine/InProcessHelpers/emulated_mode_scaling.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to, and puts a GDI program's picture, which Wine scales itself, where the mouse is | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw and its launch sets no display mode ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
 | Quit watch | `Packages/Modules/wine/InProcessHelpers/quit_watch.m` | Tells the wrapp when the game first put a frame on screen and whether anything asked it to quit, so a game that quits before it has started reads as a failure | `QUIT_WATCH_EXE`, for every Wine game ([below](#quit-watch)) | — (it only reports) |
 | Cocoa start wait | `Packages/Modules/wine/InProcessHelpers/cocoa_start_wait.m` | Lets each Wine program's Mac driver wait for its main thread to start Cocoa beyond Wine's 5 s, which a fully loaded Mac runs out, leaving the program with no display driver for good | Nothing: every Wine process ([below](#cocoa-start-wait)) | `SECOND_CHANCE_COCOA_START_WAIT=0` |
 | Hidden windows | `Packages/Modules/wine/InProcessHelpers/hidden_windows.m` | Keeps Big Fish's Game Manager's windows and Dock icon off the screen, but while the person signs in | `HIDDEN_WINDOWS_EXE`, set on the Game Manager; `*` for everything it runs during a build ([below](#hidden-windows)) | — |
@@ -120,7 +120,18 @@ of two kinds:
   which it detects by Wine having given the window an OpenGL or Metal view.
   A cnc-ddraw game's window can start out the size of the screen for a
   second or two before cnc-ddraw shrinks it, and cnc-ddraw attaches its
-  OpenGL view only after that.
+  OpenGL view only after that. A program drawing with GDI in a display mode
+  Wine emulates is taken over the same way once Wine shows its picture
+  scaled up in such a window ([below](#a-display-mode-the-launch-sets)).
+
+Wine won't move a window it counts as maximized into or out of a Space: its
+`-toggleFullScreen:` does nothing for one, and its Window menu greys Enter
+Full Screen out. A Director projector maximizes its stage window, which
+covers the screen anyway, so for a window covering the screen that the helper
+took over, and that isn't disabled (a modal dialog of the program's own is
+up), the helper moves it as AppKit does and leaves the menu item, and its
+key, on. Without that, Bioscopia's window never reached its Space while the
+helper asked again every half second.
 
 ### Whether the game asks for fullscreen
 
@@ -146,6 +157,9 @@ of two kinds:
   replaces it (`SetWindowLong(GWLP_WNDPROC)`, watched the same way). A game
   switching to a window releases DirectDraw and starts again with
   `DDSCL_NORMAL`; switching back, it starts again and sets a mode.
+- **A borderless window covering the screen that shows a GDI picture Wine
+  scaled up** from an emulated display mode asks for fullscreen, for as long
+  as it's there: a program in the display mode its launch set.
 - **Any other window** (a program drawing with GDI, SkiFree's) asks for a
   window.
 
@@ -591,12 +605,60 @@ puts it into a Space as for any other Direct3D game. The Space is the size the
 window already is, so nothing is resized. Nothing happens in a game that never
 switches modes: the mode then matches the display and the scale is 1.
 
+### A display mode the launch sets
+
+Some programs were made for one screen size and never set it themselves.
+Bioscopia's Director projector covers whatever screen it finds with a
+borderless window and draws its 800x600 stage small in its middle (on the
+1920x1080 desktop, it says first that it "requires 800 x 600"). A launch that
+says `--wine.display-mode=800x600`
+([wrappfile.md](wrappfile.md#the-launch-volumes-and-app)) has the wrapp set
+that mode in the game's Wine session before the game starts (`WineRuntime`,
+once Wine's desktop has registered the displays): `WineDisplayMode` writes
+out `display_mode.exe` and runs it. Wine has no program of its own that sets a
+mode, so the wrapp carries this one, 3.5 KB of C built with MinGW
+(`Packages/Modules/wine/DisplayMode/`, whose `regenerate.sh` rebuilds it into
+WineKit). It calls `ChangeDisplaySettingsExW` without `CDS_FULLSCREEN`, so the
+mode lasts the session: explorer.exe puts back only a fullscreen change, as
+its program exits, and win32u keeps the current mode in the session's
+volatile registry, so the next session starts from the display's own. With
+`EmulateModeset` the Mac's display is never touched. The wrapp's log says
+`[Display mode] Set to 800x600 for the game (result 0, now 800x600)`, or why
+not, and the game then starts at the display's own size.
+
+The projector then sees an 800x600 screen, makes its window 800x600, and Wine
+scales it up. A program that draws with GDI isn't scaled by this helper but by
+win32u itself, which stretches the window surface it draws into to one at the
+display's size (its `scaled_surface`, a HALFTONE StretchBlt), and puts the
+window in a Mac window covering the display, with the window's client view
+centred in it where the picture belongs and where the mouse is mapped. But
+Wine's content view shows the stretched surface from its own top left
+(`-[WineContentView updateLayer]` puts the layer at the surface's origin): on
+a 1920x1080 display the 800x600 picture was drawn across 0–1440 while the
+mouse was mapped as though it were at 240–1680, so every click landed 240
+points left of what it was aimed at, and the rest of the surface showed white
+beside it. Seen with Wine 10.0 and 11.21. So for a borderless window covering
+the screen (or in a fullscreen Space) with no OpenGL or Metal view, whose one
+subview, the client view, is off its top left, the helper crops the layer's
+image to the client view's size and moves the layer to the client view's
+place after Wine's `updateLayer`, and makes the window's background, which
+the bars show, black. The wrapp's log says
+`[Helpers] Mode scaling: placing the program's scaled picture at 240,0, 1440x1080, in its 1920x1080 window`.
+Native fullscreen takes such a window into a Space (`windowShowsScaledPicture`).
+
+What the scaling costs was measured on Bioscopia (2026-11-07, a test session
+on an M1 Max): the time from moving the pointer to the game drawing its
+cursor there was the same with the stage small and unscaled (median 82 ms) as
+scaled up in a Space (66 ms), and the game used about 6–8% of a core idle
+either way. Its cursor's lag is its own: it draws the cursor as a sprite,
+once a frame, at the movies' tempo of 10 frames a second.
+
 ### Which games get it
 
 `EmulateModeset` is on for the whole prefix, but the helper arms only in a
-game that may draw with Direct3D (`GameGraphicsAPI.mayUseDirect3D`). A game
-that draws through cnc-ddraw never switches the real display, since cnc-ddraw
-runs windowed. `SECOND_CHANCE_MODE_SCALING=0` (`--debug no-mode-scaling`)
+game that may draw with Direct3D (`GameGraphicsAPI.mayUseDirect3D`), or whose
+launch sets a display mode. A game that draws through cnc-ddraw never
+switches the real display, since cnc-ddraw runs windowed. `SECOND_CHANCE_MODE_SCALING=0` (`--debug no-mode-scaling`)
 leaves the helper unarmed but `EmulateModeset` on, so the frame lands in the
 corner again, for comparison.
 
