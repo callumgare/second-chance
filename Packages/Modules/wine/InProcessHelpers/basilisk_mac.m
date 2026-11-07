@@ -50,6 +50,14 @@
 //    so the app closes with the game; never while it's open, even behind
 //    the Finder. Told from the Mac's memory (the applications open, as the
 //    Process Manager's Application menu lists them), never from pictures.
+//  - **Hiding the Mac.** With BASILISK_MAC_HIDDEN=1 (`LAUNCH
+//    --basilisk.mac=hidden`), the Mac's own screens (its boot, the Finder and
+//    its windows) are kept from the window: every frame Basilisk II presents
+//    is cleared to black first (its import of SDL_RenderPresent is pointed
+//    here) until the program the Mac opened is in front and has drawn over
+//    the Finder's screen (its frame buffer, sampled), and again once the
+//    program shows the menu bar it hid or quits, or the Mac shuts down. Never
+//    in a build's automation, which reads the screen.
 //  - **A build's automation.** With BASILISK_MAC_AUTOMATION naming a script
 //    (the basilisk module's BASILISK.RUN), the Mac is driven by it once its
 //    window is up, a line at a time: puppet control's requests (`click 440
@@ -69,7 +77,11 @@
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 #import <Vision/Vision.h>
 #import <dlfcn.h>
+#import <mach/mach.h>
+#import <mach/mach_vm.h>
 #import <objc/runtime.h>
+#import <os/lock.h>
+#import <stdatomic.h>
 #import <signal.h>
 #import <unistd.h>
 #import "helper_common.h"
@@ -78,6 +90,7 @@ static const char *kHelper = "BasiliskMac";
 
 static void quitShutsDown(void);
 static void giveGreenButton(NSWindow *window);
+static void coverForGood(const char *why);
 
 /// Basilisk II's window: its one titled, visible window.
 static NSWindow *macWindow(void) {
@@ -579,6 +592,7 @@ static void startShutDown(void) {
     static BOOL started = NO;
     if (started) return;
     started = YES;
+    coverForGood("the Mac is shutting down");
     helperReport(kHelper, "notice", "shutting the Mac down");
     if (shutDownDirectly()) return;
     helperReport(kHelper, "notice", "shutting the Mac down by its power key");
@@ -767,6 +781,368 @@ static void watchProgram(void) {
     });
     dispatch_resume(timer);
     helperReport(kHelper, "notice", "the Mac shuts down when its program quits");
+}
+
+#pragma mark - Hiding the Mac
+
+/// BASILISK_MAC_HIDDEN=1 (`LAUNCH --basilisk.mac=hidden`): the Mac's own
+/// screens (its boot, the Finder) are kept from the window, which is black
+/// until the program the Mac opens has drawn itself, and black again once it
+/// quits or the Mac shuts down. Basilisk II's own import of
+/// SDL_RenderPresent is pointed here, and while the Mac is covered each frame
+/// is cleared to black before it's presented: nothing is put over the
+/// window, so fullscreen, the green button, the pointer and the keys are
+/// Basilisk II's as ever, and what puppet control pictures is what the window
+/// shows. What the Mac shows is read from its memory, as the quit watch reads
+/// it, at each frame and 60 times a second besides: a few hundred bytes,
+/// never a picture of the window, which would stall Basilisk II.
+static BOOL hideArmed = NO;
+
+/// Over the Mac until its program has drawn itself, off while it plays, and
+/// over it for good once it has quit or the Mac is shutting down; or off
+/// for good when no program opened, so the person isn't left at a black
+/// window with the Mac waiting behind it.
+typedef enum { CoverUntilProgram, CoverOff, CoverForGood, CoverGaveUp } CoverState;
+
+/// How long the Finder may be alone in front, no program having opened,
+/// before the cover gives up: Ingenious opens 0.7 s after the Finder.
+static const double kNoProgramSeconds = 30;
+static _Atomic int coverState = CoverUntilProgram;
+
+/// Taken by each frame and the timer while they read the Mac and move the cover.
+static os_unfair_lock coverLock = OS_UNFAIR_LOCK_INIT;
+static uint64_t hidingArmedAt;
+
+static double secondsSinceHidingArmed(void) {
+    return (double)(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - hidingArmedAt) / 1e9;
+}
+
+/// Low memory's CurApName (0x910): the application that has time now.
+static NSString *currentApplication(MacReader *r) {
+    uint8_t text[32];
+    uint8_t length = macByte(r, 0x910);
+    if (length > 31) return nil;
+    for (int i = 0; i <= length; i++) text[i] = macByte(r, 0x910 + (uint32_t)i);
+    if (!r->ok) return nil;
+    CFStringRef name = CFStringCreateWithPascalString(NULL, text, kCFStringEncodingMacRoman);
+    return name ? (__bridge_transfer NSString *)name : nil;
+}
+
+/// A rectangle of the Mac's, in its own order.
+typedef struct { int16_t top, left, bottom, right; } MacRect;
+
+static MacRect macRect(MacReader *r, uint32_t address) {
+    return (MacRect){ macWord(r, address), macWord(r, address + 2), macWord(r, address + 4), macWord(r, address + 6) };
+}
+
+/// A region's bounding box (rgnBBox, after its size word).
+static MacRect regionBox(MacReader *r, uint32_t handle) {
+    uint32_t region = macDeref(r, handle);
+    return region ? macRect(r, region + 2) : (MacRect){ 0 };
+}
+
+/// Whether the application with time has a visible window, going down its
+/// window list (low memory's WindowList, 0x9D6, which the Process Manager
+/// switches with CurApName): each WindowRecord's visible flag at 110, the
+/// next window at 144.
+static BOOL hasVisibleWindow(MacReader *r) {
+    uint32_t window = macLong(r, 0x9D6);
+    for (int i = 0; window != 0 && i < 64 && r->ok; i++) {
+        if (macByte(r, window + 110)) return YES;
+        window = macLong(r, window + 144);
+    }
+    return NO;
+}
+
+/// The sparse sample of the Mac's screen the cover compares: a 32x32 grid of
+/// bytes of its frame buffer, and which of them the front window covers.
+enum { kSampleSide = 32, kSamples = kSampleSide * kSampleSide };
+typedef struct {
+    BOOL ok;
+    uint8_t bytes[kSamples];
+    BOOL inWindow[kSamples];
+} ScreenSample;
+
+/// The Mac's frame buffer in this process: where low memory's ScrnBase
+/// (0x824) is, past MEMBaseDiff (Basilisk II addresses the Mac's memory
+/// directly), as big as ScreenRow (0x106) times the main screen's height
+/// (MainDevice, 0x8A4, its gdRect at 34); NULL unless that much of this
+/// process's memory is there to read, checked whenever the screen moves.
+static const volatile uint8_t *frameBuffer(MacReader *r, MacRect *screen, uint32_t *rowBytes) {
+    static uintptr_t *baseDiff;
+    static uintptr_t checkedStart, checkedLength;
+    static BOOL readable;
+    if (!baseDiff) baseDiff = (uintptr_t *)dlsym(RTLD_DEFAULT, "MEMBaseDiff");
+    uint32_t base = macLong(r, 0x824);
+    *rowBytes = (uint32_t)(macWord(r, 0x106) & 0x3FFF);
+    *screen = macRect(r, macDeref(r, macLong(r, 0x8A4)) + 34);
+    int height = screen->bottom - screen->top, width = screen->right - screen->left;
+    if (!r->ok || !baseDiff || !*baseDiff || !base || *rowBytes == 0 || height <= 0 || width <= 0) return NULL;
+    uintptr_t start = *baseDiff + base, length = (uintptr_t)*rowBytes * (uintptr_t)height;
+    if (start != checkedStart || length != checkedLength) {
+        checkedStart = start;
+        checkedLength = length;
+        mach_vm_address_t address = start;
+        mach_vm_size_t size = 0;
+        vm_region_basic_info_data_64_t info;
+        mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
+        mach_port_t object = MACH_PORT_NULL;
+        readable = mach_vm_region(mach_task_self(), &address, &size, VM_REGION_BASIC_INFO_64,
+                                  (vm_region_info_t)&info, &count, &object) == KERN_SUCCESS
+            && address <= start && start + length <= address + size && (info.protection & VM_PROT_READ);
+        if (!readable) helperReport(kHelper, "warning", "the Mac's screen can't be read at 0x%lx: hiding the Mac waits for its program's window alone",
+                                    (unsigned long)start);
+    }
+    return readable ? (const volatile uint8_t *)start : NULL;
+}
+
+/// The Mac's screen sampled, with which samples lie in `window` (a box in
+/// the screen's own coordinates).
+static ScreenSample sampleScreen(MacReader *r, MacRect window) {
+    ScreenSample sample = { .ok = NO };
+    MacRect screen;
+    uint32_t rowBytes = 0;
+    const volatile uint8_t *frame = frameBuffer(r, &screen, &rowBytes);
+    if (!frame) return sample;
+    int width = screen.right - screen.left, height = screen.bottom - screen.top;
+    for (int row = 0; row < kSampleSide; row++) {
+        for (int column = 0; column < kSampleSide; column++) {
+            int x = width * (2 * column + 1) / (2 * kSampleSide), y = height * (2 * row + 1) / (2 * kSampleSide);
+            int i = row * kSampleSide + column;
+            // A pixel's first byte, whatever the depth.
+            sample.bytes[i] = frame[(uint32_t)y * rowBytes + (uint32_t)((uint64_t)x * rowBytes / (uint32_t)width)];
+            int h = screen.left + x, v = screen.top + y;
+            sample.inWindow[i] = h >= window.left && h < window.right && v >= window.top && v < window.bottom;
+        }
+    }
+    sample.ok = YES;
+    return sample;
+}
+
+/// What the Mac shows, as far as the cover cares.
+typedef struct {
+    BOOL known;           // read twice alike
+    BOOL programOpen;     // a program besides the Finder is in the Application menu
+    BOOL programInFront;  // ...and has time (CurApName), so WindowList is its own
+    BOOL windowShown;     // it has a visible window
+    MacRect frontWindow;  // its front window's structure region's box, if visible
+    int16_t menuBar;      // low memory's MBarHeight (0xBAA)
+} MacScene;
+
+static MacScene readSceneOnce(const volatile uint8_t *memory, uint32_t size) {
+    MacScene scene = { 0 };
+    MacReader reader = { memory, size, YES };
+    MacReader *r = &reader;
+    NSArray<NSString *> *open = openApplications(memory, size);
+    NSString *front = currentApplication(r);
+    if (!open || !front) return scene;
+    NSArray<NSString *> *programs = [open filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF != 'Finder'"]];
+    scene.programOpen = programs.count > 0;
+    scene.programInFront = [programs containsObject:front];
+    scene.windowShown = hasVisibleWindow(r);
+    uint32_t window = macLong(r, 0x9D6);
+    if (window && macByte(r, window + 110)) scene.frontWindow = regionBox(r, macLong(r, window + 114));
+    scene.menuBar = macWord(r, 0xBAA);
+    scene.known = reader.ok;
+    return scene;
+}
+
+/// The scene, believed when two reads in a row agree: the Mac may be
+/// switching applications (CurApName and WindowList change one after the
+/// other) or changing its menu as it's read.
+static MacScene readScene(MacReader *reader) {
+    MacScene first = readSceneOnce(reader->memory, reader->size), second = readSceneOnce(reader->memory, reader->size);
+    BOOL same = first.programOpen == second.programOpen && first.programInFront == second.programInFront
+        && first.windowShown == second.windowShown && first.menuBar == second.menuBar
+        && memcmp(&first.frontWindow, &second.frontWindow, sizeof(MacRect)) == 0;
+    if (!first.known || !second.known || !same) return (MacScene){ 0 };
+    return first;
+}
+
+/// The Mac's screen as it was before the program came in front (the
+/// Finder's), to tell when the program has drawn over it.
+static ScreenSample before;
+/// When the program in front first had a window up, while covered (0: not yet).
+static double windowUpAt = 0;
+/// When the Finder was first seen alone in front, no program open yet (0: not yet).
+static double finderAloneAt = 0;
+/// Whether the last frame saw the program showing: the cover comes off at
+/// the frame after, whose picture of the Mac's screen was taken once it was.
+/// (The timer only asks for that frame: one being made as it reads may have
+/// pictured the screen a moment before.)
+static BOOL showingAtLastFrame = NO;
+/// Whether the last read, frame or timer, saw the program showing.
+static BOOL showingNow = NO;
+/// The menu bar's height when the cover came off: a program that hid it
+/// (Ingenious) showing it again is quitting.
+static int16_t menuBarWhenShown = -1;
+static BOOL coverEverRemoved = NO;
+/// Frames cleared to black, for the log.
+static int framesCovered = 0;
+
+/// Whether the program has drawn itself: of the samples its front window
+/// covers, nine in ten differ from the screen before it came in front (a
+/// window marked visible is drawn a while later: Ingenious's was marked
+/// visible about 0.1 s before its first frame); or its window has been up
+/// two seconds, so a program that draws little isn't left black.
+static BOOL programHasDrawn(MacReader *r, MacScene scene, double now) {
+    if (now - windowUpAt >= 2.0) return YES;
+    if (!before.ok) return NO;
+    ScreenSample after = sampleScreen(r, scene.frontWindow);
+    if (!after.ok) return NO;
+    int inside = 0, changed = 0;
+    for (int i = 0; i < kSamples; i++) {
+        if (!after.inWindow[i]) continue;
+        inside++;
+        if (after.bytes[i] != before.bytes[i]) changed++;
+    }
+    return inside >= 16 && changed * 10 >= inside * 9;
+}
+
+/// Moves the cover as the scene says; YES if it moved. Called before each
+/// frame (`atFrame`) and from the timer, under coverLock.
+static BOOL updateCover(BOOL atFrame) {
+    int state = coverState;
+    if (state == CoverForGood || state == CoverGaveUp) return NO;
+    uint32_t size = 0;
+    const volatile uint8_t *memory = macMemory(&size);
+    if (!memory) return NO;
+    MacReader reader = { memory, size, YES };
+    MacScene scene = readScene(&reader);
+    if (!scene.known) return NO;
+    double now = secondsSinceHidingArmed();
+    if (state == CoverOff) {
+        showingAtLastFrame = showingNow = NO;
+        if (!scene.programOpen) {
+            coverState = CoverForGood;
+            helperReport(kHelper, "notice", "the Mac's program has quit: the Mac covered (%.2f s)", now);
+            return YES;
+        }
+        // Only while the program has time: the Finder's moments of it, now
+        // and then as the program plays, show nothing.
+        if (scene.programInFront && (!scene.windowShown || scene.menuBar != menuBarWhenShown)) {
+            coverState = CoverUntilProgram;
+            windowUpAt = 0;
+            helperReport(kHelper, "notice", "the Mac's program %s: the Mac covered (%.2f s)",
+                         scene.windowShown ? "showed the menu bar" : "has no window up", now);
+            return YES;
+        }
+        return NO;
+    }
+    if (coverEverRemoved && !scene.programOpen) {
+        coverState = CoverForGood;
+        helperReport(kHelper, "notice", "the Mac's program has quit (%.2f s)", now);
+        return YES;
+    }
+    if (!coverEverRemoved && !scene.programOpen) {
+        if (finderAloneAt == 0) finderAloneAt = now;
+        if (now - finderAloneAt >= kNoProgramSeconds) {
+            coverState = CoverGaveUp;
+            helperReport(kHelper, "warning", "no program opened on the Mac in %.0f s: the Mac uncovered (%.2f s)", kNoProgramSeconds, now);
+            return YES;
+        }
+    }
+    if (!scene.programInFront) {
+        // The Finder's screen, kept to compare the program's with.
+        before = sampleScreen(&reader, (MacRect){ 0 });
+        windowUpAt = 0;
+        showingAtLastFrame = showingNow = NO;
+        return NO;
+    }
+    BOOL showing = NO;
+    if (scene.windowShown && (!coverEverRemoved || scene.menuBar == menuBarWhenShown)) {
+        if (windowUpAt == 0) windowUpAt = now;
+        // Back after a moment covered while playing: its screen is its own.
+        showing = coverEverRemoved || programHasDrawn(&reader, scene, now);
+    }
+    BOOL seenAtLastFrame = showingAtLastFrame;
+    showingNow = showing;
+    if (atFrame) showingAtLastFrame = showing;
+    if (!(showing && seenAtLastFrame && atFrame)) return NO;
+    coverState = CoverOff;
+    helperReport(kHelper, "notice", "the Mac's program is showing%s: the Mac uncovered (%.2f s, its window up %.2f s, %d frames covered)",
+                 coverEverRemoved ? " again" : "", now, now - windowUpAt, framesCovered);
+    if (!coverEverRemoved) menuBarWhenShown = scene.menuBar;
+    coverEverRemoved = YES;
+    return YES;
+}
+
+typedef void (*RenderPresent)(void *);
+static RenderPresent realPresent;
+
+/// Basilisk II's call to put a frame on the screen, redirected: the cover
+/// moved as the Mac says, and while it's on, the frame cleared to black first.
+static void presentHidden(void *renderer) {
+    os_unfair_lock_lock(&coverLock);
+    updateCover(YES);
+    os_unfair_lock_unlock(&coverLock);
+    int state = coverState;
+    if (state == CoverUntilProgram || state == CoverForGood) {
+        typedef int (*GetColor)(void *, uint8_t *, uint8_t *, uint8_t *, uint8_t *);
+        typedef int (*SetColor)(void *, uint8_t, uint8_t, uint8_t, uint8_t);
+        typedef int (*Clear)(void *);
+        static GetColor getColor;
+        static SetColor setColor;
+        static Clear clear;
+        if (!getColor) getColor = (GetColor)dlsym(RTLD_DEFAULT, "SDL_GetRenderDrawColor");
+        if (!setColor) setColor = (SetColor)dlsym(RTLD_DEFAULT, "SDL_SetRenderDrawColor");
+        if (!clear) clear = (Clear)dlsym(RTLD_DEFAULT, "SDL_RenderClear");
+        if (getColor && setColor && clear) {
+            framesCovered++;
+            uint8_t red = 0, green = 0, blue = 0, alpha = 255;
+            getColor(renderer, &red, &green, &blue, &alpha);
+            setColor(renderer, 0, 0, 0, 255);
+            clear(renderer);
+            setColor(renderer, red, green, blue, alpha);
+        }
+    }
+    realPresent(renderer);
+}
+
+/// The Mac covered for good, as it shuts down (the app's Quit, the wrapp's
+/// SIGUSR2): at once, with a frame asked for, as the window otherwise keeps
+/// the last one it was given.
+static void coverForGood(const char *why) {
+    if (!hideArmed) return;
+    if (atomic_exchange(&coverState, CoverForGood) == CoverForGood) return;
+    helperReport(kHelper, "notice", "the Mac covered: %s (%.2f s)", why, secondsSinceHidingArmed());
+    redrawAll(NULL);
+}
+
+/// The cover moved between frames too (Basilisk II presents only when the
+/// Mac's screen changes), with a frame asked for when it moves or may come
+/// off; until it's on for good.
+static void watchCover(void) {
+    static dispatch_source_t timer;
+    timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
+    dispatch_source_set_timer(timer, DISPATCH_TIME_NOW, NSEC_PER_SEC / 60, NSEC_PER_SEC / 200);
+    dispatch_source_set_event_handler(timer, ^{
+        if (coverState == CoverForGood || coverState == CoverGaveUp) {
+            dispatch_source_cancel(timer);
+            return;
+        }
+        os_unfair_lock_lock(&coverLock);
+        BOOL wasShowing = showingNow;
+        BOOL moved = updateCover(NO);
+        BOOL mayComeOff = showingNow && !wasShowing && coverState == CoverUntilProgram;
+        os_unfair_lock_unlock(&coverLock);
+        if (moved || mayComeOff) redrawAll(NULL);
+    });
+    dispatch_resume(timer);
+}
+
+/// In the constructor, before Basilisk II presents its first frame.
+static void armHiding(void) {
+    hidingArmedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+    realPresent = (RenderPresent)dlsym(RTLD_DEFAULT, "SDL_RenderPresent");
+    int replaced = realPresent ? rebindMainImport("_SDL_RenderPresent", (void *)presentHidden) : 0;
+    if (replaced == 0) {
+        helperReport(kHelper, "warning", "can't hide the Mac: Basilisk II's SDL_RenderPresent can't be redirected");
+        return;
+    }
+    hideArmed = YES;
+    helperReport(kHelper, "notice", "the Mac is hidden until its program shows");
+    watchCover();
 }
 
 #pragma mark - A build's automation
@@ -1079,6 +1455,8 @@ static void armBasiliskMac(void) {
     helperReport(kHelper, "notice", "armed in %s", getenv("BASILISK_MAC_EXE"));
     const char *withProgram = getenv("BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM");
     if (withProgram && strcmp(withProgram, "1") == 0) watchProgram();
+    const char *hidden = getenv("BASILISK_MAC_HIDDEN");
+    if (hidden && strcmp(hidden, "1") == 0) armHiding();
     const char *automation = getenv("BASILISK_MAC_AUTOMATION");
     if (automation && *automation) {
         NSString *path = @(automation);

@@ -102,7 +102,12 @@ files is left clean, and ends Basilisk II only if the Mac hasn't shut down in
 20 s. The in-process helper `basilisk_mac.m`, inserted on every
 launch, does that, and gets the window drawing, which Basilisk II and macOS leave
 stale until the window is pictured and redrawn
-([modules.md](modules.md#the-basilisk-modules-mac)).
+([modules.md](modules.md#the-basilisk-modules-mac)). With
+`--basilisk.mac=hidden` (Ingenious's), the window shows nothing of the Mac
+itself: it's black from its first frame, through the boot and the Finder,
+until the program has drawn its first picture (about 4 s after Basilisk II
+starts), and black again from the moment the program quits, or the app's
+Quit, until the app closes (about a second later, as the Mac shuts down).
 
 **The core** (`ProgramRuntime`) starts a program the app carries, when no
 module does: `LAUNCH /MacOS/tool`, a composition with no launcher. It runs the

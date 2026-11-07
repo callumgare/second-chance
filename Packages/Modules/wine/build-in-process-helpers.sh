@@ -28,7 +28,8 @@ IFS=$'\n\t'
 # those clicks, in a login where the Mac's can't; it wraps display_below_notch.m's
 # wrappers, so it is linked after it) and audio_levels.m (measures the game's
 # sound for puppet control's `audio`), basilisk_mac.m (Basilisk II's first
-# picture, and shutting its Mac down when the wrapp quits), with key_names.m, the keys puppet control and
+# picture, shutting its Mac down when the wrapp quits, and hiding the Mac's own
+# screens from the player), with key_names.m, the keys puppet control and
 # the quit watch press by name. ScummVM wrapps load the same dylib into scummvm, for
 # puppet_control.m alone. ScreenCaptureKit is weak-linked: puppet_control.m
 # needs macOS 14.4 and checks for it.

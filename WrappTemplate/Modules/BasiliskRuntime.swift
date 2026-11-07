@@ -113,7 +113,9 @@ final class BasiliskRuntime: GameStarting {
     /// when it was prepared, so dyld inserts the dylib): on every launch,
     /// `basilisk_mac.m`, which gets the Mac's window drawing and shuts the Mac
     /// down when the wrapp quits, and when its program quits if the launch
-    /// says so (`--basilisk.shut-down=with-program`); when WrappPuppeteer started the wrapp,
+    /// says so (`--basilisk.shut-down=with-program`), and hides the Mac's own
+    /// screens, black until its program shows and again once it has quit, if
+    /// the launch says so (`--basilisk.mac=hidden`); when WrappPuppeteer started the wrapp,
     /// puppet control too, as in dosbox.
     private var helperVariables: [String: String] {
         let dylib = config.appPath.appendingPathComponent("Contents/Frameworks/in_process_helpers.dylib").path
@@ -127,6 +129,11 @@ final class BasiliskRuntime: GameStarting {
         case nil: break
         case "with-program": variables["BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM"] = "1"
         case let other?: logger.warning("[Basilisk] Unknown --basilisk.shut-down=\(other): the Mac stays up when its program quits")
+        }
+        switch config.launch.options["basilisk.mac"] {
+        case nil, "shown": break
+        case "hidden": variables["BASILISK_MAC_HIDDEN"] = "1"
+        case let other?: logger.warning("[Basilisk] Unknown --basilisk.mac=\(other): the Mac's own screens are shown")
         }
         if Wine.puppetDirectory() != nil { variables["PUPPET_CONTROL_EXE"] = "BasiliskII" }
         return variables

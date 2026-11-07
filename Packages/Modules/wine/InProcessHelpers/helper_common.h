@@ -220,6 +220,13 @@ int windowShowsScaledPicture(NSWindow *window);
 /// already hold the real addresses. Returns how many entries it replaced.
 int replaceImageImport(const struct mach_header_64 *image, void *original, void *replacement);
 
+/// Point every import of `symbol` ("_SDL_RenderPresent", with its leading
+/// underscore) the main executable has at `replacement`, found by name
+/// through its indirect symbol table, so an import still bound lazily (a
+/// stub until its first call) is found too (virtual_pointer.m). Returns how
+/// many it replaced.
+int rebindMainImport(const char *symbol, void *replacement);
+
 /// The user data (kCGEventSourceUserData) puppet_control.m marks its mouse
 /// events with, so virtual_pointer.m can tell them from the moves AppKit
 /// makes up itself, which also carry this process's id.

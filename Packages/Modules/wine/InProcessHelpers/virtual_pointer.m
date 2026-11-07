@@ -205,8 +205,9 @@ static NSPoint virtualMouseLocation(id self, SEL _cmd) {
 /// executable has at `replacement`, found by name through its indirect symbol
 /// table: scummvm binds the old way, through lazy pointers that hold a stub
 /// until the first call, so the address to look for isn't there yet (the
-/// fishhook technique). Returns how many it replaced.
-static int rebindMainImport(const char *symbol, void *replacement) {
+/// fishhook technique). Returns how many it replaced. basilisk_mac.m uses it
+/// too, for Basilisk II's SDL_RenderPresent (helper_common.h).
+int rebindMainImport(const char *symbol, void *replacement) {
     const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(0);
     intptr_t slide = _dyld_get_image_vmaddr_slide(0);
     const struct symtab_command *symtab = NULL;

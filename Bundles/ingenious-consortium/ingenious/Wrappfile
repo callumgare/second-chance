@@ -40,5 +40,6 @@ BASILISK.RUN --automation=bundle:mac/setup.keys
 BASILISK.STARTUP "basilisk:System7_5_3:Desktop Folder:Ingenious alias"
 LAUNCH --mount=type=store,source=basilisk-disk,target=basilisk:disk/
 # When the player quits the game, the Mac shuts down and the app closes,
-# rather than leaving them at the Finder.
-LAUNCH --basilisk.screen=640x480x8 --basilisk.shut-down=with-program "basilisk:Ingenious CD:Ingenious"
+# rather than leaving them at the Finder; and the Mac's own screens, its boot
+# and the Finder, stay black until the game shows, and once it has quit.
+LAUNCH --basilisk.screen=640x480x8 --basilisk.shut-down=with-program --basilisk.mac=hidden "basilisk:Ingenious CD:Ingenious"

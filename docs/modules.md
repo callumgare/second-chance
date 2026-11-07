@@ -594,6 +594,52 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
     program asked for isn't taken for a quit.
     System 7.5.3's disk has no AppleScript, so this couldn't be the Mac's own
     startup item.
+  - with `LAUNCH --basilisk.mac=hidden` (`BASILISK_MAC_HIDDEN`), keeps the
+    Mac's own screens from the player: the window is black through the boot
+    (the grey screen, the happy Mac, "Welcome to Macintosh", the extensions)
+    and the Finder (its desktop, and the CD's window, which a read-only disc
+    remembers open), until the program the Mac opened is showing, and black
+    again from its quit, or the app's Quit, until the app closes. Nothing is
+    put over the window: Basilisk II's own import of `SDL_RenderPresent` is
+    pointed at the helper (`rebindMainImport`, as Basilisk II binds SDL
+    lazily), which, while the Mac is covered, clears each frame to black
+    before presenting it. So the cover is exact to the frame, fullscreen and
+    the green button, the pointer and the keys are Basilisk II's as before,
+    and what puppet control pictures is what the window shows. It's never set
+    for a build's `BASILISK.RUN`, whose automation reads the screen.
+    What the Mac shows is read from its memory at each frame and 60 times a
+    second besides (a frame is asked for, with an "exposed" event, when the
+    cover moves, as Basilisk II presents only when the screen changes), a
+    few hundred bytes each time, nothing while the program plays but those
+    reads:
+    - **The program is showing** once it's in the Application menu and in
+      front (`CurApName`, so `WindowList` is its own), its front window is
+      visible, and nine in ten of the frame buffer's samples that window
+      covers (a 32x32 grid of the Mac's screen, at `ScrnBase` past Basilisk
+      II's `MEMBaseDiff`, checked readable first) differ from the screen
+      before it came in front, the Finder's. A window is marked visible
+      before it's drawn, and so is its update region emptied: uncovered on
+      either, Ingenious's launch showed the Finder for about a tenth of a second.
+      The cover comes off at the frame after one that saw it, as the frame
+      in hand may have been taken a moment before; or two seconds after its
+      window came up, so a program that draws little isn't left black.
+      Measured with Ingenious in a test session: the Finder in front 2.4 s
+      after Basilisk II starts, Ingenious in front 3.1–3.6 s, its window
+      marked visible 0.1 s before it paints its black screen, uncovered at
+      3.5–4.1 s, 0.1–0.5 s after its window came up, on its first picture.
+    - **It has quit** when, in front, it has no visible window or shows the
+      menu bar it hid (Ingenious brings it back as it quits, before the
+      Finder draws), covered from that frame; and for good once it's gone
+      from the menu. In front only: while a program plays, the Finder has a
+      moment of time every five seconds or so (`CurApName` "Finder" for 15–35
+      ms), which says nothing. The app's Quit and the wrapp's SIGUSR2 cover
+      the Mac for good at once.
+    - **No program** in the 30 s after the Finder comes in front: the cover
+      gives up, rather than leave the person at a black window.
+
+    A black desktop pattern inside the Mac would add nothing: the cover hides
+    the whole boot, which no setting inside the Mac can, and Ingenious fills
+    the screen while it runs.
 
 ### The engine store
 

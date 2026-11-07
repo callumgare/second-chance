@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "basilisk"
-release: 4
+release: 5
 native: "basilisk"                           # its Swift: Packages/Modules/basilisk (BasiliskExecutor, BasiliskKit), BasiliskRuntime, BasiliskBuild
 versions:
   # Basilisk II, a 68040 Mac (a Quadra 900 to Mac OS), and System 7.5.3, which
@@ -71,8 +71,10 @@ build:
   core-options:
     # The Mac's screen, <width>x<height>x<colour depth>: 640x480x8 unless said;
     # shut-down=with-program shuts the Mac down, and so closes the app, once
-    # the program it opened at startup has quit, leaving only the Finder.
-    LAUNCH: { screen: value, shut-down: value }
+    # the program it opened at startup has quit, leaving only the Finder;
+    # mac=hidden keeps the Mac's own screens (its boot, the Finder) black,
+    # until the program has shown and again once it quits.
+    LAUNCH: { screen: value, shut-down: value, mac: value }
   setup: [SETUP]
   # The ROM the person gives once, kept for later builds: module:basilisk:/rom.
   provided-files: [rom]

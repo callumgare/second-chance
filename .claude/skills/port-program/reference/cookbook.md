@@ -124,7 +124,7 @@ BASILISK.CDROM ${input.disc-1}
 BASILISK.RUN --automation=bundle:mac/setup.keys     # manifest: allow-paths: ["mac/"]
 BASILISK.STARTUP "basilisk:System7_5_3:Desktop Folder:Ingenious alias"
 LAUNCH --mount=type=store,source=basilisk-disk,target=basilisk:disk/
-LAUNCH --basilisk.screen=640x480x8 --basilisk.shut-down=with-program "basilisk:Ingenious CD:Ingenious"
+LAUNCH --basilisk.screen=640x480x8 --basilisk.shut-down=with-program --basilisk.mac=hidden "basilisk:Ingenious CD:Ingenious"
 ```
 
 - Write the script from a session by hand first (`sc puppet start`, then `do
@@ -141,6 +141,14 @@ LAUNCH --basilisk.screen=640x480x8 --basilisk.shut-down=with-program "basilisk:I
   Mac's memory (no pictures, so it costs the game nothing), and shuts down
   once only the Finder is, never while the program is open behind it. Leave
   it off for a program meant to be left for the Finder.
+- `--basilisk.mac=hidden` keeps the Mac's own screens from the player: the
+  window is black through the boot and the Finder until the program has drawn
+  itself, and black again from its quit (or the app's) until the app closes.
+  Read from the Mac's memory and its frame buffer, so it costs the program
+  nothing. Use it with `shut-down=with-program`, for a program that opens at
+  startup and is all the player should see; leave it off for one meant to be
+  used beside the Finder. If no program opens within 30 s of the Finder, the
+  cover gives up and the Mac shows.
 - System 7.5.3's disk has no AppleScript (no extension, no Script Editor) and
   only HyperCard 2.4, which can't shut the Mac down by itself: anything to do
   while the program runs is the helper's, outside the Mac, not a script in it.
