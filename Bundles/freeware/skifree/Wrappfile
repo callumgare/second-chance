@@ -7,3 +7,7 @@ FROM --module=wine@11.21 prefix AS download
 COPY --from=${input.game} . ${const.install-dir}/ # the edition's download input, unpacked as its manifest says
 # A Windows program that draws with GDI, neither DirectDraw nor Direct3D
 LAUNCH --wine.graphics=unknown "${const.install-dir}/ski32.exe"
+# Its icon, made in Icon Lab from the game's own art (assets/skifree.icon,
+# compiled by `sc generate`); skifree-2 is the other design kept.
+COPY bundle:assets/skifree.icns /Resources/skifree.icns
+APP --icon=/Resources/skifree.icns

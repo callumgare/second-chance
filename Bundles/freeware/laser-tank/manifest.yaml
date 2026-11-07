@@ -4,6 +4,7 @@ id: "freeware/laser-tank"
 version: 1
 title: "LaserTank"
 display-name: "LaserTank"
+allow-paths: ["assets/"]   # its icon
 
 volumes:
   saves:

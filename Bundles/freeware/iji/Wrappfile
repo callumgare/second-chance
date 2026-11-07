@@ -23,3 +23,7 @@ COPY --from=${input.game} . ${const.install-dir}/ # the zip's files: the game, i
 WINE.PATCH skip-synth-playout
 LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="*.ini;*.sav;*.cfg" \
     --wine.graphics=direct-3d --wine.window=windowed --wine.quit-key=f12:hold=5s "${const.install-dir}/iji.exe"
+# Its icon, made in Icon Lab from the game's own art (assets/iji.icon,
+# compiled by `sc generate`); iji-2 and -3 are the other designs kept.
+COPY bundle:assets/iji.icns /Resources/iji.icns
+APP --icon=/Resources/iji.icns

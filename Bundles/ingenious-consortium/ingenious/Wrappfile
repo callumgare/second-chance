@@ -39,6 +39,10 @@ BASILISK.RUN --automation=bundle:mac/setup.keys
 # The game opened at every boot.
 BASILISK.STARTUP "basilisk:System7_5_3:Desktop Folder:Ingenious alias"
 LAUNCH --mount=type=store,source=basilisk-disk,target=basilisk:disk/
+# Its icon, made in Icon Lab from the game's own art (assets/ingenious.icon,
+# compiled by `sc generate`); ingenious-2 and -3 are the other designs kept.
+COPY bundle:assets/ingenious.icns /Resources/ingenious.icns
+APP --icon=/Resources/ingenious.icns
 # When the player quits the game, the Mac shuts down and the app closes,
 # rather than leaving them at the Finder; and the Mac's own screens, its boot
 # and the Finder, stay black until the game shows, and once it has quit.

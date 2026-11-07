@@ -882,12 +882,14 @@ takes out the Wine it no longer runs (`cleanupUnusedEngine`).
 
 **The template's icon is a generic one** (`WrappTemplate/Resources/GenericWrappIcon.icon`,
 its asset catalog's app icon), which an app whose Wrappfile gives no `APP --icon`
-keeps, SkiFree and Tyrian among them. A Wrappfile's `APP --icon` names an `.icns` a
+keeps, Tyrian among them. A Wrappfile's `APP --icon` names an `.icns` a
 `COPY` put in the app's `Resources/`; `completeBuild` checks it's there, sets
 `CFBundleIconFile` to it and removes `CFBundleIconName`, which names the
 generic icon in the asset catalog and would win over the file. The Nancy Drew
 games' icon is the nancy-drew module's `assets/nancy-drew.icns`, which its
-`set-icon` function copies in and names (`DO nancy-drew.set-icon`). The
+`set-icon` function copies in and names (`DO nancy-drew.set-icon`); a program
+with an icon of its own keeps it in its bundle's `assets/`, as Ingenious, SkiFree,
+LaserTank, Bioscopia and Iji do (`COPY bundle:assets/ingenious.icns …`). The
 app's name is `APP --name`'s, else the game's title, and its bundle id the
 one Second Chance gives it (`WrappLock.wrappBundleID`), which always wins
 over the Wrappfile's `APP --default-id` (`RecordedApp.id(given:)`); with

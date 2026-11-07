@@ -4,7 +4,7 @@ id: "tivola/bioscopia"
 version: 1
 title: "Bioscopia"
 display-name: "Bioscopia"
-allow-paths: ["quicktime/", "scummvm/"]  # QuickTime 4's setup script; the unfinished ScummVM stage's Lingo.ini
+allow-paths: ["quicktime/", "scummvm/", "assets/"]  # QuickTime 4's setup script; the unfinished ScummVM stage's Lingo.ini; its icon
 
 volumes:
   saves:

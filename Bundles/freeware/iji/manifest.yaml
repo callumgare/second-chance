@@ -4,6 +4,7 @@ id: "freeware/iji"
 version: 1
 title: "Iji"
 display-name: "Iji"
+allow-paths: ["assets/"]   # its icon
 
 volumes:
   saves:

@@ -11,3 +11,8 @@ FROM --module=wine@11.21 prefix AS download
 COPY --from=${input.game} . ${const.install-dir}/ # the zip's files: the game, its levels and graphics sets
 LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="LaserTank.ini;*.hs;*.lpb" \
     --wine.graphics=unknown --wine.window=windowed "${const.install-dir}/lasertank.exe"
+# Its icon, made in Icon Lab from the game's own art (assets/laser-tank.icon,
+# compiled by `sc generate`); laser-tank-2 to -4 are the other
+# designs kept.
+COPY bundle:assets/laser-tank.icns /Resources/laser-tank.icns
+APP --icon=/Resources/laser-tank.icns

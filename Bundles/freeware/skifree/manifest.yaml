@@ -4,6 +4,7 @@ id: "freeware/skifree"
 version: 1
 title: "SkiFree"
 display-name: "SkiFree"
+allow-paths: ["assets/"]   # its icon
 
 editions:
   - id: "download"

@@ -4,7 +4,7 @@ id: "ingenious-consortium/ingenious"
 version: 1
 title: "Ingenious!"
 display-name: "Ingenious"
-allow-paths: ["mac/"]                        # the script that sets the game's Mac up
+allow-paths: ["mac/", "assets/"]             # the script that sets the game's Mac up, and its icon
 
 volumes:
   basilisk-disk:

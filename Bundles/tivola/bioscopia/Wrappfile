@@ -36,6 +36,11 @@ WINE.KEEP-DISCS ${input.disc-2} --into=C:/bioscopia-cd
 # start screen, which only asks for an 800x600 desktop.)
 LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="Bioscopia.rup" \
     --wine.graphics=unknown --wine.display-mode=800x600 ${const.program}
+# Its icon, made in Icon Lab from the game's own art (assets/bioscopia.icon,
+# compiled by `sc generate`); bioscopia-2 and -3 are the other
+# designs kept.
+COPY bundle:assets/bioscopia.icns /Resources/bioscopia.icns
+APP --icon=/Resources/bioscopia.icns
 
 # NOT A WORKING ROUTE, kept to finish later; no edition builds it. The
 # Windows data under ScummVM's director engine (2026.4.0): the start screen,
