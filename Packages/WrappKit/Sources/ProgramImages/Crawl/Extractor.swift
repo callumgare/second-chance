@@ -143,7 +143,7 @@ nonisolated protocol NodeHandler: Sendable {
 nonisolated final class Crawl: @unchecked Sendable {
     let input: URL
     let options: ExtractionOptions
-    let filter: PathFilter
+    private(set) var filter: PathFilter
     let tools: [String: ExternalTool]
     let workDirectory: URL
     private let ownsWorkDirectory: Bool
@@ -209,7 +209,9 @@ nonisolated final class Crawl: @unchecked Sendable {
         let root = makeNode(parent: nil, step: Step(.file, input.lastPathComponent),
                             content: isDirectory.boolValue ? .hostDirectory(input) : .hostFile(input), containerDepth: 0)
         queue.append(root)
-        if isDirectory.boolValue { BundleHints.collect(at: input, into: self) }
+        if isDirectory.boolValue, let wrappIcon = BundleHints.collect(at: input, into: self) {
+            filter = filter.forWrapp(keeping: wrappIcon.map { ["contents/resources/" + $0] } ?? [])
+        }
 
         while let node = queue.popLast() {
             try Task.checkCancellation()
@@ -510,11 +512,15 @@ nonisolated enum NameHints {
 /// What a folder that is a Mac app bundle (or a wrapp) says about itself:
 /// its icon, and for a wrapp the program it launches.
 nonisolated enum BundleHints {
-    static func collect(at root: URL, into crawl: Crawl) {
+    /// For a wrapp, its icon's file name (nil inside if it has none);
+    /// nil for anything else.
+    static func collect(at root: URL, into crawl: Crawl) -> String?? {
         let rootName = root.lastPathComponent.lowercased()
         let contents = root.appendingPathComponent("Contents")
         // A wrapp: the program its launch names, on the prefix's C: drive.
         let settingsURL = contents.appendingPathComponent("Resources/AppSettings.plist")
+        let isWrapp = FileManager.default.fileExists(atPath: settingsURL.path)
+        var iconFile: String?
         if let data = try? Data(contentsOf: settingsURL),
            let settings = try? PropertyListDecoder().decode(WrappSettings.self, from: data) {
             let launch = settings.launch
@@ -533,9 +539,10 @@ nonisolated enum BundleHints {
         if let info = NSDictionary(contentsOf: contents.appendingPathComponent("Info.plist")),
            var icon = info["CFBundleIconFile"] as? String {
             if (icon as NSString).pathExtension.isEmpty { icon += ".icns" }
-            let isWrapp = FileManager.default.fileExists(atPath: settingsURL.path)
+            iconFile = icon
             crawl.addHint(TargetHint(path: "/contents/resources/" + icon, role: isWrapp ? .wrappIcon : .appBundleIcon,
                                      relativeTo: [rootName], reason: "the app's icon"))
         }
+        return isWrapp ? .some(iconFile) : nil
     }
 }

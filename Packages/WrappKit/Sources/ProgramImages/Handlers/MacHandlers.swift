@@ -18,25 +18,27 @@ nonisolated enum MacResourceHandler {
         let isApplication = mac.type == "APPL" || mac.type == "appe" || mac.type == "APPC"
         var done: Set<Int> = []
 
-        func family(_ id: Int, roles: Set<ImageRole>, label: String) {
+        // The bundle's family is the file's own icon (index 0, as a
+        // program's first icon group); others come after.
+        func family(_ id: Int, roles: Set<ImageRole>, label: String, isOwn: Bool = false) {
             done.insert(id)
             for decoded in MacIconDecoder.family(id, in: fork) {
                 crawl.addImage(decoded.image, node: node, steps: [Step(.fork, label), Step(.resource, decoded.label)],
                                roles: roles.union([.icon]), familyKey: "\(node.id)/family \(id)",
-                               iconSource: IconSource(path: node.matchPath, groupIndex: 0, groupID: id))
+                               iconSource: IconSource(path: node.matchPath, groupIndex: isOwn ? 0 : 1, groupID: id))
             }
         }
 
         // The application's own icon, through its bundle.
         if let id = fork.bundleIconID(forFileType: "APPL") {
-            family(id, roles: isApplication ? [.macAppIcon, .firstIconGroup] : [.macAppIcon], label: "resource fork")
+            family(id, roles: isApplication ? [.macAppIcon, .firstIconGroup] : [.macAppIcon], label: "resource fork", isOwn: true)
         }
         // A custom icon: a volume's, if this is the root's Icon\r.
         if fork.resource("ICN#", id: ResourceFork.customIconID) != nil || fork.resource("icns", id: ResourceFork.customIconID) != nil
             || fork.resource("icl8", id: ResourceFork.customIconID) != nil {
             var roles: Set<ImageRole> = [.customIcon]
             if fileName == "Icon\r" && mac.isVolumeRoot { roles.insert(.volumeIcon) }
-            family(ResourceFork.customIconID, roles: roles, label: "resource fork")
+            family(ResourceFork.customIconID, roles: roles, label: "resource fork", isOwn: true)
         }
         // Every other icon, each ID a family.
         let ids = Set(fork.resources.filter { MacIconDecoder.iconTypes.contains($0.type) }.map(\.id)).subtracting(done)

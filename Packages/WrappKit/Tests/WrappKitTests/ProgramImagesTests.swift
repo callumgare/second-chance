@@ -314,6 +314,20 @@ struct ProgramImageCrawlTests {
         #expect(filter.verdict(for: "windows/system32/a.dll") == .demote("system"))
     }
 
+    @Test("In a wrapp, only its program and its own icon are read")
+    func wrappFilter() throws {
+        let wrapp = try PathFilter().forWrapp(keeping: ["contents/resources/AppIcon.icns",
+                                                        "contents/resources/GenericWrappIcon.icns"])
+        #expect(wrapp.verdict(for: "Contents/Resources/AppIcon.icns") == .read)
+        #expect(wrapp.verdict(for: "Contents/Resources/GenericWrappIcon.icns") != .read)
+        #expect(wrapp.verdict(for: "Contents/Resources/gui-icons.dat") != .read)
+        #expect(wrapp.verdict(for: "Contents/Resources/scummvm/") != .read)
+        #expect(wrapp.verdict(for: "Contents/Resources/") == .read)
+        #expect(wrapp.verdict(for: "Contents/SharedSupport/game/data.pak") == .read)
+        // Not a wrapp: a Mac app's resources are its own.
+        #expect(try PathFilter().verdict(for: "Contents/Resources/gui-icons.dat") == .read)
+    }
+
     @Test("The shipped filter table loads")
     func shippedTable() throws {
         let filter = try PathFilter()

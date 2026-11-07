@@ -86,6 +86,13 @@ nonisolated struct DiscHandler: NodeHandler {
         crawl.announce(volumeNode, kind: "hfs-volume")
         var children: [Node] = []
         let entries = volume.entries(limit: crawl.options.maxNodes)
+        // An alias to an application at the volume's root is how a disc
+        // shows which program to open: the application of that name is the
+        // main one.
+        for entry in entries where entry.path.count == 1 && entry.type == "adrp" && entry.finderFlags & 0x8000 != 0 {
+            crawl.addHint(TargetHint(path: "/" + entry.name.replacingOccurrences(of: "/", with: ":"), role: .mainProgramIcon,
+                                     reason: "the application the disc's alias opens"))
+        }
         for entry in entries where !entry.isDirectory {
             let path = entry.path.map { $0.replacingOccurrences(of: "/", with: ":") }.joined(separator: "/")
             let content: Node.Content

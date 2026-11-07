@@ -20,6 +20,10 @@ nonisolated public struct PathFilter: Sendable {
         let keep: [String]
         let skip: [Rule]
         let demote: [Rule]
+        /// Only for a wrapp: everything of the wrapp's own (its engines'
+        /// data, ScummVM's icons of every other game) is outside
+        /// Contents/SharedSupport.
+        let wrapp: [Rule]?
     }
 
     public enum Verdict: Equatable, Sendable {
@@ -31,6 +35,7 @@ nonisolated public struct PathFilter: Sendable {
     private let keep: [String]
     private let skip: [Rule]
     private let demote: [Rule]
+    private let wrapp: [Rule]
 
     /// The table shipped with the package, or the one at `url`.
     public init(contentsOf url: URL? = nil) throws {
@@ -41,12 +46,21 @@ nonisolated public struct PathFilter: Sendable {
         keep = table.keep.map { $0.lowercased() }
         skip = table.skip
         demote = table.demote
+        wrapp = table.wrapp ?? []
     }
 
-    public init(keep: [String] = [], skip: [Rule] = [], demote: [Rule] = []) {
+    public init(keep: [String] = [], skip: [Rule] = [], demote: [Rule] = [], wrapp: [Rule] = []) {
         self.keep = keep
         self.skip = skip
         self.demote = demote
+        self.wrapp = wrapp
+    }
+
+    /// The filter for a wrapp: its `wrapp` rules too, keeping `paths` (its
+    /// icon) unless the other rules skip them (Second Chance's own icons).
+    public func forWrapp(keeping paths: [String]) -> PathFilter {
+        let kept = paths.filter { if case .skip = verdict(for: $0) { false } else { true } }
+        return PathFilter(keep: keep + kept.map { $0.lowercased() }, skip: skip + wrapp, demote: demote)
     }
 
     /// The shipped table, in the package's resource bundle: found where

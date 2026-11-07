@@ -1,5 +1,5 @@
 {
-  "comment": "Paths the crawl leaves alone (skip) or reads but ranks down (demote). Patterns are matched, lower-cased, against a file's path inside the container it was found in: ** is any number of folders, * anything within a name, ? one character. A pattern without a / is matched against the name alone. keep wins over the rest. docs/program-images.md#the-filter-table",
+  "comment": "Paths the crawl leaves alone (skip) or reads but ranks down (demote). Patterns are matched, lower-cased, against a file's path inside the container it was found in: ** is any number of folders, * anything within a name, ? one character. A pattern without a / is matched against the name alone. keep wins over the rest. wrapp rules apply only when the input is a wrapp, whose program is all in Contents/SharedSupport; its icon (CFBundleIconFile) is kept. docs/program-images.md#the-filter-table",
   "keep": [
     "autorun.inf",
     "*.lnk"
@@ -59,6 +59,10 @@
     { "pattern": "**/directx/**", "reason": "DirectX's installer" },
     { "pattern": "dxsetup.exe", "reason": "DirectX's installer" },
     { "pattern": "dsetup*.dll", "reason": "DirectX's installer" }
+  ],
+  "wrapp": [
+    { "pattern": "contents/resources/?*", "reason": "the wrapp's own resources, not the program's" },
+    { "pattern": "contents/resources/*/**", "reason": "the wrapp's own resources, not the program's" }
   ],
   "demote": [
     { "pattern": "msvcr*.dll", "reason": "runtime library" },
