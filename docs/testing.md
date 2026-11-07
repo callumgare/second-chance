@@ -410,12 +410,15 @@ the Mac it's typed on, which only coordinates:
    download, goes to a Mac that has its installers, or else to one this Mac's
    own will be copied to, as every `--on` sync sends them. A game no Mac can
    run is a `no Mac` row, never dropped silently. Steam, Big Fish and download
-   games need no installers. Every game tested from Steam or owned Big Fish
-   goes to one shard, the one the first of them went to (`Game.signsIn`):
-   each signs in to one shared account, which a run takes a game at a time,
-   and two sessions signing in to it at once would sign each other out. That
-   shard's session needs the Steam sign-in and `.env`, which `--on` doesn't
-   send.
+   games need no installers. A game's Steam and owned Big Fish tests are
+   handed out apart from its other sources' (`ShardPlan.split`), and all of
+   them go to one shard, the one the first went to (`Game.signsIn`): each
+   signs in to one shared account, which a run takes a game at a time, and
+   two sessions signing in to it at once would sign each other out. The
+   rest balance around them. That shard's session needs the Steam sign-in
+   and `.env`, which `--on` doesn't send. A shard handed more than one set
+   of sources makes a run for each, one after another (`ShardPlan.runs`),
+   each with its own results file.
 3. **Each shard is today's run**,
    `sc --on <user>@<host>:<path> test integration <its games>`, with the
    options given here (`--source`, `--refresh-wrapp`, `--build-concurrency`,

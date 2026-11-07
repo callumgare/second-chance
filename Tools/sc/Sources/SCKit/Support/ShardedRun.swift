@@ -40,6 +40,32 @@ enum ShardPlan {
         /// account), which a run takes a game at a time; every such game
         /// goes to one shard, so two sessions never sign in to it at once.
         var signsIn = false
+        /// The sources it's tested from in its shard. A game's sources that
+        /// sign in are a `Game` of their own (`split`), so only they are
+        /// held to one shard and its others go wherever there's room.
+        var sources: [IntegrationSource] = []
+    }
+
+    /// `sources` as the parts that can go to different shards: those that
+    /// sign in to an account, and the rest; either left out when empty.
+    static func split(_ sources: [IntegrationSource]) -> [[IntegrationSource]] {
+        let signing = sources.filter { signsIn([$0]) }
+        let rest = sources.filter { !signsIn([$0]) }
+        return [rest, signing].filter { !$0.isEmpty }
+    }
+
+    /// A shard's games as the runs it makes, one after another: one for each
+    /// set of sources, each with its games in the order they were handed out.
+    static func runs(_ shard: [Game]) -> [(sources: [IntegrationSource], games: [Game])] {
+        var runs: [(sources: [IntegrationSource], games: [Game])] = []
+        for game in shard {
+            if let index = runs.firstIndex(where: { $0.sources == game.sources }) {
+                runs[index].games.append(game)
+            } else {
+                runs.append((game.sources, [game]))
+            }
+        }
+        return runs
     }
 
     /// Somewhere a shard runs: one test session, and the installers its Mac
@@ -242,6 +268,19 @@ struct ShardCoordinator: Sendable {
     /// and no `--build-concurrency` was given, one build at a time, as each
     /// shard's own default (`IntegrationOptions.defaultBuildConcurrency`)
     /// counts the whole Mac's cores.
+    /// `options` with its `--source` naming `sources`: a shard's run tests
+    /// only the part of each game's sources it was handed (`ShardPlan.split`).
+    static func withSources(_ sources: [IntegrationSource], _ options: [String]) -> [String] {
+        var options = options
+        let value = sources.map(\.rawValue).joined(separator: ",")
+        if let index = options.firstIndex(of: "--source"), options.indices.contains(index + 1) {
+            options[index + 1] = value
+        } else {
+            options += ["--source", value]
+        }
+        return options
+    }
+
     static func shardOptions(_ forwarded: [String], shardsOnMac: Int, buildConcurrencyGiven: Bool) -> [String] {
         shardsOnMac > 1 && !buildConcurrencyGiven ? forwarded + ["--build-concurrency", "1"] : forwarded
     }
@@ -525,21 +564,27 @@ struct ShardCoordinator: Sendable {
         guard !order.isEmpty else {
             throw SCError("None of those games can be built from \(sources.map(\.rawValue).joined(separator: " or ")).")
         }
-        let toAssign = order.compactMap { slug -> ShardPlan.Game? in
-            guard let entry = planned[slug] else { return nil }
-            let measured = entry.sources.compactMap { sizes["\($0.rawValue)/\(slug)"] }.reduce(0, +)
-            // Unmeasured: a disc's worth for each disc, so bigger games still go first.
-            let weight = measured > 0 ? measured : Int64(max(1, entry.game.diskCount)) * 700_000_000
-            return ShardPlan.Game(slug: slug, weight: weight, needs: ShardPlan.needs(slug, sources: entry.sources), signsIn: ShardPlan.signsIn(entry.sources))
+        let toAssign = order.flatMap { slug -> [ShardPlan.Game] in
+            guard let entry = planned[slug] else { return [] }
+            return ShardPlan.split(entry.sources).map { part in
+                let measured = part.compactMap { sizes["\($0.rawValue)/\(slug)"] }.reduce(0, +)
+                // Unmeasured: a disc's worth for each disc, so bigger games still go first.
+                let weight = measured > 0 ? measured : Int64(max(1, entry.game.diskCount)) * 700_000_000
+                return ShardPlan.Game(slug: slug, weight: weight, needs: ShardPlan.needs(slug, sources: part),
+                                      signsIn: ShardPlan.signsIn(part), sources: part)
+            }
         }
         let slots = macs.map { ShardPlan.Slot(name: $0.name, has: $0.installers) }
         let assignment = ShardPlan.assign(toAssign, to: slots, sentFromHere: local)
         let rowsFor: (ShardPlan.Game) -> [GameBoard.Row] = { game in
             guard let entry = planned[game.slug] else { return [] }
-            return entry.sources.map { GameBoard.Row(source: $0.rawValue, slug: game.slug, engine: entry.game.engine, status: "pending") }
+            return game.sources.map { GameBoard.Row(source: $0.rawValue, slug: game.slug, engine: entry.game.engine, status: "pending") }
         }
         for (mac, shard) in zip(macs, assignment.shards) where !shard.isEmpty {
-            ui.detail("\(mac.label(mac.user ?? "?")): \(shard.map(\.slug).joined(separator: ", "))")
+            for run in ShardPlan.runs(shard) {
+                let from = run.sources.map(\.rawValue).joined(separator: ",")
+                ui.detail("\(mac.label(mac.user ?? "?")) (\(from)): \(run.games.map(\.slug).joined(separator: ", "))")
+            }
         }
         for (name, count) in Dictionary(grouping: macs, by: \.name).mapValues(\.count).sorted(by: { $0.key < $1.key }) where count > 1 {
             ui.detail("\(name) runs \(count) shards at once, building a game at a time each\(buildConcurrencyGiven ? " (or as --build-concurrency says)" : "").")
@@ -548,16 +593,23 @@ struct ShardCoordinator: Sendable {
             ui.warning("No Mac has the installers for \(assignment.unrunnable.map(\.slug).joined(separator: ", ")), so they won't be tested.")
         }
 
-        let outcomes = try await withThrowingTaskGroup(of: ShardOutcome.self) { group in
+        let outcomes = try await withThrowingTaskGroup(of: [ShardOutcome].self) { group in
             for (mac, shard) in zip(macs, assignment.shards) where !shard.isEmpty {
                 guard let user = mac.user else { continue }
-                let slugs = shard.map(\.slug), rows = shard.flatMap(rowsFor)
+                let runs = ShardPlan.runs(shard).map { (games: $0.games.map(\.slug), sources: $0.sources, rows: $0.games.flatMap(rowsFor)) }
                 group.addTask {
-                    try await runShard(on: mac, user: user, games: slugs, planned: rows, purpose: purpose, stamp: stamp)
+                    // A shard's runs share its session, so one at a time.
+                    var outcomes: [ShardOutcome] = []
+                    for (index, run) in runs.enumerated() {
+                        outcomes.append(try await runShard(on: mac, user: user, games: run.games, sources: run.sources,
+                                                           planned: run.rows, purpose: purpose,
+                                                           stamp: stamp, part: runs.count > 1 ? index + 1 : nil))
+                    }
+                    return outcomes
                 }
             }
             var outcomes: [ShardOutcome] = []
-            for try await outcome in group { outcomes.append(outcome) }
+            for try await outcome in group { outcomes += outcome }
             return outcomes
         }
         try Task.checkCancellation()
@@ -580,15 +632,17 @@ struct ShardCoordinator: Sendable {
         return arguments
     }
 
-    private func runShard(on mac: Mac, user: String, games: [String], planned: [GameBoard.Row],
-                          purpose: String, stamp: String) async throws -> ShardOutcome {
-        let resultsFile = "test-results/\(stamp)-shard-\(mac.name)-\(user).json"
+    private func runShard(on mac: Mac, user: String, games: [String], sources: [IntegrationSource], planned: [GameBoard.Row],
+                          purpose: String, stamp: String, part: Int?) async throws -> ShardOutcome {
+        let suffix = part.map { "-\($0)" } ?? ""
+        let resultsFile = "test-results/\(stamp)-shard-\(mac.name)-\(user)\(suffix).json"
         let label = mac.label(user)
-        let options = Self.shardOptions(forwarded, shardsOnMac: mac.shardsOnMac, buildConcurrencyGiven: buildConcurrencyGiven)
+        let options = Self.withSources(sources, Self.shardOptions(forwarded, shardsOnMac: mac.shardsOnMac,
+                                                                  buildConcurrencyGiven: buildConcurrencyGiven))
         let arguments = ["--on", mac.sessionTarget(user), "test", "integration"] + games + options
             + ["--results-json", resultsFile, "--open-report", "never", "--purpose", purpose]
         ui.line(ui.format("\(.primary("▸ \(label): sc test integration \(games.joined(separator: " "))"))"))
-        let (status, lines) = await runSC(arguments, log: "shard-\(mac.name)-\(user)") { line in
+        let (status, lines) = await runSC(arguments, log: "shard-\(mac.name)-\(user)\(suffix)") { line in
             // The run's own story, game by game; the rest is in the log.
             if line.hasPrefix("▸ ") { ui.line("  \(label) \(line)") }
         }
