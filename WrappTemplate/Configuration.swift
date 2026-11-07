@@ -126,6 +126,8 @@ func readPlist(at path: URL, key: String) -> String? {
 func getWinePrefix(appPath: URL, bundleId: String) -> URL {
     let originalPrefixPath = WrappLayout(app: appPath).prefix
     let fileManager = FileManager.default
+    // No Wine in this app (a ScummVM, DOSBox or Basilisk II game): nothing to set up.
+    guard fileManager.fileExists(atPath: originalPrefixPath.path) else { return originalPrefixPath }
 
     // Test if prefix is writable
     let testFile = originalPrefixPath.appendingPathComponent(".write_test")

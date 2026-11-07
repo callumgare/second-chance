@@ -90,7 +90,7 @@ class GameMonitor {
         case .wineProgram, .wineProgramStartedElsewhere:
             await waitForWineGameToStop(winePid: gamePid, process: process)
         case .ownProcess:
-            await waitForScummVMGameToStop(gamePid: gamePid, process: process)
+            await waitForOwnProcessToStop(gamePid: gamePid, process: process)
         }
     }
 
@@ -185,7 +185,7 @@ class GameMonitor {
 
     /// Wait for ScummVM game to start (ScummVM starts immediately)
     private func waitForScummVMGameToStart(gamePid: Int32) -> Int32? {
-        logger.notice("[Game Monitor] ScummVM game started with PID \(gamePid)")
+        logger.notice("[Game Monitor] The game's process started with PID \(gamePid)")
         return gamePid
     }
 
@@ -333,9 +333,9 @@ class GameMonitor {
         kill(pid, 0) == 0 || errno == EPERM
     }
 
-    /// Wait for ScummVM game to stop
-    private func waitForScummVMGameToStop(gamePid: Int32, process: Process?) async {
-        logger.notice("[Process Monitor] Waiting for ScummVM game to stop (PID \(gamePid))")
+    /// Wait for the game's own process (ScummVM, DOSBox, Basilisk II) to stop
+    private func waitForOwnProcessToStop(gamePid: Int32, process: Process?) async {
+        logger.notice("[Process Monitor] Waiting for the game's process to stop (PID \(gamePid))")
 
         // If we have the process object, use it directly for better reliability
         if let process = process {
@@ -347,13 +347,13 @@ class GameMonitor {
             await Self.waitUntilReaped(process)
             // Capture how it ended while we safely have access to the process object
             self.setExit(from: process)
-            logger.notice("[Process Monitor] ScummVM process \(gamePid) has ended")
+            logger.notice("[Process Monitor] The game's process \(gamePid) has ended")
         } else {
             // No Process to wait on: watch the pid exit instead.
             let (ended, exitSource) = Self.watchExit(of: gamePid)
             while isProcessRunning(pid: gamePid), await !ended.wait(timeout: .seconds(60)) {}
             exitSource.cancel()
-            logger.notice("[Process Monitor] ScummVM process \(gamePid) has terminated")
+            logger.notice("[Process Monitor] The game's process \(gamePid) has terminated")
             self.setExitCode(nil)  // Process is gone; its status is unknown
         }
 
