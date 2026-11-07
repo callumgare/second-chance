@@ -11,8 +11,9 @@ import NIOCore
 //                 [--v1 <games dir>] [--no-refresh]
 //
 // Serves Icon Lab's API (Packages/IconLab/docs/api.md) on 127.0.0.1, the page from --web, and the API's events on the
-// /api/events WebSocket. --env defaults to the checkout's .env; --web to the checkout's built page; the tools to the
-// checkout's icon-extract build and Xcode's ictool. --no-refresh leaves the catalogue's local copies as they are.
+// /api/events WebSocket. --env defaults to the checkout's .env; --web to the page built into IconLabAPI's resources
+// (`sc icon-lab build`); the tools to the checkout's icon-extract build and Xcode's ictool. --no-refresh leaves the
+// catalogue's local copies as they are. `sc icon-lab serve` runs this with Vite's dev server in front.
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.IconLab.Server")
 
@@ -22,9 +23,9 @@ func option(_ name: String) -> String? {
     return args[i + 1]
 }
 
-/// The checkout this was built from: Tools/icon-lab-server/Sources/icon-lab-server/main.swift → the checkout.
+/// The checkout this was built from: Tools/icon-lab/server/Sources/icon-lab-server/main.swift → the checkout.
 let checkout = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
 guard let data = option("--data") else {
     logger.critical("Say where Icon Lab's data is: --data <dir>")
@@ -33,7 +34,7 @@ guard let data = option("--data") else {
 let port = Int(option("--port") ?? "") ?? 8767
 let dataDir = URL(fileURLWithPath: data)
 let envFile = URL(fileURLWithPath: option("--env") ?? checkout.appendingPathComponent(".env").path)
-let webDir = URL(fileURLWithPath: option("--web") ?? checkout.appendingPathComponent(".local/tools/icon-lab/web/dist").path)
+let webDir = option("--web").map { URL(fileURLWithPath: $0) } ?? IconLabAPI.bundledWebRoot
 var tools = LabTools.inCheckout(checkout)
 if let p = option("--icon-extract") { tools.iconExtract = p }
 if let p = option("--ictool") { tools.ictool = p }

@@ -1,0 +1,33 @@
+{
+  "name": "icon-lab-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@tanstack/react-virtual": "^3.14.26",
+    "konva": "^9.3.22",
+    "react": "^18.3.1",
+    "react-colorful": "^5.8.1",
+    "react-dom": "^18.3.1",
+    "react-konva": "^18.2.16",
+    "zustand": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "playwright": "^1.65.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.5"
+  }
+}

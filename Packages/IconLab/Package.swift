@@ -4,7 +4,9 @@
 // engine (catalogues and sources, gathering, analysis, parts, treatments,
 // rendering, documents, jobs); `IconLabAPI` is its API (docs/api.md) with no
 // web server in it, so the app can answer the page's requests itself and a
-// dev server (Tools/icon-lab-server) can serve the same API over HTTP.
+// dev server (Tools/icon-lab/server) can serve the same API over HTTP. The
+// page (Tools/icon-lab/web) is built into IconLabAPI's resources by
+// `sc icon-lab build`, so a Mac building the app needs no Node.
 // Hummingbird and SwiftNIO stay out of this package: the app must never
 // fetch them. README.md has where things are.
 
@@ -50,6 +52,9 @@ let package = Package(
                 "IconLabKit",
                 .product(name: "Logging", package: "swift-log"),
             ],
+            // The built page; source.sha256 is the hash of the source it was built from (WebBuildTests).
+            exclude: ["Resources/source.sha256"],
+            resources: [.copy("Resources/web")],
             swiftSettings: swiftSettings
         ),
         .testTarget(

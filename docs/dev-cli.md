@@ -32,6 +32,8 @@ nearest command's help.
 ./sc release --build-only              # Build and zip the next version, changing nothing
 ./sc lint                              # SwiftLint, markdownlint and the Wrappfiles' format, as CI runs them
 ./sc setup                             # Once per clone: tools, git hooks, completions, Wrappfile highlighting
+./sc icon-lab build                    # Build Icon Lab's page into IconLabAPI's resources
+./sc icon-lab serve                    # Icon Lab's dev server and its page, live-reloading
 ./sc worktree add <name>               # A worktree in .claude/worktrees, sharing .local and cloning caches
 ./sc worktree remove <name>            # Remove one (and its build output) once it's merged
 ./sc clean build                       # Delete every checkout's DerivedData, worktrees' and Xcode's too, leaving any in use
@@ -410,6 +412,30 @@ Every command but `fmt` takes `--modules <dir>`, the modules folder, by
 default `./Modules`. A failure prints `error:` and its reason and exits
 non-zero. Its tests (`Tests/WrappBuilderToolTests/`) run with `swift test`,
 and in `sc test unit`.
+
+## Icon Lab
+
+Icon Lab designs the icons the program bundles ship
+([Packages/IconLab/README.md](../Packages/IconLab/README.md)). Its page, a
+React app, is in `Tools/icon-lab/web`; its engine and API in
+`Packages/IconLab`.
+
+- `sc icon-lab build` installs the page's packages when it has none (`npm
+  ci`), type-checks and builds it with Vite into
+  `Packages/IconLab/Sources/IconLabAPI/Resources/web`, and writes the hash of
+  its source beside it (`source.sha256`). The built page is checked in, so a
+  Mac building the app needs no Node. `IconLabAPI` serves it when its host
+  names no other page, and a test in the IconLab package
+  (`WebBuildTests`) fails while it's stale: after changing anything in
+  `Tools/icon-lab/web`, run this and commit what it wrote.
+- `sc icon-lab serve [--data <dir>] [--port <n>] [--web-port <n>]` builds and
+  runs the dev server (`Tools/icon-lab/server`: the API over HTTP on
+  127.0.0.1, port 8767 by default, its events on the `/api/events`
+  WebSocket), and Vite's dev server for the page in front of it (5173), its
+  `/api` proxied to the dev server, so a change to the page shows at once.
+  Open the address Vite prints. Without `--data`, Icon Lab's data is a
+  scratch folder, `.local/icon-lab-dev/data`: copy a program's folder into
+  its `programs/` to work on one. Ctrl-C stops both servers.
 
 ## Worktrees
 

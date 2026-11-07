@@ -5,7 +5,7 @@ import Logging
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.IconLab.API")
 
 /// Icon Lab's API (docs/api.md), with no web server in it: a host hands it each request and sends back the answer,
-/// and passes on its events. The app's URL scheme handler is one host, `Tools/icon-lab-server` another.
+/// and passes on its events. The app's URL scheme handler is one host, `Tools/icon-lab/server` another.
 ///
 /// Requests are answered off the main actor (`handle` is `@concurrent`), so a host on the main thread stays
 /// responsive however long one takes.
@@ -14,18 +14,43 @@ nonisolated public final class IconLabAPI: Sendable {
     public let catalog: Catalog
     /// The page's files, served for any path that isn't the API's; nil serves none.
     public let webRoot: URL?
+
+    /// The page built into this package's resources (`sc icon-lab build`), which a host serves unless it names
+    /// another; nil when the build left none. Found where SwiftPM's `Bundle.module` looks (the app's resources, or
+    /// beside the program), without its accessor, which is the main actor's.
+    public static var bundledWebRoot: URL? {
+        let bundleName = "IconLab_IconLabAPI.bundle"
+        let places = [Bundle.main.resourceURL, Bundle.main.bundleURL, Bundle.main.executableURL?.deletingLastPathComponent()]
+        for place in places.compactMap({ $0 }) {
+            for candidate in [place.appendingPathComponent(bundleName + "/web"),
+                              place.appendingPathComponent(bundleName + "/Contents/Resources/web")]
+            where FileManager.default.fileExists(atPath: candidate.appendingPathComponent("index.html").path) {
+                return candidate
+            }
+        }
+        // Beside the binary this code is in, or a few folders up from it (`swift test`: beside the .xctest bundle).
+        var info = Dl_info()
+        guard dladdr(#dsohandle, &info) != 0, let path = info.dli_fname else { return nil }
+        var folder = URL(fileURLWithPath: String(cString: path)).deletingLastPathComponent()
+        for _ in 0..<5 {
+            let candidate = folder.appendingPathComponent(bundleName + "/web")
+            if FileManager.default.fileExists(atPath: candidate.appendingPathComponent("index.html").path) { return candidate }
+            folder.deleteLastPathComponent()
+        }
+        return nil
+    }
     let router: Router
 
     /// - Parameters:
     ///   - dataDir: where Icon Lab keeps everything: programs, caches, catalogue copies, models.
     ///   - env: keys and settings (`Env(file:)` reads a `.env` the host names).
-    ///   - webRoot: the built page, served at `/`.
+    ///   - webRoot: the built page, served at `/`; by default the one in this package's resources.
     ///   - tools: the programs and places Icon Lab uses from outside (`LabTools`).
-    public convenience init(dataDir: URL, env: Env = Env(file: nil), webRoot: URL?, tools: LabTools = LabTools()) {
+    public convenience init(dataDir: URL, env: Env = Env(file: nil), webRoot: URL? = IconLabAPI.bundledWebRoot, tools: LabTools = LabTools()) {
         self.init(lab: Lab(dataDir: dataDir, env: env, tools: tools), webRoot: webRoot)
     }
 
-    public init(lab: Lab, webRoot: URL?) {
+    public init(lab: Lab, webRoot: URL? = IconLabAPI.bundledWebRoot) {
         self.lab = lab
         self.webRoot = webRoot
         let catalog = Catalog(lab: lab)

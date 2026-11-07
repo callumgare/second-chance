@@ -3,8 +3,8 @@
 // A dev host for Icon Lab's API (Packages/IconLab): serves it over HTTP on
 // 127.0.0.1, with the page's files and the `/api/events` WebSocket, for working
 // on the page in a browser. A package of its own so Hummingbird and SwiftNIO
-// stay out of the app's package graph. Temporary until `sc icon-lab serve`
-// (the Icon Lab plan's phase 2).
+// stay out of the app's package graph. `sc icon-lab serve` runs it, with
+// Vite's dev server for the page (Tools/icon-lab/web) in front.
 
 import PackageDescription
 
@@ -25,7 +25,7 @@ let package = Package(
         .executable(name: "icon-lab-server", targets: ["icon-lab-server"]),
     ],
     dependencies: [
-        .package(path: "../../Packages/IconLab"),
+        .package(path: "../../../Packages/IconLab"),
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.5.0"),
         .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.2.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),

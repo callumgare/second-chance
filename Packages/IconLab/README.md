@@ -4,7 +4,8 @@ Icon Lab designs the icons the program bundles ship: it finds pictures of a
 program (catalogues, its own files), cuts out their parts, suggests designs
 and renders them as Icon Composer `.icon`s. It's a tool for us, not something
 a player sees. This package is its engine and API; the page (a React app) and
-the window that hosts it come later.
+the window that hosts it come later; the page's source is in
+`Tools/icon-lab/web`.
 
 Where things are:
 
@@ -25,13 +26,44 @@ Where things are:
   read, by default the checkout's `.local/tools/icon-lab/data`.
 - `docs/api.md`: the API, the contract the page is written against.
   `docs/document.md`: the document model.
-- `Tools/icon-lab-server/` (at the repo root): a dev host that serves the API
-  over HTTP on 127.0.0.1 with the `/api/events` WebSocket, for working on the
-  page in a browser: `swift run --package-path Tools/icon-lab-server
-  icon-lab-server --data <dir>` (`--port`, `--env`, `--web`,
-  `--icon-extract`, `--ictool`, `--v1`, `--no-refresh`; its `main.swift` says
-  what each does). Hummingbird and SwiftNIO live only there, so the app never
-  fetches them.
+- `Sources/IconLabAPI/Resources/web/`: the page, built from
+  `Tools/icon-lab/web` by `sc icon-lab build`, and served by `IconLabAPI`
+  when its host names no other web root. `source.sha256` beside it is the hash
+  of the source it was built from; `WebBuildTests` fails while it's stale.
+- `Tools/icon-lab/` (at the repo root): the page's source (`web/`) and a dev
+  host (`server/`) that serves the API over HTTP on 127.0.0.1 with the
+  `/api/events` WebSocket, for working on the page in a browser.
+  `sc icon-lab serve` runs it with Vite's live-reloading dev server in front
+  ([docs/dev-cli.md](../../docs/dev-cli.md#icon-lab)); its `main.swift` says
+  what each of its options does. Hummingbird and SwiftNIO live only there, so
+  the app never fetches them.
+
+## The page's host
+
+The page reaches its host only through `src/host.ts`, so the same page runs in
+the dev host and in Second Chance's Icon Lab window.
+
+- **The API** is at `/api` on the page's own origin in both: the dev host
+  serves it over HTTP; the app's URL scheme handler answers it by calling
+  `IconLabAPI.handle(_:)`.
+- **Which host**: the page is in the app when
+  `window.webkit.messageHandlers.iconLab` exists, or when its URL has
+  `?host=app`.
+- **Events** (`IconLabAPI.events()`, each a JSON object with a `type`):
+  - In the dev host, the page listens on the `/api/events` WebSocket.
+  - In the app there's no WebSocket. The app calls
+    `window.iconLabHost.event(json)` with each event, as a JSON string or an
+    object, once the page has loaded (`host.ts` defines the function as it
+    loads).
+- **Messages to the app**: the page posts these to the `iconLab` script
+  message handler:
+  - `{ "type": "open", "url": "…" }`: open a link in the person's browser.
+    The page sends every link that would open a new tab this way.
+  - `{ "type": "copy", "text": "…" }`: put text on the clipboard, when the web
+    view's `navigator.clipboard` refuses.
+
+  In the dev host, links open with `window.open` and copying uses
+  `navigator.clipboard`.
 
 The rules are the repo's (AGENTS.md): Swift 6 with `MainActor` default
 isolation, so the engine's types are `nonisolated` or actors and nothing heavy

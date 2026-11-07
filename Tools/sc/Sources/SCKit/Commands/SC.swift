@@ -32,6 +32,7 @@ public struct SC: AsyncParsableCommand {
             LeaseCommand.self,
             SessionCommand.self,
             PuppetCommand.self,
+            IconLabCommand.self,
         ]
     )
 

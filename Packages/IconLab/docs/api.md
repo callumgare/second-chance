@@ -2,7 +2,7 @@
 
 The engine (`IconLabKit`) answers this API through `IconLabAPI` (`Packages/IconLab`), which has no web server in
 it: a host hands it each request (`IconLabAPI.handle`) and passes on its events (`IconLabAPI.events()`). The dev
-server (`Tools/icon-lab-server`) is one host: it serves the API, the web UI and `/api/events` on
+server (`Tools/icon-lab/server`) is one host: it serves the API, the web UI and `/api/events` on
 `http://127.0.0.1:8767`. Paths other than the API's are the web UI's files. JSON in and out. Documents are as in
 `document.md`.
 
