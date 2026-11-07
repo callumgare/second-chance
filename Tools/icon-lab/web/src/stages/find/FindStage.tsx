@@ -2,7 +2,7 @@
 // merged into one row per program and re-ranked as they come. Recent programs sit below; the sources panel
 // says what each source is doing.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type ProgramResult, type ProgramSummary, type SearchSnapshot, type SourceInfo } from "../../api";
+import { api, type KnownProgram, type ProgramResult, type ProgramSummary, type SearchSnapshot, type SourceInfo } from "../../api";
 import { go, type Route } from "../../lib/router";
 import { useApp } from "../../state/app";
 import { useSearch } from "../../state/search";
@@ -94,6 +94,7 @@ export function FindStage({ route }: { route: Route }) {
         )}
 
         <div className="scroll results-scroll">
+          <KnownPrograms filter={text} />
           {error && <div className="notice bad">Search failed: {error}</div>}
           {text.trim() && (
             <div className="results" role="listbox" aria-label="Results">
@@ -166,6 +167,47 @@ function KindIcon({ kind }: { kind?: string }) {
         <svg viewBox="0 0 32 32" width="30" height="30"><rect x="3" y="10" width="26" height="14" rx="7" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M10 14v6M7 17h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /><circle cx="21" cy="15.5" r="1.6" fill="currentColor" /><circle cx="24" cy="18.5" r="1.6" fill="currentColor" /></svg>
       )}
     </span>
+  );
+}
+
+/** The programs the host has bundles for (Second Chance's), above the search's results: choosing one opens the
+ *  program kept for its bundle, made the first time. */
+function KnownPrograms({ filter }: { filter: string }) {
+  const [known, setKnown] = useState<KnownProgram[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [all, setAll] = useState(false);
+  useEffect(() => { api.knownPrograms().then(setKnown).catch(() => setKnown([])); }, []);
+  if (!known?.length) return null;
+  const words = filter.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const matching = known.filter((k) => words.every((w) => k.title.toLowerCase().includes(w) || k.id.includes(w)));
+  if (!matching.length) return null;
+  const shown = all || words.length ? matching : matching.slice(0, 12);
+  const open = async (k: KnownProgram) => {
+    setBusy(k.id);
+    try {
+      const { slug } = await api.openKnown(k.id);
+      if (!k.opened) api.gather(slug).catch((e: unknown) => useApp.getState().say("Couldn't start gathering images: " + (e as Error).message, "error"));
+      void useApp.getState().loadPrograms();
+      go(slug, k.opened ? "design" : "gather");
+    } catch (e) {
+      useApp.getState().say((e as Error).message, "error");
+    } finally { setBusy(null); }
+  };
+  return (
+    <div className="recent known">
+      <h2>Second Chance's programs</h2>
+      <div className="recents">
+        {shown.map((k) => (
+          <button key={k.id} className="rec" onClick={() => void open(k)} disabled={busy === k.id} title={k.id}>
+            <span className="rec-ph" />
+            <span className="ellipsis"><b className="ellipsis">{k.title}</b><small>{k.id}{k.opened ? " · opened" : ""}</small></span>
+          </button>
+        ))}
+      </div>
+      {!all && !words.length && matching.length > shown.length && (
+        <button className="linkish" onClick={() => setAll(true)}>Show all {matching.length}</button>
+      )}
+    </div>
   );
 }
 

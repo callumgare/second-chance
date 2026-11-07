@@ -120,7 +120,7 @@ export type SuggestionParams = {
 
 // ---------------------------------------------------------------- programs and media (api.md)
 
-export type ProgramSummary = { slug: string; title: string; year?: number; thumb?: string; media: number; pins: number; updated: string }
+export type ProgramSummary = { slug: string; title: string; year?: number; bundleId?: string; thumb?: string; media: number; pins: number; updated: string }
 
 export type MediaKind = "box-front" | "box-back" | "box-spine" | "disc" | "logo" | "icon" | "title-screen" | "screenshot"
   | "banner" | "manual" | "cutout" | "art" | "other"
@@ -270,6 +270,8 @@ export type RoleKey = "subject" | "fill" | "disc" | "logo" | "icon"
 
 export type Program = {
   slug: string; title: string; year?: number
+  /** The host's bundle it was opened from (`freeware/skifree`). */
+  bundleId?: string
   media: Media[]
   colours: Record<string, string>
   colourOrder?: string[]
@@ -462,4 +464,29 @@ export const api = {
   fs: (path?: string, hidden = false) => req<FSListing>("GET", `/api/fs?${new URLSearchParams({ ...(path ? { path } : {}), ...(hidden ? { hidden: "1" } : {}) })}`),
   scans: (slug: string) => req<{ scan: string; path: string; at?: string }[]>("GET", `/api/programs/${enc(slug)}/scans`),
   extract: (slug: string, path: string) => req<{ scan: string }>("POST", `/api/programs/${enc(slug)}/extract`, { path }),
+  cancelJob: (id: string) => req<{ cancelled: boolean }>("POST", `/api/jobs/${enc(id)}/cancel`),
+
+  // the host's programs and wrapps (none under the mock, or in a host that has none)
+  host: () => orMock("host", () => req<HostInfo>("GET", "/api/host").catch(() => NO_HOST), async () => NO_HOST),
+  knownPrograms: () => orMock("host", () => req<KnownProgram[]>("GET", "/api/known-programs"), async () => []),
+  openKnown: (id: string) => req<{ slug: string }>("POST", "/api/known-programs/open", { id }),
+  wrapps: () => orMock("host", () => req<Wrapp[]>("GET", "/api/wrapps"), async () => []),
+  /** Puts a saved design (`id`) on a wrapp; `anywhere` when the person chose an app outside the built wrapps. */
+  tryIcon: (slug: string, id: string, wrapp: string, anywhere = false) =>
+    req<{ wrapp: string; icns: string }>("POST", `/api/programs/${enc(slug)}/try-icon`, { id, wrapp, anywhere }),
+  saveToBundle: (slug: string, ids: string[]) => req<SavedToBundle>("POST", `/api/programs/${enc(slug)}/save-to-bundle`, { ids }),
+  addIconLines: (slug: string) => req<{ added: string[] }>("POST", `/api/programs/${enc(slug)}/save-to-bundle/lines`),
+};
+
+/** What the host offers (`GET /api/host`). */
+export type HostInfo = { knownPrograms: number; wrapps: boolean; saveToBundle: boolean };
+const NO_HOST: HostInfo = { knownPrograms: 0, wrapps: false, saveToBundle: false };
+/** A program the host has a bundle for. */
+export type KnownProgram = {
+  id: string; title: string; slug: string; year?: number; platforms: string[]; developer?: string; publisher?: string; opened: boolean
+};
+/** A wrapp the host has built. */
+export type Wrapp = { name: string; path: string; bundleIdentifier?: string; modified?: string };
+export type SavedToBundle = {
+  bundle: string; files: string[]; allowPathAdded: boolean; manifestNote?: string; wrappfileLines?: string[]; canAddLines: boolean
 };

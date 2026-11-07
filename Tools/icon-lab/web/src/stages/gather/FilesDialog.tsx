@@ -1,7 +1,8 @@
 // "Add from files": our own path browser (real paths, nothing uploaded) over GET /api/fs, then the scan:
-// POST …/extract, with icon-extract's unpacking drawn as a tree as it streams in.
+// POST …/extract, with the unpacking drawn as a tree as it streams in. The wrapps the host has built (GET /api/wrapps)
+// are listed above the browser, each a one-click scan.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, type FSEntry, type FSListing } from "../../api";
+import { api, type FSEntry, type FSListing, type Wrapp } from "../../api";
 import { useScans } from "../../state/scans";
 import { ScanView } from "./ScanTree";
 
@@ -29,6 +30,8 @@ export function FilesDialog({ slug, scan: initialScan, onClose, onShowImages }: 
   const [scanError, setScanError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [scan, setScan] = useState<string | null>(initialScan);
+  const [wrapps, setWrapps] = useState<Wrapp[]>([]);
+  useEffect(() => { api.wrapps().then(setWrapps).catch(() => setWrapps([])); }, []);
   const colsRef = useRef<HTMLDivElement>(null);
 
   const open = useCallback(async (path: string | undefined, at = 0, select?: string) => {
@@ -102,6 +105,14 @@ export function FilesDialog({ slug, scan: initialScan, onClose, onShowImages }: 
             <span className="seg"><button className={view === "columns" ? "on" : ""} onClick={() => setView("columns")}>Columns</button><button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>List</button></span>
           </div>
         </header>
+        {wrapps.length > 0 && (
+          <div className="places wrapps" aria-label="Built game apps">
+            <span className="faint">Built apps</span>
+            {wrapps.map((w) => (
+              <button key={w.path} className="chip" title={`Scan ${w.path}`} disabled={starting} onClick={() => void startScan(w.path)}>▣ {w.name}</button>
+            ))}
+          </div>
+        )}
         <div className="browser">
           {error && <div className="notice bad">{error}</div>}
           {view === "columns" ? (

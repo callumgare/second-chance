@@ -9,6 +9,7 @@ import { useDesign } from "../../state/design";
 import { StatusSlot, TitleActions } from "../../shell/slots";
 import "./review.css";
 import { copyText } from "../../host";
+import { SaveToBundle, TryOnWrapp, useHost } from "./HostActions";
 
 type Row = { label: string; hint?: string; cell(d: Doc): ReactNode };
 
@@ -20,6 +21,10 @@ export function ReviewStage({ slug }: { slug: string }) {
   const [wall, setWall] = useState<"light" | "dark">("light");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<{ id: string; icon: string; png: string }[] | null>(null);
+  const host = useHost();
+  const bundle = useApp((s) => s.program?.bundleId);
+  const [trying, setTrying] = useState<Doc | null>(null);
+  const [toBundle, setToBundle] = useState(false);
   const pinned = pins.map((id) => docs[id]).filter(Boolean);
   const kept = pinned.filter((d) => keep[d.id] !== false);
 
@@ -68,6 +73,7 @@ export function ReviewStage({ slug }: { slug: string }) {
                       <button className={"btn small" + (on ? " on" : "")} aria-pressed={on} onClick={() => useDesign.getState().set({ keep: { ...keep, [d.id]: !on } })}>{on ? "✓ Keep" : "Keep"}</button>
                       <button className="btn small" onClick={() => { useDesign.getState().openPin(d.id); go(slug, "design"); }}>Edit</button>
                     </div>
+                    {host?.wrapps && <button className="btn small ghost" style={{ marginTop: 4 }} onClick={() => setTrying(d)}>Try on an app…</button>}
                   </th>
                 );
               })}
@@ -104,8 +110,11 @@ export function ReviewStage({ slug }: { slug: string }) {
           </div>
         </div>
       )}
+      {trying && <TryOnWrapp slug={slug} doc={trying} onClose={() => setTrying(null)} />}
+      {toBundle && <SaveToBundle slug={slug} docs={kept} onClose={() => setToBundle(false)} />}
       <TitleActions.Fill>
         <button className="btn" onClick={() => go(slug, "design")}>‹ Back to design</button>
+        {host?.saveToBundle && bundle && <button className="btn" disabled={!kept.length} onClick={() => setToBundle(true)}>Save to bundle…</button>}
         <button className="btn primary" disabled={!kept.length || saving} onClick={save}>{saving ? <><span className="spin" /> Saving…</> : `Save ${kept.length} kept`}</button>
       </TitleActions.Fill>
       <StatusSlot.Fill><span>{kept.length} of {pinned.length} kept</span><span className="faint">Saving writes each kept design's .icon and a 1024 px PNG to data/programs/{slug}/saved/</span></StatusSlot.Fill>
