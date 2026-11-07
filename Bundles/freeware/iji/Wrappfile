@@ -20,6 +20,6 @@ COPY --from=${input.game} . ${const.install-dir}/ # the zip's files: the game, i
 # the synthesiser, but every Wine 11 tried crashes Iji at start (11.6 to
 # 11.21, a stack overflow in its exception handlers) or loads it for minutes
 # (11.0). Once a newer Wine runs Iji, move it there and drop this.
-DO wine.skip-synth-playout
+WINE.PATCH skip-synth-playout
 LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="*.ini;*.sav;*.cfg" \
     --wine.graphics=direct-3d --wine.window=windowed --wine.quit-key=f12:hold=5s "${const.install-dir}/iji.exe"

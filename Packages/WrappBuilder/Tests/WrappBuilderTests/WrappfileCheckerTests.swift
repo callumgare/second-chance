@@ -45,6 +45,9 @@ struct WrappfileCheckerTests {
          "line 10: WINE.KEEP-DISCS takes no --cdrom"),
         ("USE nancy-drew AS nd", "USE nancy-drew", "line 12: DO nd.patch: the stage doesn't USE a module called nd"),
         ("USE wine@10", "USE wine@99", "line 6: USE wine@99: no version of wine is 99"),
+        // A retired function says so, rather than that there's none.
+        ("USE wine@10", "USE wine@10\nDO wine.keep-thread-handles",
+         "line 7: DO wine.keep-thread-handles: the wine module retired its function keep-thread-handles: its module.yaml says what to write instead"),
         ("DO nd.patch --id=x --into=${const.install-dir}", "DO nd.patch --id=x", "line 12: DO nd.patch needs --into"),
         ("DO nd.patch --id=x --into=${const.install-dir}", "DO nd.nothing", "line 12: DO nd.nothing: the nancy-drew module has no function called nothing"),
         ("assets/disc.iss", "assets/missing.iss", "line 11: INSTALLER.RUN assets/missing.iss: the bundle has no assets/missing.iss"),

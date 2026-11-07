@@ -41,5 +41,5 @@ tests:
 
 notes:
   about: "Daniel Remar's 2008 action platformer, in its 1.8 release (2021), freeware. A Game Maker 7 game: Direct3D 8."
-  music: "MP3s played through MCI (Wine's DirectShow and GStreamer), sound effects through Wine's DirectMusic, its synthesiser patched to stop at once (DO wine.skip-synth-playout); the author's optional high-quality soundtrack (ijimusic.zip) isn't included."
+  music: "MP3s played through MCI (Wine's DirectShow and GStreamer), sound effects through Wine's DirectMusic, its synthesiser patched to stop at once (WINE.PATCH skip-synth-playout); the author's optional high-quality soundtrack (ijimusic.zip) isn't included."
   checked: "2026-11-04: the author's URL gives the file with this sha256; the 2025 Wayback capture of remar.se's URL is the same file (CDX digest = its SHA-1)."

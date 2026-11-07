@@ -2117,6 +2117,32 @@
           "11.0_1",
           "11.21"
         ]
+      },
+      {
+        "data" : [
+          "routine-errors.yaml"
+        ],
+        "files" : {
+          "functions/cnc-ddraw" : "fac7493d23092d9c58b67de38c58a790e8dffb13c577bff3d77949b437bdf389",
+          "functions/prefix-settings" : "dd3d44712863174eac250c0f854c0a2bad43aae8dd49727f2ab8176f0b544e59",
+          "module.yaml" : "14ce3bec9266eae6a20b95a449e6a14dd90ddff6c447b32271162f87c1a25073",
+          "routine-errors.schema.json" : "c2e6388125fcef9f21c7a78e331490fe661f9a44e59344e2e6a3f1826f35ad8c",
+          "routine-errors.yaml" : "93aad1e7395db3d36fea175e1b836cb66e36a477edad956fed9b04667b8fa61f",
+          "scenarios/quits-with-keys.yaml" : "14a798eb0da5883d528005810943a52fb5c73284e9fc5b4436d14eb0368286a5",
+          "scenarios/starts-and-quits.yaml" : "2760622fd4f6a61a6cd5840b6c7b2f7eff57e800a76a108b76180bd03376771b",
+          "stages/prefix" : "b96451779b6f83429b13c44d93e59af78ca842578d367b1be2022df821e24776",
+          "stages/update" : "341abda5530a60f01f699ad859beaf61905e37b478b79311dc0b668cf3b786d6"
+        },
+        "functions" : [
+          "functions/cnc-ddraw",
+          "functions/prefix-settings"
+        ],
+        "release" : 30,
+        "versions" : [
+          "10.0_8",
+          "11.0_1",
+          "11.21"
+        ]
       }
     ]
   }

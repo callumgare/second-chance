@@ -612,6 +612,10 @@ public nonisolated struct WrappfileChecker {
                 return
             }
             guard let function = moduleFunction(functionName, of: module) else {
+                if module.manifest.retired?.contains("functions/\(functionName)") == true {
+                    found.errors.append("\(at) \(name): the \(id) module retired its function \(functionName): its module.yaml says what to write instead")
+                    return
+                }
                 found.errors.append("\(at) \(name): the \(id) module has no function called \(functionName)")
                 return
             }

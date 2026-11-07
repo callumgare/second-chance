@@ -28,7 +28,7 @@ EDIT C:/windows/syswow64/ddraw.ini --ini=icytower13.fake_mode=640x480x16
 # macOS 26). To go: Allegro waiting on a handle of its own (it can't be
 # changed in this game), or a Wine that doesn't reuse a closed handle's value
 # that soon; none does yet.
-DO wine.keep-thread-handles
+WINE.PATCH keep-thread-handles
 COPY --from=${input.game} . C:/icy-tower-setup/ # the installer, as it comes
 RUN "C:/icy-tower-setup/icytower13_install.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /NOICONS /DIR=C:\IcyTower
 REMOVE C:/icy-tower-setup

@@ -22,8 +22,10 @@ public nonisolated struct ModuleManifest: Decodable, Hashable, Sendable {
     public let versions: [Version]
     public let dependsOn: [String]?
     public let data: [String]?
-    /// Data an earlier release had that only the app's own Swift read,
-    /// never a bundle, so dropping it needs no new version.
+    /// What an earlier release had that this one dropped without a new
+    /// version: data only the app's own Swift read, never a bundle, or a
+    /// function (`functions/<name>`) whose work a Wrappfile now says itself,
+    /// which `DO` then refuses, naming it retired.
     public let retired: [String]?
     public let assets: [String]?
     public let functions: [String]?
@@ -364,11 +366,12 @@ public nonisolated struct ModuleReleases: Codable, Sendable, Equatable {
     /// Within a version every release is backwards compatible: what a
     /// release provided for a version it still provides, the next one may
     /// not take away. (It may stop providing a version altogether.) Data the
-    /// module says is `retired` was never a bundle's to read, so may go.
+    /// module says is `retired` was never a bundle's to read, so may go, as
+    /// may a function it says is retired.
     static func compatibilityProblems(from previous: Release, to next: Release, retired: [String] = []) -> [String] {
         guard !Set(previous.versions).isDisjoint(with: next.versions) else { return [] }
         var messages: [String] = []
-        for function in previous.functions where !next.functions.contains(function) {
+        for function in previous.functions where !next.functions.contains(function) && !retired.contains(function) {
             messages.append("release \(next.release) drops the function \(function), which release \(previous.release) had: that needs a new version")
         }
         for table in previous.data where !next.data.contains(table) && !retired.contains(table) {

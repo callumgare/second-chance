@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 29
+release: 30
 native: "wine"                               # its Swift: Packages/Modules/wine (WineKit, WineExecutor), WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -57,9 +57,13 @@ versions:
           urls: ["https://github.com/Sikarugir-App/Wrapper/releases/download/v1.0/Template-1.0.11.tar.xz"]
 runtime: { save-warning: true }              # Wine games are less stable than ScummVM's
 data: ["routine-errors.yaml"]
-retired: ["prefix.yaml"]                     # The app's own; the prefix stage replaced it
+# The app's own prefix.yaml, which the prefix stage replaced; and the patch
+# functions, which only ran WINE.PATCH: a Wrappfile writes
+# WINE.PATCH keep-thread-handles or WINE.PATCH skip-synth-playout itself,
+# with a comment saying why it needs it.
+retired: ["prefix.yaml", "functions/keep-thread-handles", "functions/skip-synth-playout"]
 stages: ["stages/prefix", "stages/update"]  # FROM --module=wine@<version> prefix
-functions: ["functions/cnc-ddraw", "functions/prefix-settings", "functions/keep-thread-handles", "functions/skip-synth-playout"]  # DO wine.cnc-ddraw
+functions: ["functions/cnc-ddraw", "functions/prefix-settings"]  # DO wine.cnc-ddraw
 assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a program with no menu, started and quit
 updates:
   # A wrapp whose prefix was set up by another prefix stage gets this

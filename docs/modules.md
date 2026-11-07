@@ -21,7 +21,6 @@ Modules/
     stages/update           the wine-prefix update, over an old app's prefix (FROM ${input.previous})
     functions/cnc-ddraw     cnc-ddraw, for a DirectDraw game (DO wine.cnc-ddraw)
     functions/prefix-settings  the prefix's settings, which both stages give it (DO wine.prefix-settings)
-    functions/keep-thread-handles  msvcrt keeping _beginthread's handles, for an Allegro 4 game's exit (DO wine.keep-thread-handles)
     routine-errors.yaml     Wine's err: lines that say nothing is wrong
   scummvm/  dosbox/  basilisk/  steam/  big-fish/  nancy-drew/  installer/  disc/  her-download/
 ```
@@ -60,9 +59,9 @@ versions:                      # what this release provides, as a bundle names i
   - version: "10.0_8"
     package: { … }             # an engine's: what it is made from (below)
 data: ["routine-errors.yaml"]
-retired: ["prefix.yaml"]       # data only Second Chance's Swift read, dropped (below)
+retired: ["prefix.yaml", "functions/keep-thread-handles"]  # what a release dropped (below)
 stages: ["stages/prefix", "stages/update"]  # Wrappfiles a bundle builds FROM (FROM --module=wine@10 prefix)
-functions: ["functions/cnc-ddraw", "functions/prefix-settings", "functions/keep-thread-handles"]
+functions: ["functions/cnc-ddraw", "functions/prefix-settings"]
 allow-paths: ["assets/"]       # folders of its own its stages and functions may read files from
 updates:                       # its default updates, after a bundle's
   - { id: "wine-prefix", when-changed: ["stages/prefix"] }
@@ -295,8 +294,9 @@ it found) on a Wine it doesn't know rather than patching blind.
   ([big-fish.md](big-fish.md#armadillo-under-rosetta)).
 - **A game that asks gets the patches it names**, through `WINE.PATCH
   <name>…`, in a stage after it has Wine: `keep-thread-handles` and
-  `skip-synth-playout` (`WinePatch.all`, in `WineExecutor`), each also a
-  function of the same name (`DO wine.keep-thread-handles`). A patch changes
+  `skip-synth-playout` (`WinePatch.all`, in `WineExecutor`), each written
+  where it's applied, with a comment above saying what it does, why the
+  program needs it and what would let it go. A patch changes
   the stage tree's own copy of the engine (cloned from the store, and
   replaced file by file, so the store is never touched) and the prefix's copy
   of the same DLL (`syswow64`, when it's Wine's: one winetricks laid in, as
@@ -687,7 +687,7 @@ none.
 
 | Module | Data | Read by |
 | --- | --- | --- |
-| `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), then `functions/prefix-settings`: `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `stages/update`, the `wine-prefix` update, which gives an old app's prefix this Wine and those settings again ([wrappfile.md](wrappfile.md#updates)); `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`); `functions/keep-thread-handles`, `WINE.PATCH keep-thread-handles` for an Allegro 4 game that hangs as it exits, and `functions/skip-synth-playout`, `WINE.PATCH skip-synth-playout` for a game that loads its sounds through DirectMusic for minutes ([above](#the-wine-modules-patches)) | `WineManager`, as it makes a prefix, and the wine module's executor, which carries the steps out (through `ModuleSteps`); Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
+| `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), then `functions/prefix-settings`: `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `stages/update`, the `wine-prefix` update, which gives an old app's prefix this Wine and those settings again ([wrappfile.md](wrappfile.md#updates)); `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`); the patches a stage asks for are `WINE.PATCH` lines of its own ([above](#the-wine-modules-patches)) | `WineManager`, as it makes a prefix, and the wine module's executor, which carries the steps out (through `ModuleSteps`); Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
 | `wine` | `routine-errors.yaml`: Wine's routine `err:` lines | the wrapp's quit check (`GameQuitCheck`), compiled in by `sc generate` |
 | `steam` | `stages/client`: Steam's client in the wine module's prefix, ⌘ acting as Ctrl in its windows (`FROM --module=steam@1 client`); `functions/install`, the game installed by Steam with the shared sign-in, then signed out (`DO steam.install`) | `SteamWrappBuilder`, which carries the client stage out before the game is known and the edition's steps after ([steam.md](steam.md#building)) |
 | `big-fish` | `stages/manager`: the Game Manager in the wine module's prefix, from its installer pinned by its hash, ⌘ acting as Ctrl in its window (`FROM --module=big-fish@1 manager`); `functions/install`, the game installed and activated, then the account taken out (`DO big-fish.install`); `functions/cnc-ddraw`, cnc-ddraw hooking the functions themselves, as Armadillo rebuilds a game's imports (`DO big-fish.cnc-ddraw`) | `BigFishWrappBuilder`, which carries the manager stage out before the game is known and the edition's steps after ([big-fish.md](big-fish.md#the-build)) |
@@ -735,7 +735,10 @@ tests) fail on a module whose files differ from what its release recorded,
 naming the files. A new release is compared with the one before: for a
 version both provide, it may not drop a function or a data table, since a
 bundle can't choose a release and must keep working; that needs a new
-version. It may stop providing a version altogether. The one exception is a
-table only Second Chance's own Swift ever read, which no bundle could: the
-module names it under `retired`, and it goes (the wine module's
-`prefix.yaml`, which the `prefix` stage replaced).
+version. It may stop providing a version altogether. The exceptions are
+named under `retired`, and go: a table only Second Chance's own Swift ever
+read, which no bundle could (the wine module's `prefix.yaml`, which the
+`prefix` stage replaced), and a function whose work a Wrappfile now says
+itself (`functions/keep-thread-handles` and `functions/skip-synth-playout`,
+which only ran `WINE.PATCH`). A `DO` of a retired function is refused,
+naming it retired, and the module's `module.yaml` says what to write instead.

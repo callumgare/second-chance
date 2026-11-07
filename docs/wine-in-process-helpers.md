@@ -857,7 +857,7 @@ never falls back on a gap of its own. `KeyNamesTests` reads
 A game that has started quitting and then hangs, its window up, using no CPU,
 isn't ignoring the quit: Icy Tower's, after its log says `Exiting Allegro`,
 was Allegro's timer waiting on a thread handle Wine had closed and given out
-again, which `DO wine.keep-thread-handles` fixes in that game's Wine
+again, which `WINE.PATCH keep-thread-handles` fixes in that game's Wine
 ([modules.md](modules.md#the-wine-modules-patches)).
 
 ### Which games get it

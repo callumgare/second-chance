@@ -140,9 +140,9 @@
       "uniqueItems": true
     },
     "retired": {
-      "description": "Data an earlier release had that only Second Chance's own code read, never a bundle, dropped without a new version.",
+      "description": "What an earlier release had and this one dropped without a new version: data only Second Chance's own code read, never a bundle, or a function (functions/<name>) whose work a Wrappfile now says itself; a DO of it is refused, naming it retired.",
       "type": "array",
-      "items": { "type": "string", "pattern": "^[a-z0-9-]+\\.(yaml|json)$" },
+      "items": { "type": "string", "pattern": "^([a-z0-9-]+\\.(yaml|json)|functions/[a-z0-9-]+)$" },
       "uniqueItems": true
     },
     "assets": {
