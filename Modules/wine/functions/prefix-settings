@@ -13,6 +13,12 @@ FUNCTION prefix-settings
   # what Direct3D draws to match (docs/wine-in-process-helpers.md#mode-scaling).
   EMIT "second-chance.substep.display"
   WINE.REGISTRY --set x11-driver:EmulateModeset Y
+  # No Wine crash dialog: a program that crashes ends at once, its backtrace
+  # in the log (winedbg --auto), rather than waiting on a dialog. In a build
+  # nobody sees it, and the step hung until it was killed (Bioscopia's
+  # QuickTime under winetricks); a wrapp's quit watch reports the crash
+  # in its own words (docs/wine-in-process-helpers.md#quit-watch).
+  WINE.WINETRICKS nocrashdialog
   # The prefix's user folders unlinked from the Mac's home folder
   EMIT "second-chance.substep.disc"
   WINE.WINETRICKS isolate_home

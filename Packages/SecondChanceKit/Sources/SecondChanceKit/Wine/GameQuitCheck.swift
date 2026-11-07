@@ -20,7 +20,9 @@
 //    watch reports the first; cnc-ddraw presents on a timer whatever the
 //    game does, so its frames say nothing about the game);
 //  - quit within `errorWindow` of Wine reporting an error that isn't one of
-//    the routine ones every launch logs.
+//    the routine ones every launch logs;
+//  - quit within `crashWindow` of an exception nothing handled: with no crash
+//    dialog, the program ends once winedbg has written its backtrace.
 //
 //  See docs/wine-in-process-helpers.md#quit-watch.
 
@@ -46,6 +48,12 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
     /// healthy launch that quit 4.8 s after an unrelated error, so the window
     /// stays just above the quickest real one.
     static let errorWindow: TimeInterval = 1
+
+    /// How soon after an exception nothing handled an exit counts as that
+    /// crash. The prefix has no crash dialog (the wine module's
+    /// `nocrashdialog`), so a crashed program ends once winedbg has written
+    /// its backtrace to the log: seconds, longer on a loaded Mac.
+    static let crashWindow: TimeInterval = 30
 
     // `routineErrors` and `routineSteamErrors`, the Wine errors healthy
     // launches log that say nothing about why a game quit, are the wine and
@@ -121,6 +129,10 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
                 summary = String(format: "it quit %.1f s after Wine reported an error", exitTime.timeIntervalSince(last.at))
                 // For the player, so no "Wine": the summary, for the log, has that.
                 situation = String(localized: "The game quit just after something went wrong in it.")
+            } else if let crash = errors.last(where: { Self.isCrash($0.line) }),
+                      exitTime.timeIntervalSince(crash.at) <= Self.crashWindow {
+                summary = String(format: "it quit %.1f s after an exception nothing handled", exitTime.timeIntervalSince(crash.at))
+                situation = String(localized: "The game quit just after something went wrong in it.")
             } else {
                 return nil
             }
@@ -135,14 +147,19 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
             || line.contains("Unhandled exception") || line.contains("Unhandled stack overflow")
     }
 
+    /// Whether a line of Wine's output reports an exception the program
+    /// didn't handle, which ends it.
+    static func isCrash(_ line: String) -> Bool {
+        line.contains("Unhandled page fault") || line.contains("Unhandled exception") || line.contains("Unhandled stack overflow")
+    }
+
     /// What a Wine error means for the player, for the errors known to end a
     /// game; nil for the rest.
     static func knownCause(of line: String) -> String? {
         if line.contains("NtUserChangeDisplaySettings"), line.contains("DISPLAY") {
             return String(localized: "The game asked for a screen setting this Mac doesn't have, and quit when it couldn't have it.")
         }
-        if line.contains("Unhandled page fault") || line.contains("Unhandled exception")
-            || line.contains("Unhandled stack overflow") {
+        if isCrash(line) {
             return String(localized: "Something went wrong inside the game, and it had to close.")
         }
         if line.contains(":err:module:import_dll") {

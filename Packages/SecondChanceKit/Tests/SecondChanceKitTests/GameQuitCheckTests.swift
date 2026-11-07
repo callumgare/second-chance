@@ -121,6 +121,18 @@ struct GameQuitCheckTests {
         #expect(!check.wasQuitRequested)
     }
 
+    @Test("Quitting while winedbg writes a crash's backtrace is a failure; long after, it isn't")
+    func quitAfterCrash() throws {
+        let crash = "wine: Unhandled page fault on read access to 00000000 at address 0045A1B2 (thread 0024), starting debugger..."
+        let check = started(.directDraw)
+        check.observe(line: firstFrame, at: start + 1)
+        check.observe(line: crash, at: start + 60)
+        let failure = try #require(check.failure(exitedAt: start + 64))
+        #expect(failure.summary == "it quit 4.0 s after an exception nothing handled")
+        #expect(failure.explanation == "Something went wrong inside the game, and it had to close.")
+        #expect(check.failure(exitedAt: start + 60 + GameQuitCheck.crashWindow + 1) == nil)
+    }
+
     @Test("An unhandled exception reads as a crash")
     func crash() {
         #expect(GameQuitCheck.isWineError("wine: Unhandled page fault on read access to 00000000 at address 0045A1B2"))

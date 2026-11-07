@@ -748,7 +748,14 @@ failure if nothing asked the game to quit and the game:
   launch logs (`Modules/wine/routine-errors.yaml`: Vulkan, wow64, HID devices,
   NTLM and Kerberos, the desktop's `(null)` mode refusal, and for a game
   started through Steam, the COM lookups and graphics probe Steam does as it
-  starts).
+  starts);
+- quit within 30 s of an exception nothing handled (`Unhandled page fault`,
+  `Unhandled exception`). The prefix has no Wine crash dialog (the wine
+  module's `nocrashdialog`, in `functions/prefix-settings`), so a crashed
+  program ends by itself once winedbg has written its backtrace to the log,
+  which takes seconds, rather than waiting on a dialog of Wine's: in a build
+  nobody would see it and the step hung, and a player sees the wrapp's own
+  error window instead.
 
 Asked to quit means the wrapp quitting (⌘Q on its window, a `SIGTERM`, which is
 how the tests stop it), the helper's `quit requested`, or macOS announcing a

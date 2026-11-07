@@ -9,7 +9,7 @@ struct PrefixSetupTests {
     @Test("The app ships the wine module's prefix stage, every step of which it carries out")
     func readsTheWineModulesStage() throws {
         let steps = try WineManager.prefixStage().steps.filter { !$0.setup }
-        #expect(steps.map(\.instruction) == ["DRIVES", "REGISTRY", "WINETRICKS"])
+        #expect(steps.map(\.instruction) == ["DRIVES", "REGISTRY", "WINETRICKS", "WINETRICKS"])
         #expect(steps.allSatisfy(ModuleSteps.handles))
         #expect(steps.compactMap { $0.option("progress") }.allSatisfy { WineManager.progressText($0) != nil })
     }

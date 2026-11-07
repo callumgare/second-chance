@@ -288,7 +288,7 @@ struct BuildPlanTests {
         let steps = plan.stages.flatMap(\.steps).map { "\($0.module ?? "").\($0.instruction)" }
         // No PREFIX: the old prefix is made, and wineboot -u over it can
         // wait on Wine's Mono installer (the module's update-setup).
-        #expect(steps == [".ENGINE", "wine.HELPERS", "wine.REGISTRY", "wine.WINETRICKS", "wine.WINETRICKS", ".EDIT"])
+        #expect(steps == [".ENGINE", "wine.HELPERS", "wine.REGISTRY", "wine.WINETRICKS", "wine.WINETRICKS", "wine.WINETRICKS", ".EDIT"])
         #expect(plan.launch == nil)
         // A build without an old app has no tree to start the stage from.
         #expect(throws: BuildPlanner.PlanError.self) {
