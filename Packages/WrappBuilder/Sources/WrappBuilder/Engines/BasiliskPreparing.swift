@@ -42,7 +42,10 @@ nonisolated extension BasiliskBuild {
 
     /// The hfsutils commands the build changes the Mac's disks with, in the
     /// engine's build tools (never in an app): Homebrew's builds for Apple
-    /// silicon and Intel, each command made one universal binary with lipo.
+    /// silicon and Intel, each command made one universal binary with lipo,
+    /// each slice aligned to 16 KB as said rather than lipo's choice, which
+    /// changed with Xcode (4 KB for the Intel slice in macOS 26's) and made
+    /// the prepared tree's hash differ from Mac to Mac.
     static let hfsutils = ["hmount", "humount", "hls", "hcopy", "hmkdir", "hrename", "hdel", "hattrib", "hvol"]
 
     /// Where they are in a prepared tree.
@@ -63,7 +66,9 @@ nonisolated extension BasiliskBuild {
         for tool in hfsutils {
             let out = folder.appendingPathComponent(tool)
             try await job.run("/usr/bin/lipo", ["-create", arm64.appendingPathComponent(tool).path,
-                                                x86.appendingPathComponent(tool).path, "-output", out.path])
+                                                x86.appendingPathComponent(tool).path,
+                                                "-segalign", "x86_64", "4000", "-segalign", "arm64", "4000",
+                                                "-output", out.path])
             tools.append(out)
         }
         return tools

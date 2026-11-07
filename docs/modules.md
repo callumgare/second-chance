@@ -455,7 +455,10 @@ Preparing must give the package's hash, so every Mac runs the engine that
 was tested. It is taken **before signing**: `codesign` writes a different
 ad hoc signature for the same file on another macOS (15.6 and 26.2 do), so
 a module's Swift returns what to sign, and the preparer hashes the tree,
-then signs it.
+then signs it. Any other tool that preparing runs must be told what it
+would otherwise choose by its version: `lipo -create` aligns an Intel slice
+to 16 KB with macOS 15's Xcode and 4 KB with macOS 26's, so the basilisk
+module's hfsutils are made with `-segalign` given for each slice.
 
 ```bash
 ./sc engine prepare wine                   # prepare it here; check, or print, its hash (or wrapp-builder engine prepare)
