@@ -69,6 +69,15 @@ nonisolated extension GameInfoProvider {
             displayName: "Ingenious"
         ),
         GameInfo(
+            id: "bioscopia",
+            title: "Bioscopia",
+            diskCount: 2,
+            internalGameExePath: "/Program Files/Tivola/Bioscopia/Bioscopia.exe",
+            detectionAliases: ["BIOSCOPIA_INSTALL", "Bioscopia Install"],
+            program: "tivola/bioscopia",
+            displayName: "Bioscopia"
+        ),
+        GameInfo(
             id: "secrets-can-kill",
             title: "Secrets Can Kill",
             diskCount: 2,

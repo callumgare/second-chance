@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "tivola/bioscopia"
+version: 1
+title: "Bioscopia"
+display-name: "Bioscopia"
+allow-paths: ["quicktime/", "scummvm/"]  # QuickTime 4's setup script; the unfinished ScummVM stage's Lingo.ini
+
+volumes:
+  saves:
+    display-name: "saved games"   # Bioscopia.rup, beside the game: its settings and save slots
+
+editions:
+  - id: "cd"
+    source: "disc"
+    build:
+      target: "disc"   # the Windows side under Wine; the Wrappfile's scummvm stage is unfinished, and no edition builds it
+      inputs:
+        disc-1: { type: "disc" }
+        disc-2: { type: "disc" }
+    detect:
+      aliases: ["BIOSCOPIA_INSTALL", "Bioscopia Install"]
+      matchers:
+        - { file-exists: "Transfer/Bioscopia.exe" }   # the Windows projector the installer copies
+
+tests:
+  scenario: "wine/starts-and-quits"
+  window: "windowed"   # a window the size of the screen, the 800x600 stage in its middle
+
+notes:
+  about: "Tivola's 2002 biology adventure (Heureka-Klett; German original Biolab, 2001), made with Macromedia Director 8, on two hybrid Mac/PC CDs: disc 1 installs, disc 2 holds the game and stays in the drive. ScummVM's director engine knows it (director:bioscopia)."
+  saves: "Save game writes the slot's name and the game's state to Bioscopia.rup beside Bioscopia.exe (its [general] ID_n names, an [IDDatan] section a slot). A hidden Shift key in the game writes bioscopia.ini on the Windows desktop, a developers' save left alone."
+  quicktime: "Its video needs QuickTime 4 or later. Apple's QuickTime 7.6 doesn't initialise under Wine 10, so the build installs the QuickTime 4 on disc 1, clicked through by AutoIt."
+  scummvm: "The Wrappfile's scummvm stage (ScummVM 2026.4.0) is unfinished: the comment above it says why. A patched ScummVM drew the first scene; the patch isn't in a release."

@@ -1,0 +1,58 @@
+# Bioscopia: a Macromedia Director 8 title on two hybrid Mac/PC discs. Disc 1
+# installs (its Transfer folder, and QuickTime 4), disc 2 holds the game and
+# must be in the drive while it runs.
+INPUT disc-1
+INPUT disc-2
+# The saved games: Bioscopia.rup beside the game, which holds its settings and
+# its save slots (the names, and each slot's page, objects and e-mails).
+STORE saves
+CONST install-dir = "C:/Program Files/Tivola/Bioscopia"
+CONST program = "${const.install-dir}/Bioscopia.exe"
+
+# The Windows projector under Wine, set up as the disc's installer would.
+FROM --module=wine@10 prefix AS disc
+# Director's QuickTime Xtra (QT3Asset) needs QuickTime 4 or later, and the
+# game won't start without it. Apple's QuickTime 7.6 (winetricks quicktime76)
+# installs, but its QuickTime.qts fails to initialise under Wine (its DllMain
+# returns 0, and the game asks for QuickTime 4), and its installer's msiexec
+# crashes at the end. The disc's own QuickTime 4 works: its setup clicked
+# through by AutoIt, with its defaults.
+COPY --from=${input.disc-1} QuickTime C:/quicktime-setup/
+RUN --mount=type=bind,source=quicktime/setup.au3,target=C:/quicktime-setup.au3 \
+    --mount=type=bind,source=module:installer:/autoit,target=C:/autoit \
+    C:/autoit/AutoIt3.exe /ErrorStdOut C:/quicktime-setup.au3 C:/quicktime-setup/QuickTimeInstaller.exe
+REMOVE C:/quicktime-setup
+# What the disc's installer does: its Transfer folder copied.
+COPY --from=${input.disc-1} Transfer ${const.install-dir}/
+# Disc 2 in a CD drive (D:): the game looks for CDNr2.rup on a CD-ROM drive.
+WINE.KEEP-DISCS ${input.disc-2} --into=C:/bioscopia-cd
+# It draws with GDI (Dirapi.dll imports neither ddraw nor d3d). Its window
+# covers the screen with the 800x600 stage in the middle; native fullscreen
+# took it for a fullscreen window and never settled, so it stays a window.
+LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="Bioscopia.rup" \
+    --wine.graphics=unknown --wine.window=windowed ${const.program}
+
+# NOT A WORKING ROUTE, kept to finish later; no edition builds it. The
+# Windows data under ScummVM's director engine (2026.4.0): the start screen,
+# intro and main menu work, but a new game's first scene stays black, for
+# reasons in ScummVM:
+# - Lingo.ini's bare assignments (`_CDTest = "28.02.02"`) don't parse, so the
+#   disc check fails: scummvm/Lingo.ini says them with `set … to …`.
+# - The game's handlers are movie scripts in Game/GameLib.dcr, a linked
+#   movie cast member that the casts reach with `tell sprite(1)`, and
+#   ScummVM's `tell` takes only windows, so every Hdle* handler is
+#   "undefined". A patched ScummVM (tell into a sprite's linked movie, tell
+#   the stage back out, and count/getProp on strings' chunks) draws the
+#   scene; the patch isn't in ScummVM yet.
+# - Director 8's sound cast members aren't played (stubbed in ScummVM).
+# Its stores are left out until it works.
+# STORE scummvm-saves
+# STORE scummvm-settings
+FROM scratch AS scummvm
+USE scummvm
+COPY --from=${input.disc-1} Transfer /SharedSupport/game/
+COPY --from=${input.disc-2} . /SharedSupport/game/
+COPY scummvm/Lingo.ini /SharedSupport/game/Lingo.ini
+# LAUNCH --mount=type=store,source=scummvm-saves,target=scummvm:saves/
+# LAUNCH --mount=type=store,source=scummvm-settings,target=scummvm:settings/
+LAUNCH scummvm:/SharedSupport/game/ director:bioscopia
