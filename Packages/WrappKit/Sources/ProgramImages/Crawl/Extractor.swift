@@ -45,6 +45,9 @@ nonisolated public struct ExtractionOptions: Sendable {
     public var filter: PathFilter?
     /// Tools, by name; found on PATH and in Homebrew's folders if nil.
     public var tools: [String: ExternalTool]?
+    /// Asked between files: true stops the crawl with `CancellationError`. `extract` sets it from its task's
+    /// cancellation, which its crawl, on a thread of its own, can't see.
+    public var isCancelled: (@Sendable () -> Bool)?
 
     public init(outputDirectory: URL) {
         self.outputDirectory = outputDirectory
@@ -62,9 +65,19 @@ nonisolated public enum ProgramImageExtractor {
     /// Crawl `input` (a file or folder: an installer, a disc image, an
     /// installed program, a wrapp) for every image, off the calling thread.
     /// `events` is called for each event, on the crawl's thread.
+    /// Cancelling the calling task stops the crawl at its next file, with `CancellationError`.
     public static func extract(_ input: URL, options: ExtractionOptions,
                                events: @escaping @Sendable (ExtractionEvent) -> Void) async throws -> ExtractionSummary {
-        try await Blocking.run { try extractSynchronously(input, options: options, events: events) }
+        let cancelled = CancelFlag()
+        var options = options
+        let asked = options.isCancelled
+        options.isCancelled = { cancelled.isSet || (asked?() ?? false) }
+        let run = options
+        return try await withTaskCancellationHandler {
+            try await Blocking.run { try extractSynchronously(input, options: run, events: events) }
+        } onCancel: {
+            cancelled.set()
+        }
     }
 
     /// The same, on this thread.
@@ -215,6 +228,7 @@ nonisolated final class Crawl: @unchecked Sendable {
 
         while let node = queue.popLast() {
             try Task.checkCancellation()
+            if options.isCancelled?() == true { throw CancellationError() }
             guard nodesSeen < options.maxNodes else {
                 skip(node, "the crawl reached its limit of \(options.maxNodes) files")
                 break
@@ -545,4 +559,12 @@ nonisolated enum BundleHints {
         }
         return isWrapp ? .some(iconFile) : nil
     }
+}
+
+/// Set once, from any thread.
+nonisolated private final class CancelFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    var isSet: Bool { lock.withLock { value } }
+    func set() { lock.withLock { value = true } }
 }

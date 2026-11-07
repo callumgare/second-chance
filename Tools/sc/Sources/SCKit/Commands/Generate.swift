@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import ProcessKit
 import WrappBuilder
 import WrappBuilderTool
 
@@ -70,17 +71,11 @@ struct GenerateCommand: AsyncParsableCommand {
             for icon in ((try? files.contentsOfDirectory(atPath: assets.path)) ?? []).sorted() where icon.hasSuffix(".icon") {
                 let name = String(icon.dropLast(".icon".count))
                 let rel = String(assets.path.dropFirst(root.path.count + 1))
-                let scratch = files.temporaryDirectory.appendingPathComponent("sc-icon-\(UUID().uuidString)")
-                try files.createDirectory(at: scratch, withIntermediateDirectories: true)
-                defer { try? files.removeItem(at: scratch) }
-                let compiled = try await Proc.collect("/usr/bin/xcrun", [
-                    "actool", assets.appendingPathComponent(icon).path, "--compile", scratch.path, "--app-icon", name,
-                    "--platform", "macosx", "--minimum-deployment-target", "15.0",
-                    "--output-partial-info-plist", scratch.appendingPathComponent("partial.plist").path,
-                ])
-                let made = scratch.appendingPathComponent("\(name).icns")
-                guard compiled.status == 0, let data = try? Data(contentsOf: made) else {
-                    throw SCError("actool couldn't compile \(rel)/\(icon).", hints: [compiled.error])
+                let data: Data
+                do {
+                    data = try await IconCompile.icns(from: assets.appendingPathComponent(icon), name: name)
+                } catch let failure as IconCompile.Failure {
+                    throw SCError("actool couldn't compile \(rel)/\(icon).", hints: [failure.detail])
                 }
                 let path = "\(rel)/\(name).icns"
                 let target = assets.appendingPathComponent("\(name).icns")

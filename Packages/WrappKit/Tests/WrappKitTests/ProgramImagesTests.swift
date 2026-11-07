@@ -394,6 +394,25 @@ struct ProgramImageCrawlTests {
         #expect(icon.provenance.count == 2)
     }
 
+    @Test("A crawl asked to stop stops, with CancellationError")
+    func stopsWhenCancelled() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("program-images-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try WindowsResourceTests.program().write(to: root.appendingPathComponent("a.exe"))
+        var options = ExtractionOptions(outputDirectory: root.appendingPathComponent("out"))
+        options.useTools = false
+        options.isCancelled = { true }
+        await #expect(throws: CancellationError.self) {
+            _ = try await ProgramImageExtractor.extract(root, options: options) { _ in }
+        }
+        // a cancelled task stops it too, though the crawl runs on a thread of its own
+        options.isCancelled = nil
+        let task = Task { try await ProgramImageExtractor.extract(root, options: options) { _ in } }
+        task.cancel()
+        await #expect(throws: CancellationError.self) { _ = try await task.value }
+    }
+
     @Test("A hybrid disc's Mac side: the volume icon and the application's own")
     func macDisc() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("program-images-\(UUID().uuidString)")
