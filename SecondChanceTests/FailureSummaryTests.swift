@@ -14,21 +14,18 @@ struct FailureSummaryTests {
         let underlying = NSError(domain: "Inner", code: 7, userInfo: [NSLocalizedDescriptionKey: "inner thing"])
         let error = NSError(domain: "Outer", code: 1, userInfo: [NSLocalizedDescriptionKey: "outer thing", NSUnderlyingErrorKey: underlying])
 
-        // LogStore is shared by every test in the process, so another test's
-        // error (WineNoDisplayTests logs Wine's nodrv line) can land between
-        // entering the stage and this test's first error, and be "first".
-        // Try again in a fresh stage when that happens.
-        var marker = ""
-        var text = ""
-        for _ in 1...5 {
-            marker = UUID().uuidString
+        // LogStore and the process's stage are shared by every test in the
+        // process, and others enter stages and log errors in parallel. A
+        // build's own context keeps this test's stage and entries its own,
+        // as it keeps side-by-side builds apart.
+        let marker = UUID().uuidString
+        let text = LogContext.$build.withValue(BuildLogContext()) {
             LogContext.enterStage("Stage \(marker)")
             LogStore.shared.append(level: "notice", label: "au.gare.callum.second-chance.Test.X", message: "fine")
             LogStore.shared.append(level: "error", label: "au.gare.callum.second-chance.Test.X", message: "first \(marker)")
             LogStore.shared.append(level: "error", label: "au.gare.callum.second-chance.Test.X", message: "second \(marker)")
             LogStore.shared.append(level: "warning", label: "au.gare.callum.second-chance.Shared.Wine", message: "wine said \(marker)")
-            text = FailureSummary.render(what: "Testing", error: error, files: [("Diagnostics", "/tmp/x")])
-            if text.contains("first \(marker)") { break }
+            return FailureSummary.render(what: "Testing", error: error, files: [("Diagnostics", "/tmp/x")])
         }
 
         #expect(text.hasPrefix(FailureSummary.startMarker))
@@ -46,13 +43,18 @@ struct FailureSummaryTests {
 
     @Test("The summary names the programs the stage started and how each ended")
     func programs() {
+        // In a build's own context, as `summary()`: another test entering a
+        // stage between these lines and the render would otherwise move the
+        // stage's start past them.
         let marker = UUID().uuidString
-        LogContext.enterStage("Stage \(marker)")
-        LogStore.shared.append(level: "notice", label: "au.gare.callum.second-chance.SecondChance.WineProcess",
-                               message: "▶ wine reg started (pid 1): reg import \(marker)")
-        LogStore.shared.append(level: "error", label: "au.gare.callum.second-chance.SecondChance.WineProcess",
-                               message: "■ wine reg (pid 1) was killed by SIGTERM (15) — cancelled \(marker)")
-        let text = FailureSummary.render(what: "Testing", error: nil)
+        let text = LogContext.$build.withValue(BuildLogContext()) {
+            LogContext.enterStage("Stage \(marker)")
+            LogStore.shared.append(level: "notice", label: "au.gare.callum.second-chance.SecondChance.WineProcess",
+                                   message: "▶ wine reg started (pid 1): reg import \(marker)")
+            LogStore.shared.append(level: "error", label: "au.gare.callum.second-chance.SecondChance.WineProcess",
+                                   message: "■ wine reg (pid 1) was killed by SIGTERM (15) — cancelled \(marker)")
+            return FailureSummary.render(what: "Testing", error: nil)
+        }
         #expect(text.contains("Programs this stage started and ended:"))
         #expect(text.contains("reg import \(marker)"))
         #expect(text.contains("cancelled \(marker)"))
