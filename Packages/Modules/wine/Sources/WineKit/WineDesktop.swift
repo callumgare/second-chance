@@ -40,6 +40,14 @@ nonisolated public final class WineDesktop: Sendable {
         self.logger = logger
     }
 
+    /// `explorer.exe /desktop`, started in the prefix. Left to inherit the
+    /// wrapp's working directory (`/`, opened from the Finder) it was the one
+    /// Wine program the prefix's cleanup couldn't tell was its own
+    /// (`WineServer.programs`), so a `wineserver -k9` left it running.
+    static func command(_ wine: Wine) -> WineCommand {
+        .wine(["explorer.exe", "/desktop"], in: wine.prefix)
+    }
+
     /// Start the desktop and wait until it has registered the display devices.
     /// Nil when it was already running, or could not be started — in both
     /// cases there is nothing to release. Cancelling the task ends the wait,
@@ -58,7 +66,7 @@ nonisolated public final class WineDesktop: Sendable {
 
         let launcher: WineProcess
         do {
-            launcher = try wine.start(.wine(["explorer.exe", "/desktop"]), output: .log(outputLogger))
+            launcher = try wine.start(command(wine), output: .log(outputLogger))
         } catch {
             logger.warning("[Desktop] Could not start the desktop, leaving it to Wine: \(error)")
             return nil

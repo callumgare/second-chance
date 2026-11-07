@@ -154,7 +154,9 @@ fallback (later on a busy Mac) kills Wine before exiting. **Killing Wine means
 killing its programs too:** `wineserver -k9` kills the server alone, and Wine's
 programs, waiting on it, are left running for good — so `wine.server.kill()`
 then kills every Wine program working in the prefix's folder
-(`WineServer.programs`), and a launch first clears any a killed session left
+(`WineServer.programs`). That's why the desktop is started in the prefix
+(`WineDesktop.command`): it once inherited the wrapp's working directory, `/`,
+and outlived a kill unseen. A launch first clears any a killed session left
 behind (`clearLeftovers`), as the game monitor would otherwise take that
 session's game for its own and wait for ever for its window. Never run
 `wineserver -k9` by hand without doing the same. A launch that still finds Wine

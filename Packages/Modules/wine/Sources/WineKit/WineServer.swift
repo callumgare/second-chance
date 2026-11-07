@@ -85,11 +85,18 @@ nonisolated public struct WineServer: Sendable {
     /// server has gone. Blocks while it lists them.
     public func programs(in processes: ProcessList? = ProcessList.current()) -> [ProcessList.Entry] {
         guard let processes else { return [] }
-        let folder = Self.realPath(wine.prefix.deletingLastPathComponent())
         return processes.wine.filter { entry in
-            guard let cwd = ProcessList.workingDirectory(of: entry.pid) else { return false }
-            return cwd == folder || cwd.hasPrefix(folder + "/")
+            ProcessList.workingDirectory(of: entry.pid).map(isInPrefix) ?? false
         }
+    }
+
+    /// Whether a Wine program working in `directory` (as the kernel has it,
+    /// symlinks resolved) is this prefix's: in the prefix, or the folder it's
+    /// in. Every program the wrapp starts is started in one, Wine's desktop
+    /// included (`WineDesktop.command`): one in `/` outlives a kill unseen.
+    func isInPrefix(_ directory: String) -> Bool {
+        let folder = Self.realPath(wine.prefix.deletingLastPathComponent())
+        return directory == folder || directory.hasPrefix(folder + "/")
     }
 
     /// Whether `pid` is known to be working in another folder than this
@@ -97,8 +104,7 @@ nonisolated public struct WineServer: Sendable {
     /// be told.
     public func isElsewhere(_ pid: pid_t) -> Bool {
         guard let cwd = ProcessList.workingDirectory(of: pid) else { return false }
-        let folder = Self.realPath(wine.prefix.deletingLastPathComponent())
-        return cwd != folder && !cwd.hasPrefix(folder + "/")
+        return !isInPrefix(cwd)
     }
 
     /// Kill the programs left running in the prefix by a session whose server
@@ -126,7 +132,7 @@ nonisolated public struct WineServer: Sendable {
 
     /// `url`'s path with every symlink resolved, as the kernel reports a
     /// working directory: /private/var, not /var.
-    private static func realPath(_ url: URL) -> String {
+    static func realPath(_ url: URL) -> String {
         guard let resolved = realpath(url.path, nil) else { return url.standardizedFileURL.path }
         defer { free(resolved) }
         return String(cString: resolved)
