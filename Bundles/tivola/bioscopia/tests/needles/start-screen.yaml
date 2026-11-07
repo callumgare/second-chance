@@ -1,6 +1,0 @@
-# The start screen, which checks the display and QuickTime before the intro.
-# On a display that isn't 800x600 it waits there; its Continue button shows
-# only once it has found QuickTime 4 or later (without, it asks for it).
-kind: "text"
-tags: ["running"]
-text: { strings: ["Continue"] }

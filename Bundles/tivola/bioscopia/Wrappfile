@@ -26,11 +26,14 @@ REMOVE C:/quicktime-setup
 COPY --from=${input.disc-1} Transfer ${const.install-dir}/
 # Disc 2 in a CD drive (D:): the game looks for CDNr2.rup on a CD-ROM drive.
 WINE.KEEP-DISCS ${input.disc-2} --into=C:/bioscopia-cd
-# It draws with GDI (Dirapi.dll imports neither ddraw nor d3d). Its window
-# covers the screen with the 800x600 stage in the middle; native fullscreen
-# took it for a fullscreen window and never settled, so it stays a window.
+# It draws with GDI (Dirapi.dll imports neither ddraw nor d3d). The projector
+# never sets a display mode: its window covers whatever screen it finds, its
+# 800x600 stage drawn small in the middle. Started in an 800x600 mode, which
+# Wine emulates, its window is the stage, and Wine scales it up to fill the
+# display, which native fullscreen puts in a Space. (It then also skips its
+# start screen, which only asks for an 800x600 desktop.)
 LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="Bioscopia.rup" \
-    --wine.graphics=unknown --wine.window=windowed ${const.program}
+    --wine.graphics=unknown --wine.display-mode=800x600 ${const.program}
 
 # NOT A WORKING ROUTE, kept to finish later; no edition builds it. The
 # Windows data under ScummVM's director engine (2026.4.0): the start screen,

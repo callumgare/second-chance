@@ -25,7 +25,7 @@ editions:
 
 tests:
   scenario: "wine/starts-and-quits"
-  window: "windowed"   # a window the size of the screen, the 800x600 stage in its middle
+  window: "fullscreen"   # its 800x600 window, scaled up from the display mode its launch sets, in a Space
 
 notes:
   about: "Tivola's 2002 biology adventure (Heureka-Klett; German original Biolab, 2001), made with Macromedia Director 8, on two hybrid Mac/PC CDs: disc 1 installs, disc 2 holds the game and stays in the drive. ScummVM's director engine knows it (director:bioscopia)."

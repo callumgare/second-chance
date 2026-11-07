@@ -1,0 +1,6 @@
+# Its name, on the intro's title card about ten seconds in and on the main
+# menu. (Started in its 800x600 display mode, it skips the start screen that
+# checks the display; OCR reads its "i" as a Cyrillic one now and then.)
+kind: "text"
+tags: ["running"]
+text: { strings: ["Bioscop", "New game"] }
