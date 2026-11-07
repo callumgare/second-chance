@@ -48,7 +48,7 @@ struct StageTreesTests {
         let prefix = try #require(plan.stages.first)
         let setup = prefix.steps.filter(\.setup).map(\.keyword)
         #expect(setup == ["ENGINE", "WINE.HELPERS", "WINE.PREFIX"])
-        #expect(prefix.steps.filter(\.setup).first?.arguments.first?.hasPrefix("wine@10") == true)
+        #expect(prefix.steps.filter(\.setup).first?.arguments.first?.hasPrefix("wine@11.21") == true)
         // The bundle's stage, built from it, sets nothing up again.
         #expect(plan.target?.steps.contains(where: \.setup) == false)
         #expect(plan.bundleSteps.allSatisfy { !$0.setup })
