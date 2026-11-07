@@ -21,6 +21,11 @@ nonisolated public struct WindowInfo {
     public let title: String
     /// Global display coordinates, top-left origin, in points.
     public let bounds: CGRect
+    /// The window's level: 0 for an app's ordinary windows, above it the
+    /// Dock, Notification Centre and the menu bar, below it the desktop's.
+    public let layer: Int
+    /// 0 for a window that's there but can't be seen.
+    public let alpha: Double
 
     public init?(_ dictionary: [String: Any]) {
         guard let pid = dictionary[kCGWindowOwnerPID as String] as? Int32 else { return nil }
@@ -30,6 +35,18 @@ nonisolated public struct WindowInfo {
         ownerName = dictionary[kCGWindowOwnerName as String] as? String ?? "(no owner)"
         title = dictionary[kCGWindowName as String] as? String ?? "(unnamed)"
         bounds = CGRect(x: rawBounds["X"] ?? 0, y: rawBounds["Y"] ?? 0, width: rawBounds["Width"] ?? 0, height: rawBounds["Height"] ?? 0)
+        layer = dictionary[kCGWindowLayer as String] as? Int ?? 0
+        alpha = dictionary[kCGWindowAlpha as String] as? Double ?? 1
+    }
+
+    public init(number: Int32, ownerPid: Int32, ownerName: String, bounds: CGRect, layer: Int = 0, alpha: Double = 1) {
+        self.number = number
+        self.ownerPid = ownerPid
+        self.ownerName = ownerName
+        title = "(unnamed)"
+        self.bounds = bounds
+        self.layer = layer
+        self.alpha = alpha
     }
 
     /// Ignores menu-bar extras, cursors and other tiny helper windows.
@@ -44,6 +61,31 @@ nonisolated public enum WindowFinder {
         if excludingDesktop { options.insert(.excludeDesktopElements) }
         let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
         return list.compactMap { WindowInfo($0) }
+    }
+
+    /// The app whose window is in front of every other app's: the first
+    /// ordinary (layer 0), visible, substantial window in the window server's
+    /// front-to-back order. Asked of the window server each time, so it's
+    /// current even in a process whose main thread never turns its run loop,
+    /// where AppKit's `isActive` and `frontmostApplication` stay as they
+    /// were when last refreshed. Nil when no app has such a window.
+    public static func frontOwner(of windows: [WindowInfo]) -> Int32? {
+        frontWindow(of: windows)?.ownerPid
+    }
+
+    /// The window `frontOwner` goes by.
+    public static func frontWindow(of windows: [WindowInfo]) -> WindowInfo? {
+        windows.first { $0.layer == 0 && $0.alpha > 0 && $0.isSubstantial }
+    }
+
+    /// What's in front, for a log: the owner of the front window, else
+    /// AppKit's frontmost application.
+    public static func describeFront() -> String {
+        if let front = frontWindow(of: onScreenWindows()) {
+            return "\(front.ownerName) (PID \(front.ownerPid))"
+        }
+        let app = NSWorkspace.shared.frontmostApplication
+        return "\(app?.localizedName ?? app?.bundleIdentifier ?? "nothing") (PID \(app?.processIdentifier ?? -1))"
     }
 
     /// `pid`'s biggest on-screen window: an app's own, rather than the

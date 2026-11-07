@@ -969,7 +969,7 @@ struct NancyDrewQuitScenario {
                             // back, and the handler starts it again from its
                             // screen, not having acted.
                             guard FocusDetector.isFocused(pid: gamePid, strategy: strategy) else {
-                                switch regainFocus(before: pressing, gamePid: gamePid, strategy: strategy) {
+                                switch regainFocus(before: pressing, gamePid: gamePid, strategy: strategy, context: context) {
                                 case .focused: continue attemptLoop
                                 case .timedOut, .blocked:
                                     forceQuit(app)
@@ -1079,12 +1079,15 @@ struct NancyDrewQuitScenario {
     /// Bring the game back in front after something else took it during a
     /// sequence of keys, saying what was in front, so the log tells a lost
     /// key from one the program ignored.
-    private func regainFocus(before key: String, gamePid: Int32, strategy: FocusStrategy) -> FocusWaitResult {
-        let frontmost = NSWorkspace.shared.frontmostApplication
-        let name = frontmost?.localizedName ?? frontmost?.bundleIdentifier ?? "nothing"
-        let pid = frontmost?.processIdentifier ?? -1
-        logger.warning("    ⚠️  The game isn't in front before \(key) (\(name), pid \(pid), is): bringing it back to start its keys again")
-        return FocusDetector.waitForFocus(pid: gamePid, strategy: strategy, activate: wrapp.activatesForFocus, timeout: 60, settleDelay: 1)
+    private func regainFocus(before key: String, gamePid: Int32, strategy: FocusStrategy, context: Context) -> FocusWaitResult {
+        logger.warning("    ⚠️  The game isn't in front before \(key) (\(WindowFinder.describeFront()) is): bringing it back to start its keys again")
+        let result = FocusDetector.waitForFocus(pid: gamePid, strategy: strategy, activate: wrapp.activatesForFocus, timeout: 60, settleDelay: 1)
+        // What the game's own window says: in front and key, yet a program
+        // may still ignore its keys after being switched away from (Iji does).
+        if result == .focused, let state = context.game.state() {
+            logger.notice("    Back in front: the game's window says active \(state.active), key \(state.key)")
+        }
+        return result
     }
 
     /// How long after a Quit that should only ask the program is checked to
