@@ -409,7 +409,9 @@ builds. Wine's:
   and MoltenVK among them, found through its own `@loader_path` run paths:
   that folder goes in `SharedSupport/wine`, `Frameworks` stays empty, and
   only the template's `cabextract` is taken. `Wine` points GStreamer at the
-  engine's own plugins when it has them (`gstreamerPlugins`).
+  engine's own plugins when it has them (`gstreamerPlugins`), with a plugin
+  cache for each copy of them
+  ([wrapp-launch.md](wrapp-launch.md#gstreamers-plugin-cache)).
 - The Mac driver (`winemac.so`) gets a weak dependency on the in-process
   helpers, and Sikarugir's `wineserver`, which asks for `@rpath/libinotify`,
   a run path to `Frameworks` (a WineHQ build's has its own, and no room for

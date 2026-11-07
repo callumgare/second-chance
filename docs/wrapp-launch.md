@@ -161,6 +161,28 @@ on-demand start, for comparison. Anything that runs `wine` and reads its output
 must not wait for EOF on a pipe: Wine's background services inherit the child's
 stdout and hold the pipe open.
 
+## GStreamer's plugin cache
+
+Wine decodes media through GStreamer (DirectShow and Media Foundation: an MP3
+a game plays through MCI, a video), and GStreamer keeps what each of its
+~200 plugins offers in a registry file, by default one per Mac user
+(`~/.cache/gstreamer-1.0`), keyed by each plugin's path. Every wrapp carries
+its own copy of GStreamer, so each that used it left the shared file stale for
+the next, and the next rescanned every plugin inside the game the first time
+it opened a media file: Iji's title screen froze for a minute (its main thread
+waiting on quartz's filter thread while winegstreamer started), and only
+when another wrapp, or another copy of Iji, had run since. So `Wine` gives
+each copy of GStreamer a registry of its own, under Second Chance's caches and
+named by where that copy is (`GST_REGISTRY`, `Wine.gstreamerRegistry`), and
+it's built outside the game, by GStreamer's own `gst-inspect-1.0` with the
+environment Wine gives the game (`Wine.warmGStreamerCache`): by the build,
+once the app is saved where it will be (`WrappBuildHelper.finalize`), and by
+a launch that finds none (the app was moved), alongside Wine's desktop
+start-up, before the game (`WineRuntime.prepare`). The first load of a plugin
+from a new place is slow under Rosetta, about a minute for them all on a quiet
+Mac; after that the whole scan takes about 2 s. A build's log says
+`[GStreamer] Plugin cache built in …`.
+
 ## The loading window
 
 Each step shows as a `LoadingStage`, with its own message, and its own

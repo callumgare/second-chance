@@ -414,6 +414,13 @@ class WrappBuildHelper {
         let finalPath = try await input.getSaveLocation(for: gameInfo)
         try Task.checkCancellation()
         try await saveWrapp(from: wrappPath, to: finalPath)
+        // GStreamer's plugin cache for the app's own copy of it, where it now
+        // is, so the game never builds it the first time it plays a sound or
+        // video: that froze Iji's title screen for a minute (GStreamerCache).
+        let savedWine = Wine(wrapp: finalPath)
+        if FileManager.default.fileExists(atPath: savedWine.gstreamerFramework.path) {
+            await savedWine.warmGStreamerCache(logger: logger)
+        }
 
         await input.onWrappBuildComplete(finalPath)
         await bus.publishWrappBuild(.completed(wrappPath: finalPath))

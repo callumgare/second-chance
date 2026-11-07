@@ -91,8 +91,18 @@ final class WineRuntime: GameStarting {
     /// devices, before the game runs — while the save warning shows, when it
     /// does. There is no deadline: the loading window says meanwhile whether
     /// the wait looks stuck. See `WineDesktop`. Under Steam, Steam's start
-    /// has started the session already.
+    /// has started the session already. Meanwhile GStreamer's plugin cache
+    /// is built if this copy has none (the build normally has), so the game
+    /// doesn't build it as it first plays a sound or video (`GStreamerCache`).
     func prepare(_ launch: LaunchContext) async -> PrepareOutcome {
+        let wine = config.wine, logger = logger
+        async let cache: Void = wine.warmGStreamerCache(logger: logger)
+        let outcome = await prepareSession(launch)
+        await cache
+        return outcome
+    }
+
+    private func prepareSession(_ launch: LaunchContext) async -> PrepareOutcome {
         if let path = config.wineSessionVariables[HelperReportFile.variable] {
             let file = HelperReportFile(url: URL(fileURLWithPath: path))
             let watchers = launch.watchers

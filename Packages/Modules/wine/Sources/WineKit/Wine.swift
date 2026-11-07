@@ -82,6 +82,9 @@ nonisolated public struct Wine: Sendable {
             "PATH": "\(binDir.path):\(originalPath):/opt/local/bin:/opt/local/sbin",
             "DYLD_FALLBACK_LIBRARY_PATH": dyldFallbackLibraryPath,
             "GST_PLUGIN_PATH": gstreamerPlugins.path,
+            // This copy's own plugin cache, not the user's shared one, which
+            // every other wrapp's GStreamer left stale (GStreamerCache).
+            "GST_REGISTRY": gstreamerRegistry.path,
             "WINETRICKS_FALLBACK_LIBRARY_PATH": dyldFallbackLibraryPath,
             "WINEBOOT_HIDE_DIALOG": "1",
             // winemenubuilder turns each Start menu entry and file association
