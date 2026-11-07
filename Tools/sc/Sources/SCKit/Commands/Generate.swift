@@ -11,7 +11,7 @@ struct GenerateCommand: AsyncParsableCommand {
         Code that reads no YAML — GameCatalog, and the wrapp — gets what it needs \
         of bundles and modules as Swift, generated and checked in: GameCatalog's \
         table of games, and the wrapp's routine Wine errors and Her engine log; and each \
-        module's icons, compiled from Icon Composer's .icon to the .icns an app is given. \
+        module's and bundle's icons, compiled from Icon Composer's .icon to the .icns an app is given. \
         Run this after changing a bundle or a module's data; a test fails while a file is stale.
         """
     )
@@ -20,6 +20,8 @@ struct GenerateCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
+        // icons first: a Wrappfile's COPY of its .icns is checked when the bundles load
+        try await compileIcons(session)
         let bundles: [ProgramBundle]
         switch try ProgramBundleLoader(root: session.repo.bundles, modules: try loadModules(session)).loadAll() {
         case .success(let loaded): bundles = loaded
@@ -42,21 +44,32 @@ struct GenerateCommand: AsyncParsableCommand {
                 session.ui.line("Wrote \(path)")
             }
         }
-        try await compileIcons(session)
         session.ui.success("Generated files are up to date.")
     }
 
-    /// Each module's Icon Composer icons (`assets/<name>.icon`) as the
-    /// `.icns` a Wrappfile's `ICON` names (`assets/<name>.icns`): an app is
-    /// built on Macs without Xcode, which alone compiles an `.icon`. actool's
-    /// output is the same for the same icon, so an unchanged one is left be.
+    /// Each module's and bundle's Icon Composer icons (`assets/<name>.icon`) as
+    /// the `.icns` a Wrappfile's `APP --icon` names (`assets/<name>.icns`): an
+    /// app is built on Macs without Xcode, which alone compiles an `.icon`.
+    /// actool's output is the same for the same icon, so an unchanged one is
+    /// left be.
     func compileIcons(_ session: Session) async throws {
-        let modules = session.repo.modules
         let files = FileManager.default
-        for module in try files.contentsOfDirectory(atPath: modules.path).sorted() {
-            let assets = modules.appendingPathComponent(module).appendingPathComponent("assets")
+        let root = session.repo.root
+        // every assets/ folder of a module (Modules/<name>/) or a bundle (Bundles/<group>/<name>/)
+        var folders: [URL] = []
+        for module in ((try? files.contentsOfDirectory(atPath: session.repo.modules.path)) ?? []).sorted() {
+            folders.append(session.repo.modules.appendingPathComponent(module).appendingPathComponent("assets"))
+        }
+        for group in ((try? files.contentsOfDirectory(atPath: session.repo.bundles.path)) ?? []).sorted() {
+            let g = session.repo.bundles.appendingPathComponent(group)
+            for bundle in ((try? files.contentsOfDirectory(atPath: g.path)) ?? []).sorted() {
+                folders.append(g.appendingPathComponent(bundle).appendingPathComponent("assets"))
+            }
+        }
+        for assets in folders {
             for icon in ((try? files.contentsOfDirectory(atPath: assets.path)) ?? []).sorted() where icon.hasSuffix(".icon") {
                 let name = String(icon.dropLast(".icon".count))
+                let rel = String(assets.path.dropFirst(root.path.count + 1))
                 let scratch = files.temporaryDirectory.appendingPathComponent("sc-icon-\(UUID().uuidString)")
                 try files.createDirectory(at: scratch, withIntermediateDirectories: true)
                 defer { try? files.removeItem(at: scratch) }
@@ -67,9 +80,9 @@ struct GenerateCommand: AsyncParsableCommand {
                 ])
                 let made = scratch.appendingPathComponent("\(name).icns")
                 guard compiled.status == 0, let data = try? Data(contentsOf: made) else {
-                    throw SCError("actool couldn't compile Modules/\(module)/assets/\(icon).", hints: [compiled.error])
+                    throw SCError("actool couldn't compile \(rel)/\(icon).", hints: [compiled.error])
                 }
-                let path = "Modules/\(module)/assets/\(name).icns"
+                let path = "\(rel)/\(name).icns"
                 let target = assets.appendingPathComponent("\(name).icns")
                 if (try? Data(contentsOf: target)) == data {
                     session.ui.line("\(path) is up to date")

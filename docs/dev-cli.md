@@ -122,9 +122,10 @@ privacy prompts (which Steam waits on) aren't addressed to `sc`; see
 
 `sc generate` writes the Swift made from `Bundles/` and `Modules/`, and
 from Second Chance's `EMIT` strings (`SecondChance/Resources/emit-vocabulary.yaml`,
-[wrappfile.md](wrappfile.md#emit)), and compiles each module's Icon Composer icons (`assets/<name>.icon`) to the
+[wrappfile.md](wrappfile.md#emit)), and compiles each module's and bundle's Icon Composer icons (`assets/<name>.icon`) to the
 `.icns` a Wrappfile's `APP --icon` names (`xcrun actool`, which only Xcode has, so
-the `.icns` is checked in).
+the `.icns` is checked in). It compiles them before it checks the bundles, so a
+Wrappfile can `COPY` an `.icns` that its first run makes.
 
 `--from steam` builds any game on Steam that the signed-in account owns;
 `--steam-launch steam|direct` answers the launch question for a DRM-free one,

@@ -582,8 +582,8 @@ app keeps no Wine.
 - **`APP --icon` names an `.icns` in the app's `/Resources/`**, which a
   `COPY` put there; the build sets it as the app's icon. An app with no icon
   has the template's own, a generic one. An `.icns`, not an Icon Composer
-  `.icon`, as only Xcode compiles those: a module's `assets/<name>.icon` is
-  compiled to `<name>.icns` beside it by `sc generate`.
+  `.icon`, as only Xcode compiles those: a module's or a bundle's
+  `assets/<name>.icon` is compiled to `<name>.icns` beside it by `sc generate`.
 - **`APP --name`** is the app's name, in place of the game's title, and
   **`APP --default-id`** its bundle id when whoever runs the build gives
   none. The caller's id always wins, and Second Chance always gives one
