@@ -399,8 +399,12 @@ static CGImageRef copyWindowPicture(void) {
         SCContentFilter *filter = [[SCContentFilter alloc] initWithDesktopIndependentWindow:found];
         SCStreamConfiguration *config = [SCStreamConfiguration new];
         // Twice the Mac's pixels: the Mac's small bitmap fonts read better.
+        // Scaled to fit: Basilisk II's window has a 1x backing even on a
+        // Retina display, and unscaled it filled only a quarter of the
+        // picture, its text too small for Vision to read.
         config.width = (size_t)size.width * 2;
         config.height = (size_t)size.height * 2;
+        config.scalesToFit = YES;
         config.showsCursor = NO;
         [SCScreenshotManager captureImageWithFilter:filter configuration:config
                                   completionHandler:^(CGImageRef image, NSError *captureError) {
@@ -448,6 +452,37 @@ static NSString *comparable(NSString *text) {
             componentsJoinedByString:@""];
 }
 
+/// Whether `wanted` is in `text`, both `comparable`, allowing a letter in
+/// every eight misread: Vision reads the Mac's bitmap fonts well but not
+/// perfectly ("Quioktime 2.5 Installer"). Words under eight letters must be
+/// read exactly. An approximate substring match (Sellers' edit distance).
+static BOOL containsRoughly(NSString *text, NSString *wanted) {
+    if ([text containsString:wanted]) return YES;
+    NSUInteger m = wanted.length, n = text.length;
+    NSUInteger allowed = m / 8;
+    if (allowed == 0 || m == 0) return NO;
+    NSUInteger *previous = calloc(m + 1, sizeof(NSUInteger)), *current = calloc(m + 1, sizeof(NSUInteger));
+    if (!previous || !current) { free(previous); free(current); return NO; }
+    BOOL found = NO;
+    for (NSUInteger i = 0; i <= m; i++) previous[i] = i;
+    for (NSUInteger j = 1; j <= n && !found; j++) {
+        current[0] = 0;   // a match may start anywhere in the text
+        unichar c = [text characterAtIndex:j - 1];
+        for (NSUInteger i = 1; i <= m; i++) {
+            NSUInteger cost = [wanted characterAtIndex:i - 1] == c ? 0 : 1;
+            NSUInteger best = previous[i - 1] + cost;
+            if (previous[i] + 1 < best) best = previous[i] + 1;
+            if (current[i - 1] + 1 < best) best = current[i - 1] + 1;
+            current[i] = best;
+        }
+        if (current[m] <= allowed) found = YES;
+        NSUInteger *swap = previous; previous = current; current = swap;
+    }
+    free(previous);
+    free(current);
+    return found;
+}
+
 /// A picture of the screen left where BASILISK_MAC_AUTOMATION_PICTURES says,
 /// for whoever looks into a failure.
 static void keepPicture(const char *name) {
@@ -484,7 +519,7 @@ static NSString *waitForText(NSString *text, double seconds, BOOL gone) {
             if (picture) {
                 NSString *read = textIn(picture) ?: @"";
                 CGImageRelease(picture);
-                if ([comparable(read) containsString:wanted] != gone) return nil;
+                if (containsRoughly(comparable(read), wanted) != gone) return nil;
                 last = read.length ? [read stringByReplacingOccurrencesOfString:@"\n" withString:@" | "] : @"(no text)";
             }
         }

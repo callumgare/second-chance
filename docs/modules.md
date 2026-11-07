@@ -498,7 +498,9 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
   of puppet control's requests (`click 440 418`, `key cmd+option+w`,
   [docs/wine-in-process-helpers.md](wine-in-process-helpers.md#puppet-control)),
   `type <text>`, `wait <seconds>`, `wait-for <seconds> <text>`, which waits for the
-  text to be on the Mac's screen (Vision reading a picture of the window), or
+  text to be on the Mac's screen (Vision reading a picture of the window, scaled
+  to twice its size; case and spaces don't count, and in text of eight letters or
+  more one letter in eight may be misread), or
   `wait-gone <seconds> <text>`, for it to go, or `wait-restart <seconds>`, for the
   Mac to restart. Basilisk II keeps its window at a restart, and the screens
   between are gone too soon to be caught reliably, so a restart is told by the
