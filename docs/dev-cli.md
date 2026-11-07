@@ -221,6 +221,7 @@ They map onto the app's and wrapp's own switches:
 | `strict-install`          | `STRICT_INSTALL=true`                 |           | ✓             |             |
 | `keep-failed-build`       | `SECOND_CHANCE_KEEP_FAILED_BUILD=1`   | ✓         | ✓             |             |
 | `install-stall=<seconds>` | `SECOND_CHANCE_INSTALL_STALL_SECONDS` | ✓         | ✓             |             |
+| `leftover-wait=<seconds>` | `SECOND_CHANCE_WINE_LEFTOVER_SECONDS` | ✓         | ✓             |             |
 | `layer-cache=<policy>`    | `SECOND_CHANCE_LAYER_CACHE=<policy>`  | ✓         | ✓             |             |
 | `settings-dialog`         | `--debug-options`                     |           |               | ✓           |
 | `wine=<channels>`         | `SECOND_CHANCE_WINEDEBUG=<channels>`  | ✓         | ✓             | ✓           |

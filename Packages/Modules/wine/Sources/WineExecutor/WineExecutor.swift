@@ -143,7 +143,7 @@ public nonisolated struct WineExecutor: ModuleExecutor {
         case "PREFIX":
             // wineboot's prefix, Wine's server let finish so it's all written.
             try await wine.run(.wine(["wineboot", "-u"]))
-            try await wine.server.waitUntilProgramsExit(timeout: nil)
+            try await Self.endLeftovers(of: wine, after: "wineboot", limit: Self.leftoverLimit())
         default:
             throw StepFailure.recipe("\(step.origin): the wine module has no instruction \(step.instruction)")
         }
@@ -180,9 +180,11 @@ public nonisolated struct WineExecutor: ModuleExecutor {
         } catch WineError.executionFailed(let exit) {
             code = exit
         }
-        // A program failing still waits for what it started.
+        // A program failing still waits for what it started, for as long as
+        // the step's --timeout gives the program, or the leftovers' limit.
         desktop?.release()
-        try await wine.server.waitUntilProgramsExit(timeout: timeout)
+        try await Self.endLeftovers(of: wine, after: path,
+                                    limit: program.timeout.map { TimeInterval($0.components.seconds) } ?? Self.leftoverLimit())
         return code
     }
 
@@ -278,8 +280,43 @@ public nonisolated struct WineExecutor: ModuleExecutor {
     public func checkpoint(_ context: any StepContext) async throws {
         let server = Wine(wrapp: context.tree).server
         guard await server.isRunning else { return }
-        try await server.waitUntilProgramsExit(timeout: nil)
+        try await Self.endLeftovers(of: Wine(wrapp: context.tree), after: "the stage's last step", limit: Self.leftoverLimit())
         await server.stop()
+    }
+
+    // MARK: - Leftovers
+
+    /// How long the programs a step leaves running may go on once its own
+    /// program has finished, unless the step gives a --timeout:
+    /// `SECOND_CHANCE_WINE_LEFTOVER_SECONDS`, else 5 minutes. Builds' logs
+    /// show this wait at about 3 s (Wine's server lingering after its last
+    /// program), 7 s at most on a fully loaded Mac, and 73–97 s for the two
+    /// InstallShield installers whose setup.exe hands the install to a
+    /// child and exits; a window left open (an installer's folder, a
+    /// dialog nobody answers) waited for ever, or until a test timed out.
+    public static func leftoverLimit(environment: [String: String] = ProcessInfo.processInfo.environment) -> TimeInterval {
+        environment["SECOND_CHANCE_WINE_LEFTOVER_SECONDS"].flatMap(TimeInterval.init).flatMap { $0 > 0 ? $0 : nil } ?? 300
+    }
+
+    /// Wait for what a step left running in `wine`'s session to finish, for
+    /// at most `limit` (stretched while the Mac is heavily loaded); past
+    /// it, log what's still running and end the session, Wine's own way
+    /// first (`stop`, then `kill`). The step carries on: its program has
+    /// finished, and what it was to make is judged by its own checks (its
+    /// exit code, `--creates`, its signals), as a leftover that was still
+    /// working leaves something those miss.
+    static func endLeftovers(of wine: Wine, after what: String, limit: TimeInterval) async throws {
+        let server = wine.server
+        if try await server.waitUntilProgramsExit(allowance: WaitAllowance(limit: limit)) { return }
+        let left = await Blocking.run { server.programs() }
+        let names = left.map { "\($0.name) (\($0.pid))" }.joined(separator: ", ")
+        logger.warning("""
+            [Wine] Wine programs still running \(Int(limit)) s after \(what) finished, so its session is being ended: \
+            \(names.isEmpty ? "none found, only Wine's server" : names) \
+            (SECOND_CHANCE_WINE_LEFTOVER_SECONDS gives them longer)
+            """)
+        await server.stop()
+        if await !server.waitUntilStopped(timeout: 15) { await server.kill() }
     }
 
     /// The helpers the Mac driver loads, laid in the tree's `Frameworks/`.

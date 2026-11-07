@@ -316,6 +316,32 @@ nonisolated public struct WineServer: Sendable {
         try await wine.run(.wineserver(["-w"]), timeout: timeout, watchdog: watchdog)
     }
 
+    /// Wait for the programs a step left running to finish, for at most
+    /// `allowance`'s time: whether they did. Time while the Mac is heavily
+    /// loaded counts for less (`WaitAllowance`), as Wine slows sharply once
+    /// every core is busy. Leaves the session as it is either way: ending
+    /// it is the caller's. Cancelling stops the wait.
+    public func waitUntilProgramsExit(allowance initial: WaitAllowance,
+                                      isHeavy: @escaping @Sendable () -> Bool = { SystemLoad.read()?.isHeavy ?? false })
+        async throws -> Bool {
+        guard hasWine else { return true }
+        let ended = EndedFlag()
+        guard let waiter = onStop({ ended.set() }) else {
+            return await waitUntilStopped(timeout: initial.limit)
+        }
+        defer { if !ended.isSet { waiter.terminate() } }
+        var allowance = initial
+        var heavy = false
+        var tick = 0
+        while !ended.isSet {
+            try await Task.sleep(for: .seconds(1))
+            if tick % 10 == 0 { heavy = await Blocking.run { isHeavy() } }
+            tick += 1
+            if allowance.spend(1, heavy: heavy) { return ended.isSet }
+        }
+        return true
+    }
+
     /// `stop()`, for code that can't wait asynchronously: the launcher's
     /// cancellation handler. Blocks until the request has been made.
     func stopNow() {
@@ -329,4 +355,27 @@ nonisolated public struct WineServer: Sendable {
             logger.warning("Couldn't stop Wine (wineserver -k): \(error.localizedDescription)")
         }
     }
+}
+
+/// How long a wait may go on: `limit` seconds of time on a Mac that isn't
+/// heavily loaded, a second while it is counting as half.
+nonisolated public struct WaitAllowance: Sendable, Equatable {
+    public let limit: TimeInterval
+    public private(set) var spent: TimeInterval = 0
+
+    public init(limit: TimeInterval) { self.limit = limit }
+
+    /// `seconds` of waiting spent; whether the allowance has run out.
+    public mutating func spend(_ seconds: TimeInterval, heavy: Bool) -> Bool {
+        spent += heavy ? seconds / 2 : seconds
+        return spent >= limit
+    }
+}
+
+/// Set once from another thread, read from the waiting task.
+private nonisolated final class EndedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var ended = false
+    func set() { lock.withLock { ended = true } }
+    var isSet: Bool { lock.withLock { ended } }
 }

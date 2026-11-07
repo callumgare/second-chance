@@ -768,6 +768,32 @@ exited); all but two games stayed under 15 s. A `setup.exe` frozen with
 `kill -STOP` under a 30 s window was stopped 31 s after its last sign, and its
 headless build failed with `installStalled` about a minute after the freeze.
 
+## Programs a step leaves running
+
+A Wine step waits for every program its own program started to finish
+(`wineserver -w`) before the next step, or before its stage is kept as a
+layer: an installer's bootstrap often hands over to another program and
+exits. That wait has a limit (`WineExecutor.endLeftovers`): the step's
+`--timeout` when it gives one, else `SECOND_CHANCE_WINE_LEFTOVER_SECONDS`, 5
+minutes by default (`sc … --debug leftover-wait=<seconds>`), a second
+counting as half while the Mac is heavily loaded (`WaitAllowance`), since
+Wine slows sharply once every core is busy. Past it, the build logs the Wine
+programs still running and ends the session, Wine's own way first
+(`wineserver -k`, then `WineServer.kill`), and carries on: the step's own
+program has finished, and whether it made what it should is for the step's
+own checks (its exit code, `--creates`, its signals), which a leftover still
+working when it was ended leaves something to fail. `INSTALLER.RUN` waits for
+its leftovers its own way, under the install's timeout and stall watch
+([above](#a-stalled-install)).
+
+The limit comes from builds' logs (990 of these waits, on this project's
+test Macs): about 3 s, Wine's server lingering after its last program; 7 s
+at most with every core busy; and 73–97 s, in every build, for the two
+InstallShield games whose `setup.exe` exits and leaves the install to its
+children. The waits that never ended were a window left open, an
+installer's folder opened after it exited and a dialog nobody answered,
+and before the limit they held a build until something killed it.
+
 ## Headless runs
 
 `CLIBuilder` (not the ViewModel) owns headless mode. `NON_INTERACTIVE=true`

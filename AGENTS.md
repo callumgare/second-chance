@@ -539,7 +539,10 @@ direct assignment.
   `SECOND_CHANCE_INSTALL_TIMEOUT` seconds (default 1800), but is stopped long
   before that once it shows no sign of progress for
   `SECOND_CHANCE_INSTALL_STALL_SECONDS` (`InstallStallWatch`,
-  [docs/wrapp-build.md](docs/wrapp-build.md#a-stalled-install)). The `--skip-installer` debug flag
+  [docs/wrapp-build.md](docs/wrapp-build.md#a-stalled-install)). Programs any
+  other Wine step leaves running get `SECOND_CHANCE_WINE_LEFTOVER_SECONDS`
+  (default 300) before the session is ended and the build carries on
+  ([docs/wrapp-build.md](docs/wrapp-build.md#programs-a-step-leaves-running)). The `--skip-installer` debug flag
   skips running the installer entirely (useful for testing wrapp construction).
   Through `sc` these are `--debug strict-install` and `--debug skip-installer`;
   the `SECOND_CHANCE_*` switches below are `--debug` values on `sc wrapp run`
