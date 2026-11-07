@@ -8,9 +8,12 @@ built from `Tools/icon-lab/web`. Second Chance opens it with Debug ▸ Icon
 Lab… (`SecondChance/IconLab/`): a web view whose `iconlab://` scheme handler
 answers the page and its API through `IconLabAPI.handle`, with one engine for
 the app's life. Its data is in `~/Library/Application Support/SecondChance/Icon
-Lab` (`SECOND_CHANCE_ICON_LAB_DATA` names another); a Debug build reads the
-checkout's `.env`, `icon-extract` build and `built-apps/`, and offers to move
-the standalone lab's `.local/tools/icon-lab/data` in when its own is empty.
+Lab` (`SECOND_CHANCE_ICON_LAB_DATA` names another). It lists Second Chance's
+programs first when finding one (each opens as the program for its bundle);
+a Debug build also reads the checkout's `.env`, lists its `built-apps/`
+wrapps to scan and try designs on, saves pinned designs to its `Bundles/`
+(`SECOND_CHANCE_ICON_LAB_BUNDLES` names another), and offers to move the
+standalone lab's `.local/tools/icon-lab/data` in when its own is empty.
 
 Where things are:
 
@@ -18,8 +21,10 @@ Where things are:
   gathering, analysis (`Analysis/`, Vision and Core ML), parts and cut-outs
   (`Lab*.swift`), treatments, rendering (`Render/`, its own sketch renderer
   and Icon Composer's `ictool`), documents, jobs and the store. `Lab` is the
-  entry point; `LabTools` is what it uses from outside (`icon-extract`,
-  `ictool`, where built wrapps are), which the host finds and passes in.
+  entry point; `LabTools` is what it uses from outside (`ictool`, where
+  built wrapps are) and `LabHostInfo` what its host knows (its programs, a
+  `Bundles/` to save to), which the host finds and passes in. "Add from
+  files" finds images with WrappKit's `ProgramImages` in-process.
 - `Sources/IconLabAPI/`: the API, with no web server in it.
   `IconLabAPI.handle(_:)` takes an `APIRequest` and answers an `APIResponse`
   (data or a file to stream); `events()` streams what the engine broadcasts.

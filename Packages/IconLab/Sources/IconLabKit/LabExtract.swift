@@ -1,22 +1,15 @@
 import Foundation
 import Logging
+import ProgramImages
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.IconLab.Extract")
 
-/// "Add from files": runs `icon-extract` (committed Swift on the icon-lab branch, docs/program-images.md there)
-/// over a path, streams its progress to the page as `scan` events, and adds the images it found as media.
+/// "Add from files": finds every image in a path with `ProgramImages` (WrappKit, docs/program-images.md), in this
+/// process and off the main actor, streams its progress to the page as `scan` events, and adds the images it found
+/// as media. Cancelling the scan's job stops the crawl.
 nonisolated extension Lab {
-    /// Where the icon-extract binary is: $ICON_EXTRACT, else the one the host gave (`LabTools`).
-    public var iconExtract: String? {
-        if let p = env["ICON_EXTRACT"], FileManager.default.isExecutableFile(atPath: p) { return p }
-        return tools.iconExtract.flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
-    }
-
-    /// Starts a scan; returns its id. Events: `{type:"scan", program, scan, event: <icon-extract's JSON line>}`.
+    /// Starts a scan; returns its id. Events: `{type:"scan", program, scan, event: <an extraction event's JSON line>}`.
     public func extract(_ slug: String, path: String) async throws -> String {
-        guard let tool = iconExtract else {
-            throw IconLabError.tool("icon-extract isn't built: run `swift build -c release --product icon-extract` in Packages/WrappKit")
-        }
         guard FileManager.default.fileExists(atPath: path) else { throw IconLabError.notFound(path) }
         let scan = UUID().uuidString.lowercased().prefix(8)
         let out = store.dir(slug).appendingPathComponent("scans").appendingPathComponent(String(scan))
@@ -26,8 +19,16 @@ nonisolated extension Lab {
         let name = (path as NSString).lastPathComponent
         await jobs.enqueue(title: "Find images in \(name)", program: slug, group: "scan", source: "files") { [self] progress in
             var seen = 0
-            try await Run.lines(tool, [path, "--out", out.path]) { line in
-                guard let d = line.data(using: .utf8), let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return }
+            let (lines, sink) = AsyncStream<String>.makeStream()
+            let crawl = Task {
+                defer { sink.finish() }
+                _ = try await ProgramImageExtractor.extract(URL(fileURLWithPath: path), options: ExtractionOptions(outputDirectory: out)) {
+                    sink.yield($0.jsonLine)
+                }
+            }
+            defer { crawl.cancel() }
+            for await line in lines {
+                guard let d = line.data(using: .utf8), let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { continue }
                 if let ev = try? JSONSerialization.data(withJSONObject: ["type": "scan", "program": slug, "scan": String(scan), "event": obj]) {
                     await self.jobs.broadcastData(ev)
                 }
@@ -37,6 +38,7 @@ nonisolated extension Lab {
                 }
                 if obj["event"] as? String == "image" { seen += 1 }
             }
+            try await withTaskCancellationHandler { try await crawl.value } onCancel: { crawl.cancel() }
             await progress(0.92, "Adding the images")
             try await self.importExtracted(slug, from: out, scanRoot: name)
         }
@@ -222,33 +224,5 @@ nonisolated extension Lab {
         if let chains = r["chains"] as? [[String: Any]], let first = chains.first, let s = first["display"] as? String { return s }
         if let ds = r["display"] as? [String], let s = ds.first { return s }
         return r["name"] as? String ?? "your files"
-    }
-}
-
-nonisolated extension Run {
-    /// Runs a program and hands each stdout line to `line` as it arrives. Its end is awaited, not waited for on a
-    /// thread; cancelling the task stops it.
-    public static func lines(_ path: String, _ args: [String], _ line: (String) async -> Void) async throws {
-        let p = Process()   // ProcessKit's runners return output at the end; this one streams it
-        p.executableURL = URL(fileURLWithPath: path)
-        p.arguments = args
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = FileHandle.nullDevice
-        p.standardInput = FileHandle.nullDevice
-        let exited = AsyncStream<Int32>.makeStream()
-        p.terminationHandler = { exited.continuation.yield($0.terminationStatus); exited.continuation.finish() }
-        try p.run()
-        try await withTaskCancellationHandler {
-            for try await l in pipe.fileHandleForReading.bytes.lines { await line(l) }
-        } onCancel: {
-            if p.isRunning { p.terminate() }
-        }
-        var status: Int32 = 0
-        for await s in exited.stream { status = s }
-        if status != 0 {
-            logger.error("\((path as NSString).lastPathComponent) exited \(status)")
-            throw IconLabError.tool("icon-extract exited \(status)")
-        }
     }
 }

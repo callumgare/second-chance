@@ -80,6 +80,17 @@ import WebKit
         }
     }
 
+    @Test func theHostGivesSecondChancesProgramsAndItsBundles() throws {
+        let known = IconLabPaths.knownPrograms()
+        #expect(known.contains { $0.id == "freeware/skifree" && $0.title == "SkiFree" })
+        #expect(Set(known.map(\.id)).count == known.count)
+        let paths = IconLabPaths.current(environment: ["SECOND_CHANCE_ICON_LAB_BUNDLES": "/nonexistent/Bundles",
+                                                        "SECOND_CHANCE_ICON_LAB_DATA": "/nonexistent/data"])
+        #expect(paths.host.bundles?.path == "/nonexistent/Bundles")
+        #expect(paths.data.path == "/nonexistent/data")
+        #expect(paths.host.knownPrograms.count == known.count)
+    }
+
     @Test func oldDataIsOfferedOnlyIntoAnEmptyFolder() async throws {
         try await withScratch { dir in
             let old = dir.appendingPathComponent("old"), new = dir.appendingPathComponent("new")

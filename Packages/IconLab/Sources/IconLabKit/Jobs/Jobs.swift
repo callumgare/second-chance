@@ -23,6 +23,8 @@ public actor Jobs {
     private var listeners: [UUID: Listener] = [:]
     private var running = 0
     private var waiting: [(String, @Sendable () async throws -> Void)] = []
+    /// Running jobs' tasks, so a job can be cancelled.
+    private var tasks: [String: Task<Void, Never>] = [:]
     public let width: Int
 
     public init(width: Int = 3) { self.width = width }
@@ -84,9 +86,9 @@ public actor Jobs {
         order.append(id)
         if order.count > 300 { let drop = order.removeFirst(); jobs[drop] = nil }
         publish(job)
-        Task.detached { [self] in
+        tasks[id] = Task.detached { [self] in
             var failure: String?
-            do { try await work { p, detail in await self.progress(id, p, detail) } } catch { failure = "\(error)" }
+            do { try await work { p, detail in await self.progress(id, p, detail) } } catch { failure = Self.failure(error) }
             await self.finish(id, failure, slotted: false)
         }
         return id
@@ -99,9 +101,9 @@ public actor Jobs {
             jobs[id]?.state = "running"
             jobs[id]?.started = Date()
             if let j = jobs[id] { publish(j) }
-            Task.detached { [weak self] in
+            tasks[id] = Task.detached { [weak self] in
                 var failure: String?
-                do { try await work() } catch { failure = "\(error)" }
+                do { try await work() } catch { failure = Self.failure(error) }
                 await self?.finish(id, failure)
             }
         }
@@ -116,7 +118,29 @@ public actor Jobs {
         publish(j)
     }
 
+    /// Cancels a job: a queued one never starts, and a running one's task is cancelled, so work that checks stops
+    /// (a scan, a download). False when there's no such job, or it has finished.
+    @discardableResult
+    public func cancel(_ id: String) -> Bool {
+        if let i = waiting.firstIndex(where: { $0.0 == id }) {
+            waiting.remove(at: i)
+            running += 1   // finish takes the slot back
+            finish(id, Self.cancelled)
+            return true
+        }
+        guard let task = tasks[id] else { return false }
+        task.cancel()
+        return true
+    }
+
+    static let cancelled = "cancelled"
+
+    nonisolated static func failure(_ error: any Error) -> String {
+        error is CancellationError ? cancelled : "\(error)"
+    }
+
     private func finish(_ id: String, _ failure: String?, slotted: Bool = true) {
+        tasks[id] = nil
         if slotted { running -= 1 }
         if var j = jobs[id] {
             j.state = failure == nil ? "done" : "failed"

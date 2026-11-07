@@ -40,8 +40,10 @@ let package = Package(
             name: "IconLabKit",
             dependencies: [
                 .product(name: "Logging", package: "swift-log"),
-                // Running ictool, icon-extract, ditto and the rest off the main thread.
+                // Running ictool, actool, ditto and the rest off the main thread.
                 .product(name: "ProcessKit", package: "WrappKit"),
+                // "Add from files": every image in a program, its installer, disc or wrapp, found in-process.
+                .product(name: "ProgramImages", package: "WrappKit"),
             ],
             swiftSettings: swiftSettings
         ),

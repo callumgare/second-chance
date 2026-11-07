@@ -46,8 +46,10 @@ nonisolated public final class IconLabAPI: Sendable {
     ///   - env: keys and settings (`Env(file:)` reads a `.env` the host names).
     ///   - webRoot: the built page, served at `/`; by default the one in this package's resources.
     ///   - tools: the programs and places Icon Lab uses from outside (`LabTools`).
-    public convenience init(dataDir: URL, env: Env = Env(file: nil), webRoot: URL? = IconLabAPI.bundledWebRoot, tools: LabTools = LabTools()) {
-        self.init(lab: Lab(dataDir: dataDir, env: env, tools: tools), webRoot: webRoot)
+    ///   - host: the programs the host has bundles for, and where those bundles may be written (`LabHostInfo`).
+    public convenience init(dataDir: URL, env: Env = Env(file: nil), webRoot: URL? = IconLabAPI.bundledWebRoot, tools: LabTools = LabTools(),
+                            host: LabHostInfo = LabHostInfo()) {
+        self.init(lab: Lab(dataDir: dataDir, env: env, tools: tools, host: host), webRoot: webRoot)
     }
 
     public init(lab: Lab, webRoot: URL? = IconLabAPI.bundledWebRoot) {
@@ -60,6 +62,7 @@ nonisolated public final class IconLabAPI: Sendable {
         Self.addCatalogRoutes(&router, lab: lab, catalog: catalog)
         Self.addStageTwoRoutes(&router, lab: lab)
         Self.addModelRoutes(&router, lab: lab)
+        Self.addHostRoutes(&router, lab: lab)
         self.router = router
     }
 

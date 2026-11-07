@@ -7,13 +7,14 @@ import IconLabKit
 import Logging
 import NIOCore
 
-// icon-lab-server --data <dir> [--port 8767] [--env <file>] [--web <dir>] [--icon-extract <path>] [--ictool <path>]
-//                 [--v1 <games dir>] [--no-refresh]
+// icon-lab-server --data <dir> [--port 8767] [--env <file>] [--web <dir>] [--ictool <path>] [--built-apps <dir>]
+//                 [--bundles <dir>] [--v1 <games dir>] [--no-refresh]
 //
 // Serves Icon Lab's API (Packages/IconLab/docs/api.md) on 127.0.0.1, the page from --web, and the API's events on the
 // /api/events WebSocket. --env defaults to the checkout's .env; --web to the page built into IconLabAPI's resources
-// (`sc icon-lab build`); the tools to the checkout's icon-extract build and Xcode's ictool. --no-refresh leaves the
-// catalogue's local copies as they are. `sc icon-lab serve` runs this with Vite's dev server in front.
+// (`sc icon-lab build`); ictool to Xcode's; --built-apps to the checkout's built-apps/. --bundles names a Bundles/
+// folder whose programs are listed first and whose bundles designs can be saved to (none by default, so nothing
+// writes to the checkout's own unless asked). --no-refresh leaves the catalogue's local copies as they are. `sc icon-lab serve` runs this with Vite's dev server in front.
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.IconLab.Server")
 
@@ -36,10 +37,15 @@ let dataDir = URL(fileURLWithPath: data)
 let envFile = URL(fileURLWithPath: option("--env") ?? checkout.appendingPathComponent(".env").path)
 let webDir = option("--web").map { URL(fileURLWithPath: $0) } ?? IconLabAPI.bundledWebRoot
 var tools = LabTools.inCheckout(checkout)
-if let p = option("--icon-extract") { tools.iconExtract = p }
 if let p = option("--ictool") { tools.ictool = p }
+if let p = option("--built-apps") { tools.builtApps = URL(fileURLWithPath: p) }
+var host = LabHostInfo()
+if let p = option("--bundles") {
+    let bundles = URL(fileURLWithPath: p)
+    host = LabHostInfo(knownPrograms: KnownProgram.read(bundles: bundles), bundles: bundles)
+}
 
-let api = IconLabAPI(dataDir: dataDir, env: Env(file: envFile), webRoot: webDir, tools: tools)
+let api = IconLabAPI(dataDir: dataDir, env: Env(file: envFile), webRoot: webDir, tools: tools, host: host)
 await api.start(importingV1From: option("--v1").map { URL(fileURLWithPath: $0) }, refreshingLocalCopies: !args.contains("--no-refresh"))
 
 /// Hands every request to the API.

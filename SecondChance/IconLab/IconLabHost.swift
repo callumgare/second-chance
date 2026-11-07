@@ -8,6 +8,7 @@
 //  answered off the main actor (Packages/IconLab/README.md).
 
 import Foundation
+import GameCatalog
 import IconLabAPI
 import IconLabKit
 import Logging
@@ -22,13 +23,16 @@ nonisolated struct IconLabPaths: Sendable {
     /// The `.env` its keys come from, if any.
     var env: URL?
     var tools: LabTools
+    /// The programs Second Chance has bundles for, and the checkout's `Bundles/` to save designs to.
+    var host: LabHostInfo
     /// The standalone lab's data, which the window offers to move in (`IconLabMigration`).
     var oldData: URL?
 
-    init(data: URL, env: URL? = nil, tools: LabTools = LabTools(), oldData: URL? = nil) {
+    init(data: URL, env: URL? = nil, tools: LabTools = LabTools(), host: LabHostInfo = LabHostInfo(), oldData: URL? = nil) {
         self.data = data
         self.env = env
         self.tools = tools
+        self.host = host
         self.oldData = oldData
     }
 
@@ -39,22 +43,32 @@ nonisolated struct IconLabPaths: Sendable {
         return StoreLocations.realAppSupport.appendingPathComponent("SecondChance/Icon Lab", isDirectory: true)
     }
 
-    /// This build's: in a Debug build, the checkout it was built from gives the keys (its `.env`), `icon-extract`
-    /// (built in its WrappKit package), `built-apps/` and the old data; in any build, Xcode's `ictool` if it's there.
+    /// This build's: the programs Second Chance has bundles for, and Xcode's `ictool` if it's there; in a Debug
+    /// build, the checkout it was built from also gives the keys (its `.env`), `built-apps/`, `Bundles/` (to save
+    /// designs to) and the old data. `SECOND_CHANCE_ICON_LAB_BUNDLES` and `SECOND_CHANCE_ICON_LAB_OLD_DATA` name others.
     static func current(environment: [String: String] = ProcessInfo.processInfo.environment) -> IconLabPaths {
-        var tools = LabTools(ictool: FileManager.default.isExecutableFile(atPath: LabTools.xcodeICTool) ? LabTools.xcodeICTool : nil)
+        var tools = LabTools(ictool: LabTools.installedICTool)
+        var host = LabHostInfo(knownPrograms: knownPrograms())
         var env: URL?
         var oldData: URL?
-        if let bundled = Bundle.main.url(forAuxiliaryExecutable: "icon-extract") { tools.iconExtract = bundled.path }
         if let checkout = sourceCheckout {
-            let inCheckout = LabTools.inCheckout(checkout)
-            tools.iconExtract = tools.iconExtract ?? inCheckout.iconExtract
-            tools.builtApps = inCheckout.builtApps
+            tools.builtApps = LabTools.inCheckout(checkout).builtApps
+            host.bundles = checkout.appendingPathComponent("Bundles", isDirectory: true)
             env = checkout.appendingPathComponent(".env")
             oldData = checkout.appendingPathComponent(".local/tools/icon-lab/data", isDirectory: true)
         }
+        if let path = environment["SECOND_CHANCE_ICON_LAB_BUNDLES"], !path.isEmpty { host.bundles = URL(fileURLWithPath: path, isDirectory: true) }
         if let path = environment["SECOND_CHANCE_ICON_LAB_OLD_DATA"], !path.isEmpty { oldData = URL(fileURLWithPath: path, isDirectory: true) }
-        return IconLabPaths(data: dataFolder(environment: environment), env: env, tools: tools, oldData: oldData)
+        return IconLabPaths(data: dataFolder(environment: environment), env: env, tools: tools, host: host, oldData: oldData)
+    }
+
+    /// Every program in the game catalogue (the shipped bundles, and the extra ones `sc --bundle` named), once each.
+    static func knownPrograms(_ catalogue: GameInfoProvider = .shared) -> [KnownProgram] {
+        var seen: Set<String> = []
+        return catalogue.allGames().compactMap { game in
+            guard seen.insert(game.programID).inserted else { return nil }
+            return KnownProgram(id: game.programID, title: game.appName)
+        }
     }
 
     /// The checkout a Debug build was built from (`SourceCheckout` in its Info.plist, from `$(SRCROOT)`); nil in a
@@ -89,7 +103,7 @@ final class IconLabHost {
     var api: IconLabAPI {
         if let made { return made }
         logger.notice("Icon Lab's data: \(paths.data.path)")
-        let api = IconLabAPI(dataDir: paths.data, env: Env(file: paths.env), tools: paths.tools)
+        let api = IconLabAPI(dataDir: paths.data, env: Env(file: paths.env), tools: paths.tools, host: paths.host)
         made = api
         return api
     }

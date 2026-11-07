@@ -164,7 +164,7 @@ Id namespaces in `ids`: `wikidata`, `wikipedia` (page title), `launchbox`, `theg
 picture those sources found before is removed first (files, masks, parts, picks and all) and
 `{ type: "media-removed", program, ids }` is sent, so the source gathers again from nothing: "Clear and gather again".
 The source id `"files"` is "Your files": gathering it again scans every path scanned before (that's still there)
-with icon-extract; with `clear`, its pictures and the old scans are removed first. Its scan jobs carry `source: "files"`.
+as `extract` does; with `clear`, its pictures and the old scans are removed first. Its scan jobs carry `source: "files"`.
 `GET /api/programs/:slug/scans` → `{ scan, path, at }[]`, newest first: what has been scanned (scans from before
 paths were recorded aren't listed, so "Your files" from them can be cleared but not scanned again).
 
@@ -253,10 +253,50 @@ type FSEntry = { name: string; path: string; dir: boolean; size?: number
 ```
 
 `POST /api/programs/:slug/extract` `{ path }` → `{ scan }` — finds every image in a wrapp, installer, disc image or
-folder with `icon-extract` (a job, group "scan"). Its progress streams as events
-`{ type: "scan", program, scan, event }`, where `event` is one of icon-extract's JSON lines (`node`, `image`, `skip`,
-`progress`, `done` — see the repo's docs/program-images.md) — enough to draw the unpacking tree live. The
-images it finds arrive as `media` events (source "Your files", with `provenance`).
+folder with WrappKit's `ProgramImages`, in the engine's process (a job, group "scan"; cancelling the job stops the
+crawl). Its progress streams as events `{ type: "scan", program, scan, event }`, where `event` is one of the
+extraction's JSON lines, as `icon-extract` writes them (`node`, `image`, `skip`, `progress`, `done` — see the repo's
+docs/program-images.md) — enough to draw the unpacking tree live. The images it finds arrive as `media` events
+(source "Your files", with `provenance`).
+
+## The host's programs
+
+What the host knows of programs (Second Chance: its bundles and its built wrapps), passed to the engine as
+`LabHostInfo` and `LabTools.builtApps`. A host with none answers with empty lists.
+
+`GET /api/host` → `{ knownPrograms: number; wrapps: boolean; saveToBundle: boolean }` — what it offers.
+`saveToBundle` is true only when the host named a `Bundles/` folder that may be written (a Debug build of Second
+Chance, its checkout's).
+
+`GET /api/known-programs` → `{ id, title, slug, year?, platforms, developer?, publisher?, opened }[]`, by title: the
+programs the host has bundles for (`id` is the bundle id, `freeware/skifree`; `slug` the program it opens as,
+`freeware--skifree`; `opened` whether that program exists yet).
+
+`POST /api/known-programs/open` `{ id }` → `{ slug }`, 201 when the program was made, 200 when it was there. Its
+`program.json` records the bundle as `bundleId`, which `GET /api/programs` and `GET /api/programs/:slug` give too.
+
+`GET /api/wrapps` → `{ name, path, bundleIdentifier?, modified? }[]`, newest first: the apps in the host's built-apps
+folder, which "Add from files" offers to scan with one click.
+
+`POST /api/programs/:slug/try-icon` `{ id?: string; doc?: Doc; wrapp: string; anywhere?: boolean }` →
+`{ wrapp, icns }` — puts a saved design (`id`) or `doc` on a built app as its `APP --icon` would: compiled to
+`Contents/Resources/<slug>.icns` (actool), named by `CFBundleIconFile` with `CFBundleIconName` removed, the app signed
+again ad hoc and touched, so the Dock and Finder show it. Only apps in the built-apps folder, unless `anywhere`
+(the person chose another app themselves); otherwise 400.
+
+`POST /api/programs/:slug/save-to-bundle` `{ ids: string[] }` → `{ bundle, files, allowPathAdded, manifestNote?,
+wrappfileLines?, canAddLines }` — writes the designs, in order, to the program's bundle (its `bundleId`) as
+`assets/<name>.icon`, `<name>-2.icon`, … (`<name>` the bundle folder's name), each with its compiled `.icns`, and adds
+`"assets/"` to the manifest's `allow-paths` (a one-line list, or a new line after the title; otherwise
+`manifestNote` says what to do). When the Wrappfile has no `APP --icon`, `wrappfileLines` are the `COPY` and `APP`
+lines that give the app the first icon; `canAddLines` says whether the engine can add them itself (the Wrappfile has
+one stage). Nothing is committed. 400 when saving isn't available or the program isn't from a bundle.
+
+`POST /api/programs/:slug/save-to-bundle/lines` → `{ added: string[] }` — adds those lines after the stage's last
+`LAUNCH`.
+
+`POST /api/jobs/:id/cancel` → `{ cancelled: boolean }` — a queued job never starts (it ends `failed`, detail
+`"cancelled"`); a running one's task is cancelled, which stops a scan or a download.
 
 ## Models
 

@@ -12,12 +12,15 @@ nonisolated public final class Lab: Sendable {
     public let jobs: Jobs
     public let env: Env
     public let tools: LabTools
+    public let host: LabHostInfo
     public let downloader = Downloader()
 
-    /// `dataDir` holds everything Icon Lab keeps; `env` its keys; `tools` the programs and places it uses from outside.
-    public init(dataDir: URL, env: Env = Env(file: nil), tools: LabTools = LabTools()) {
+    /// `dataDir` holds everything Icon Lab keeps; `env` its keys; `tools` the programs and places it uses from outside;
+    /// `host` what the host knows of programs and their bundles.
+    public init(dataDir: URL, env: Env = Env(file: nil), tools: LabTools = LabTools(), host: LabHostInfo = LabHostInfo()) {
         self.env = env
         self.tools = tools
+        self.host = host
         store = Store(root: dataDir)
         assets = Assets(store: store)
         renderer = Renderer(assets: assets)
@@ -75,6 +78,7 @@ nonisolated public final class Lab: Sendable {
     public struct ProgramDTO: Codable, Sendable {
         var slug, title: String
         var year: Int?
+        var bundleId: String?
         var media: [MediaDTO]
         var colours: [String: String]
         var colourOrder: [String]
@@ -86,7 +90,7 @@ nonisolated public final class Lab: Sendable {
         let media = await store.media(slug)
         let roles = Treatments.defaultRoles(media)
         let (colours, order) = Lab.mergeSameColours(await colourOptions(slug, subject: roles["subject"], media: media))
-        return ProgramDTO(slug: slug, title: p.title, year: p.year, media: media.map { dto(slug, $0) }, colours: colours,
+        return ProgramDTO(slug: slug, title: p.title, year: p.year, bundleId: p.bundleId, media: media.map { dto(slug, $0) }, colours: colours,
                           colourOrder: order, roles: roles)
     }
 
@@ -141,6 +145,7 @@ nonisolated public final class Lab: Sendable {
     public struct ProgramSummary: Codable, Sendable {
         var slug, title: String
         var year: Int?
+        var bundleId: String?
         var thumb: String?
         var media, pins: Int
         var updated: String
@@ -152,7 +157,7 @@ nonisolated public final class Lab: Sendable {
             let media = await store.media(p.slug)
             let pins = await store.state(p.slug).pins.count
             let subject = Treatments.defaultRoles(media)["subject"]
-            out.append(ProgramSummary(slug: p.slug, title: p.title, year: p.year,
+            out.append(ProgramSummary(slug: p.slug, title: p.title, year: p.year, bundleId: p.bundleId,
                                       thumb: subject.map { "/api/programs/\(p.slug)/media/\($0)/thumb" }, media: media.count, pins: pins,
                                       updated: p.updated ?? ""))
         }

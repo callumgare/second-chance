@@ -34,6 +34,8 @@ public actor Store {
         public var updated: String?
         public var developer: String?
         public var publisher: String?
+        /// The host's bundle for it (`freeware/skifree`), when it was opened from the host's programs.
+        public var bundleId: String?
     }
 
     public func programs() -> [ProgramInfo] {

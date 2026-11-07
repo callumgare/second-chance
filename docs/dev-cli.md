@@ -435,7 +435,11 @@ React app, is in `Tools/icon-lab/web`; its engine and API in
   `/api` proxied to the dev server, so a change to the page shows at once.
   Open the address Vite prints. Without `--data`, Icon Lab's data is a
   scratch folder, `.local/icon-lab-dev/data`: copy a program's folder into
-  its `programs/` to work on one. Ctrl-C stops both servers.
+  its `programs/` to work on one. Ctrl-C stops both servers. Run on its own
+  with `swift run`, the server (`icon-lab-server`) also takes
+  `--bundles <dir>`, a `Bundles/` folder whose programs it lists and saves
+  designs to (give it a copy to keep the checkout's own unchanged), and
+  `--built-apps <dir>`.
 
 ## Worktrees
 
