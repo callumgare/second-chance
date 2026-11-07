@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "ingenious-consortium/ingenious"
+version: 1
+title: "Ingenious!"
+display-name: "Ingenious"
+allow-paths: ["mac/"]                        # the script that sets the game's Mac up
+
+volumes:
+  basilisk-disk:
+    display-name: "saved games"   # the emulated Mac's startup disk, where the game keeps its agents
+
+editions:
+  - id: "cd"
+    source: "disc"
+    build:
+      target: "disc"   # the Mac side, under Basilisk II; the Wrappfile's scummvm stage is unfinished, and no edition builds it
+      inputs:
+        disc-1: { type: "disc" }
+    detect:
+      aliases: ["Ingenious CD"]
+      matchers:
+        - { file-exists: "INGW95.EXE" }   # the Windows projector ScummVM detects it by
+
+tests:
+  scenario: "basilisk/starts-and-quits"
+  window: "windowed"   # Basilisk II's window, windowed at start (no green button until the fullscreen helper)
+
+notes:
+  about: "The Ingenious Consortium's 1998 science adventure for Windows and Mac (Director 5.01), a hybrid CD. ScummVM's director engine knows both releases (director:ingenious), and the disc's Educational Resources as director:ingenioused."
+  saves: "The Windows release saves missions and agent profiles in C:\\WINDOWS\\INGPREFS; the Mac release in the System Folder's Preferences:Ingenious Preferences: (Agents:<name>:PROFILE.TXT)."
+  scummvm: "The Wrappfile's scummvm stage (the Windows side) is unfinished: the comment above it says why. Every Director game is ADGF_UNSTABLE in ScummVM, so it warns that the game isn't fully supported before starting it: kept, so the player knows to save often."

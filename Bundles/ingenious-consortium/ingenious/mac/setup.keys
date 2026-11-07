@@ -1,0 +1,59 @@
+# The game's Mac set up once, at build time (BASILISK.RUN): QuickTime 2.5
+# installed from the disc with Apple's Installer, and an alias of the game made
+# on the desktop for BASILISK.STARTUP to move into Startup Items.
+# Click and screen positions are on the Mac's 640x480 screen, in its window.
+
+# The Finder's desktop is up; a click on it gives the Mac the keyboard, and
+# with every window closed, typing selects on the desktop.
+wait-for 180 Trash
+wait 3
+click 450 420
+key cmd+option+w
+wait 2
+
+# Ingenious CD ▸ Quicktime 2.5 Installer ▸ QuickTime™ Install Disk 1 ▸ Install QuickTime™
+type Ingenious CD
+key cmd+down
+wait-for 60 Quicktime 2.5 Installer
+type Quicktime 2
+key cmd+down
+wait-for 60 Install Disk 1
+type QuickTime
+key cmd+down
+wait 4
+type Install Q
+key cmd+o
+
+# Apple's Installer: Continue, the licence's Agree (it has no default button),
+# Install (Easy Install), then Restart.
+wait-for 120 Welcome to QuickTime
+wait 2
+key return
+wait-for 60 Disagree
+wait 2
+click 440 418
+wait-for 60 Easy Install
+wait 2
+key return
+wait-for 600 Installation was successful
+wait 2
+key return
+# The Mac restarts.
+wait-restart 180
+
+# The alias, made in the Finder once the Mac is back: the CD is locked, so the
+# Finder offers to make it on the desktop.
+wait-for 180 Trash
+wait 5
+click 450 420
+key cmd+option+w
+wait 2
+type Ingenious CD
+key cmd+down
+wait-for 60 Quicktime 2.5 Installer
+type Ingenious
+key cmd+m
+wait-for 60 locked
+wait 1
+key return
+wait 3

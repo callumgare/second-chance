@@ -1,0 +1,42 @@
+# Ingenious!: a Macromedia Director 5 title on a hybrid Mac/PC disc.
+INPUT disc-1
+# The emulated Mac's startup disk, the person's own copy, where the game keeps
+# its agents (System Folder:Preferences:Ingenious Preferences:).
+STORE basilisk-disk
+
+# NOT A WORKING ROUTE, kept to finish later; no edition builds it. The disc's
+# Windows side under ScummVM's director engine (2026.4.0), as it is: it
+# reaches the sign-in screen but can't be played, for reasons in ScummVM:
+# - "Some fonts aren't on your system": BOOT.DXR's Windows-only check sets a
+#   field's font to IngMono and IngProp and reads it back; ScummVM loads a
+#   Windows game's .FON fonts (the disc's INSTALL/FONTS/INGMONO_.FON,
+#   INGPROP_.FON) only through a per-game quirk in its source. "Continue
+#   regardless" gets past it.
+# - "Builtin 'count' did not return value!" at sign-in: FileXtra's
+#   DirectoryToList gives VOID, not an empty list, for a folder that isn't
+#   there (\INGPREFS\Agents\), and its CreateDirectory is a stub. An empty
+#   INGPREFS/Agents/ folder in /SharedSupport/game/ gets past it.
+# - No agent can be added: typing reaches the name field, but ScummVM never
+#   runs the game's keyDown/keyUp scripts, which enable the Add button.
+# Its stores are left out until it works, so nothing of a half-working route
+# is kept in a person's files.
+# STORE scummvm-saves
+# STORE scummvm-settings
+FROM scratch AS scummvm
+USE scummvm
+COPY --from=${input.disc-1} . /SharedSupport/game/
+# LAUNCH --mount=type=store,source=scummvm-saves,target=scummvm:saves/
+# LAUNCH --mount=type=store,source=scummvm-settings,target=scummvm:settings/
+LAUNCH scummvm:/SharedSupport/game/ director:ingenious
+
+# The Mac side, under Basilisk II: System 7.5.3 on an emulated 68040 Mac, with
+# the disc as its CD.
+FROM scratch AS disc
+USE basilisk
+BASILISK.CDROM ${input.disc-1}
+# QuickTime 2.5, from the disc, and an alias of the game, made in the Mac.
+BASILISK.RUN --automation=bundle:mac/setup.keys
+# The game opened at every boot.
+BASILISK.STARTUP "basilisk:System7_5_3:Desktop Folder:Ingenious alias"
+LAUNCH --mount=type=store,source=basilisk-disk,target=basilisk:disk/
+LAUNCH --basilisk.screen=640x480x8 "basilisk:Ingenious CD:Ingenious"

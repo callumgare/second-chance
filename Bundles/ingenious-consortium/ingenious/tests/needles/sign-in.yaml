@@ -1,0 +1,5 @@
+# The sign-in screen, where the game waits once its intro has played: the Mac
+# boots into the game by itself (its Startup Items).
+kind: "text"
+tags: ["running"]
+text: { strings: ["Add your name", "Sign in"] }

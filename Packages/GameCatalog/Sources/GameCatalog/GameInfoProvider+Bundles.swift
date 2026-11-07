@@ -61,6 +61,14 @@ nonisolated extension GameInfoProvider {
             displayName: "Tyrian 2000"
         ),
         GameInfo(
+            id: "ingenious",
+            title: "Ingenious!",
+            diskCount: 1,
+            detectionAliases: ["Ingenious CD"],
+            program: "ingenious-consortium/ingenious",
+            displayName: "Ingenious"
+        ),
+        GameInfo(
             id: "secrets-can-kill",
             title: "Secrets Can Kill",
             diskCount: 2,
