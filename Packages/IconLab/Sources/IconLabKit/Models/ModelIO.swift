@@ -71,8 +71,8 @@ nonisolated enum ModelIO {
                 let p = a.dataPointer.assumingMemoryBound(to: Float.self)
                 return offs.map { p[$0] }
             case .float16:
-                let p = a.dataPointer.assumingMemoryBound(to: Float16.self)
-                return offs.map { Float(p[$0]) }
+                let p = a.dataPointer.assumingMemoryBound(to: UInt16.self)
+                return offs.map { HalfFloat.float(p[$0]) }
             case .double:
                 let p = a.dataPointer.assumingMemoryBound(to: Double.self)
                 return offs.map { Float(p[$0]) }
@@ -85,8 +85,8 @@ nonisolated enum ModelIO {
             let p = a.dataPointer.assumingMemoryBound(to: Float.self)
             return Array(UnsafeBufferPointer(start: p, count: n))
         case .float16:
-            let p = a.dataPointer.assumingMemoryBound(to: Float16.self)
-            return UnsafeBufferPointer(start: p, count: n).map { Float($0) }
+            let p = a.dataPointer.assumingMemoryBound(to: UInt16.self)
+            return UnsafeBufferPointer(start: p, count: n).map { HalfFloat.float($0) }
         case .double:
             let p = a.dataPointer.assumingMemoryBound(to: Double.self)
             return UnsafeBufferPointer(start: p, count: n).map { Float($0) }
@@ -109,7 +109,7 @@ nonisolated enum ModelIO {
                 switch fmt {
                 case kCVPixelFormatType_OneComponent8: v = base.load(fromByteOffset: y * row + x, as: UInt8.self)
                 case kCVPixelFormatType_OneComponent16Half:
-                    v = UInt8(max(0, min(255, Float(base.load(fromByteOffset: y * row + x * 2, as: Float16.self)) * 255)))
+                    v = UInt8(max(0, min(255, HalfFloat.float(base.load(fromByteOffset: y * row + x * 2, as: UInt16.self)) * 255)))
                 case kCVPixelFormatType_OneComponent32Float:
                     v = UInt8(max(0, min(255, base.load(fromByteOffset: y * row + x * 4, as: Float.self) * 255)))
                 default: v = base.load(fromByteOffset: y * row + x * 4 + 1, as: UInt8.self)   // BGRA: green

@@ -141,12 +141,12 @@ nonisolated struct SAMEncoding: Sendable {
                 var out = Data(count: a.count * 2)
                 let contiguous = a.strides.map(\.intValue) == Part.strides(shape)
                 out.withUnsafeMutableBytes { dst in
-                    let d = dst.bindMemory(to: Float16.self)
+                    let d = dst.bindMemory(to: UInt16.self)
                     if contiguous {
-                        let s = a.dataPointer.assumingMemoryBound(to: Float16.self)
+                        let s = a.dataPointer.assumingMemoryBound(to: UInt16.self)
                         for i in 0..<a.count { d[i] = s[i] }
                     } else {
-                        for i in 0..<a.count { d[i] = Float16(a[i].floatValue) }
+                        for i in 0..<a.count { d[i] = HalfFloat.bits(a[i].floatValue) }
                     }
                 }
                 bytes = out
