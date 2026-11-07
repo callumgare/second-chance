@@ -642,8 +642,30 @@ the screen (or in a fullscreen Space) with no OpenGL or Metal view, whose one
 subview, the client view, is off its top left, the helper crops the layer's
 image to the client view's size and moves the layer to the client view's
 place after Wine's `updateLayer`, and makes the window's background, which
-the bars show, black. The wrapp's log says
-`[Helpers] Mode scaling: placing the program's scaled picture at 240,0, 1440x1080, in its 1920x1080 window`.
+the bars show, black.
+
+The picture Wine paints can also be a little smaller than the client view.
+win32u places the client view by the display's size over the mode's exactly,
+but stretches the surface by a whole-number DPI, 96 times that ratio rounded
+(`monitor_get_dpi`, then `map_dpi_rect` in `scaled_surface_flush`). On a
+2560x1440 display an 800x600 picture's DPI is 230, not 230.4, so Wine paints
+1917x1438 of a 1920x1440 client view. The last 3 columns and 2 rows showed
+whatever the surface held there, a thin grey line down the right and along
+the bottom (Bioscopia, 2026-11-08). On 1920x1080 the DPI rounds up instead
+(173 for 172.8), and the crop hides the 2 extra pixels. So the helper works
+out the painted size as win32u does and crops to that, and the window's black
+background shows past it. That needs the mode, which win32u can only be asked
+from a Wine thread, so the main thread asks whenever the picture first shows
+or changes, and the game's thread answers it the next time it reads its
+message queue (`NtUserPeekMessage` and `NtUserGetMessage`, replaced in
+win32u's syscall table as `NtUserChangeDisplaySettings` is). The window is then
+drawn again. That covers a mode set before the helper was loaded (a game's
+first `ChangeDisplaySettings` loads the Mac driver, and so the helper) and a
+mode set by another process (`display_mode.exe`). Until the answer comes, the
+crop is to the client view as before. The wrapp's log says
+`[Helpers] Mode scaling: placing the program's scaled picture at 240,0, 1440x1080 (1440x1080 painted), in its 1920x1080 window`,
+once with the client view's size and again with the painted size once the
+mode is known.
 Native fullscreen takes such a window into a Space (`windowShowsScaledPicture`).
 
 What the scaling costs was measured on Bioscopia (2026-11-07, a test session

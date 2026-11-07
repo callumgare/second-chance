@@ -59,6 +59,7 @@
 #include <mach-o/dyld.h>
 #include <mach-o/getsect.h>
 #include <math.h>
+#include <stdatomic.h>
 
 #include "helper_common.h"
 
@@ -112,6 +113,44 @@ static CGFloat wineScale(void) {
     CGSize display = wineMainDisplaySize();
     if (display.width <= 0 || display.height <= 0) return 1.0;
     return fmin(display.width / mode.width, display.height / mode.height);
+}
+
+// MARK: - The mode, for the main thread
+//
+// win32u can only be asked from a Wine thread, and a GDI picture is placed on
+// the main thread ("A GDI picture scaled up"), so the main thread asks for
+// the mode (gModeWanted) and the game's thread answers it the next time it
+// looks at its message queue, through win32u's NtUserPeekMessage and
+// NtUserGetMessage (replaced in its syscall table, as below), where it holds
+// none of Wine's locks; the window is then drawn again with it. Asking when
+// the picture first shows or moves covers a mode set before this dylib was
+// loaded (a game's first ChangeDisplaySettings loads the Mac driver, and so
+// this) and one set by another process (the wrapp's display_mode.exe); a mode
+// the game changes to later is noted as it changes it.
+
+static _Atomic uint64_t gKnownMode;   // width << 32 | height; 0 while unknown
+
+#if defined(__x86_64__)
+static _Atomic BOOL gModeWanted = YES;
+
+/// A Wine thread only. Draws the windows again when the mode has changed.
+static void noteModeFromWin32u(void) {
+    CGSize size;
+    if (!emulatedModeSize(&size)) return;
+    uint64_t mode = (uint64_t)size.width << 32 | (uint64_t)size.height;
+    if (gKnownMode == mode) return;
+    gKnownMode = mode;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        for (NSWindow *window in NSApp.windows) [window.contentView setNeedsDisplay:YES];
+    });
+}
+#endif
+
+static BOOL knownModeSize(CGSize *size) {
+    uint64_t mode = gKnownMode;
+    if (!mode) return NO;
+    *size = CGSizeMake((uint32_t)(mode >> 32), (uint32_t)mode);
+    return YES;
 }
 
 // MARK: - Keeping the picture while the game is in the background
@@ -178,7 +217,9 @@ static int32_t changeDisplaySettingsKeepingMode(void *device, void *mode, void *
         gInBackground = NO;
         os_log(gLog, "[EmulatedMode] the game asked for its mode again, so it has handled coming back");
     }
-    return gChangeDisplaySettings(device, mode, hwnd, flags, lparam);
+    int32_t result = gChangeDisplaySettings(device, mode, hwnd, flags, lparam);
+    if (result == 0) noteModeFromWin32u();   // DISP_CHANGE_SUCCESSFUL
+    return result;
 }
 
 static int32_t showWindowKeepingWindow(void *hwnd, int32_t cmd) {
@@ -203,14 +244,19 @@ static void *replaceWin32uSyscall(const struct mach_header_64 *win32u, const cha
     return replaced ? original : NULL;
 }
 
-/// Whether both entries were replaced; neither is unless both are found.
-static BOOL keepPictureInBackground(void) {
+static const struct mach_header_64 *win32uImage(void) {
     const struct mach_header_64 *win32u = NULL;
     for (uint32_t i = 0; i < _dyld_image_count(); i++) {
         if (strcmp(processIdentityBasename(_dyld_get_image_name(i)), "win32u.so") == 0) {
             win32u = (const struct mach_header_64 *)_dyld_get_image_header(i);
         }
     }
+    return win32u;
+}
+
+/// Whether both entries were replaced; neither is unless both are found.
+static BOOL keepPictureInBackground(void) {
+    const struct mach_header_64 *win32u = win32uImage();
     if (!win32u) return NO;
     gChangeDisplaySettings = replaceWin32uSyscall(win32u, "NtUserChangeDisplaySettings", (void *)changeDisplaySettingsKeepingMode);
     if (!gChangeDisplaySettings) return NO;
@@ -223,6 +269,37 @@ static BOOL keepPictureInBackground(void) {
     [center addObserverForName:NSApplicationDidResignActiveNotification object:nil queue:nil
                     usingBlock:^(NSNotification *note) { (void)note; gInBackground = YES; }];
     return YES;
+}
+
+// The game's message loop answers the main thread's question ("The mode, for
+// the main thread").
+
+typedef int32_t (*PeekMessageFn)(void *msg, void *hwnd, uint32_t first, uint32_t last, uint32_t flags);
+typedef int32_t (*GetMessageFn)(void *msg, void *hwnd, uint32_t first, uint32_t last);
+static PeekMessageFn gPeekMessage;
+static GetMessageFn gGetMessage;
+
+static void answerModeIfWanted(void) {
+    if (atomic_exchange(&gModeWanted, NO)) noteModeFromWin32u();
+}
+
+static int32_t peekMessageAnsweringMode(void *msg, void *hwnd, uint32_t first, uint32_t last, uint32_t flags) {
+    answerModeIfWanted();
+    return gPeekMessage(msg, hwnd, first, last, flags);
+}
+
+static int32_t getMessageAnsweringMode(void *msg, void *hwnd, uint32_t first, uint32_t last) {
+    answerModeIfWanted();
+    return gGetMessage(msg, hwnd, first, last);
+}
+
+/// Whether either entry was replaced.
+static BOOL answerModeFromMessageLoop(void) {
+    const struct mach_header_64 *win32u = win32uImage();
+    if (!win32u) return NO;
+    gPeekMessage = replaceWin32uSyscall(win32u, "NtUserPeekMessage", (void *)peekMessageAnsweringMode);
+    gGetMessage = replaceWin32uSyscall(win32u, "NtUserGetMessage", (void *)getMessageAnsweringMode);
+    return gPeekMessage || gGetMessage;
 }
 
 #endif
@@ -407,7 +484,7 @@ static void blackOutsideGLView(NSView *self, SEL _cmd, CGImageRef image) {
 
 static IMP gWineUpdateLayer;
 static BOOL gArmed = NO;
-static char kReportedCentringKey;   // the client frame last reported for the window, as an NSValue
+static char kReportedCentringKey;   // the client frame and painted size last reported for the window
 
 /// The rect Wine's window surface covers in its content view: WineContentView's
 /// surfaceRect, which -updateLayer places the surface's layer at.
@@ -449,6 +526,36 @@ int windowShowsScaledPicture(NSWindow *window) {
     return scaledPictureFrame(window, &frame);
 }
 
+/// How much of a client view of `client` points win32u's scaled surface
+/// paints, which can be a pixel or so of the mode short of it. The client
+/// view is placed by the display's size over the mode's exactly
+/// (map_monitor_rect, monitor_virt_to_raw_ratio), but the surface is
+/// stretched by a whole-number DPI, 96 times that ratio rounded
+/// (monitor_get_dpi; scaled_surface_flush maps by map_dpi_rect). On a
+/// 2560x1440 display an 800x600 picture's DPI is 230, not 230.4, so it
+/// covers 1917x1438 of its 1920x1440 client view, and the last three columns
+/// and two rows showed what the surface held there, a grey line (Bioscopia,
+/// 2026-11-08). On 1920x1080 the DPI rounds up (173 for 172.8), the picture
+/// overshoots, and the crop to the client view hides it. `client` when the
+/// mode isn't known, or the sum comes out further off than rounding can be.
+static CGSize paintedPictureSize(CGSize client) {
+    CGSize mode, display = wineMainDisplaySize();
+    if (!knownModeSize(&mode) || display.width < 1 || display.height < 1) return client;
+    // monitor_get_dpi, in its float arithmetic, from the system DPI, 96.
+    float scaleX = (float)display.width / (float)mode.width, scaleY = (float)display.height / (float)mode.height;
+    long dpi = MIN(lroundf(96.0f * scaleX), lroundf(96.0f * scaleY));
+    // monitor_virt_to_raw_ratio: the axis the mode fills.
+    BOOL widthFills = display.width * mode.height <= display.height * mode.width;
+    double ratio = widthFills ? display.width / mode.width : display.height / mode.height;
+    long virtualWidth = lround(client.width / ratio), virtualHeight = lround(client.height / ratio);
+    // muldiv, rounding half up.
+    CGSize painted = CGSizeMake((virtualWidth * dpi + 48) / 96, (virtualHeight * dpi + 48) / 96);
+    // The DPI is at most half off, so the picture at most this many points.
+    CGFloat slack = ceil(MAX(virtualWidth, virtualHeight) * 0.5 / 96.0) + 1;
+    if (client.width - painted.width > slack || client.height - painted.height > slack) return client;
+    return CGSizeMake(fmin(client.width, painted.width), fmin(client.height, painted.height));
+}
+
 static void centredUpdateLayer(NSView *self, SEL _cmd) {
     ((void (*)(id, SEL))gWineUpdateLayer)(self, _cmd);
     NSWindow *window = self.window;
@@ -460,8 +567,10 @@ static void centredUpdateLayer(NSView *self, SEL _cmd) {
     if (!image || CFGetTypeID(image) != CGImageGetTypeID() || !wineSurfaceRect(self, &surface)) return;
 
     // The picture starts at the image's top left; the image is in pixels.
+    // Past what win32u painted, the window's black background shows.
+    CGSize painted = paintedPictureSize(picture.size);
     CGFloat scale = layer.contentsScale > 0 ? layer.contentsScale : 1.0;
-    CGRect crop = CGRectMake(0, 0, picture.size.width * scale, picture.size.height * scale);
+    CGRect crop = CGRectMake(0, 0, painted.width * scale, painted.height * scale);
     if (CGImageGetWidth(image) > crop.size.width + 0.5 || CGImageGetHeight(image) > crop.size.height + 0.5) {
         CGImageRef cropped = CGImageCreateWithImageInRect(image, crop);
         if (cropped) {
@@ -472,13 +581,17 @@ static void centredUpdateLayer(NSView *self, SEL _cmd) {
     layer.position = CGPointMake(surface.origin.x + picture.origin.x, surface.origin.y + picture.origin.y);
     if (window.isOpaque && ![window.backgroundColor isEqual:NSColor.blackColor]) window.backgroundColor = NSColor.blackColor;
 
-    NSValue *now = [NSValue valueWithRect:picture];
+    NSString *now = [NSString stringWithFormat:@"%@ %@", NSStringFromRect(picture), NSStringFromSize(painted)];
     if ([objc_getAssociatedObject(window, &kReportedCentringKey) isEqual:now]) return;
     objc_setAssociatedObject(window, &kReportedCentringKey, now, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    os_log(gLog, "[EmulatedMode] placing the scaled picture at %.0f,%.0f, %.0fx%.0f, in a %.0fx%.0f window",
-           picture.origin.x, picture.origin.y, picture.size.width, picture.size.height, self.bounds.size.width, self.bounds.size.height);
-    helperReport("EmulatedMode", "notice", "placing the program's scaled picture at %.0f,%.0f, %.0fx%.0f, in its %.0fx%.0f window",
-                 picture.origin.x, picture.origin.y, picture.size.width, picture.size.height,
+#if defined(__x86_64__)
+    gModeWanted = YES;   // the picture is new or has changed: check the mode
+#endif
+    os_log(gLog, "[EmulatedMode] placing the scaled picture at %.0f,%.0f, %.0fx%.0f (%.0fx%.0f painted), in a %.0fx%.0f window",
+           picture.origin.x, picture.origin.y, picture.size.width, picture.size.height, painted.width, painted.height,
+           self.bounds.size.width, self.bounds.size.height);
+    helperReport("EmulatedMode", "notice", "placing the program's scaled picture at %.0f,%.0f, %.0fx%.0f (%.0fx%.0f painted), in its %.0fx%.0f window",
+                 picture.origin.x, picture.origin.y, picture.size.width, picture.size.height, painted.width, painted.height,
                  self.bounds.size.width, self.bounds.size.height);
 }
 
@@ -535,6 +648,10 @@ static void emulatedModeScalingInit(void) {
     if (!keepPictureInBackground()) {
         helperReport("EmulatedMode", "warning", "win32u's syscall table not as expected; "
                      "a game switched away from may come back with its picture misplaced");
+    }
+    if (!answerModeFromMessageLoop()) {
+        helperReport("EmulatedMode", "warning", "win32u's NtUserPeekMessage and NtUserGetMessage not found; "
+                     "a GDI program's scaled picture may show a line of what Wine didn't paint at its right and bottom");
     }
 #endif
     gArmed = YES;
