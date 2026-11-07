@@ -27,6 +27,11 @@
 //    person's pointer is if it's over the window, else in the middle; never
 //    once the person has moved the pointer there, and the person's pointer
 //    itself is never moved.
+//  - **The green button.** Basilisk II's window is a fixed size, which macOS
+//    gives no fullscreen button: it's made fullscreen-capable and resizable
+//    (keeping the screen's shape), and in fullscreen Basilisk II's pointer
+//    grab and hidden menu bar are undone, so the title bar can be reached to
+//    leave it. It starts windowed.
 //  - **Shutting the Mac down.** SIGUSR2 (the wrapp's, when it quits), and
 //    the app's own Quit (⌘Q, which SDL would turn into the power key alone,
 //    leaving the Mac asking "shut down now?"), raise
@@ -61,6 +66,7 @@
 static const char *kHelper = "BasiliskMac";
 
 static void quitShutsDown(void);
+static void giveGreenButton(NSWindow *window);
 
 /// Basilisk II's window: its one titled, visible window.
 static NSWindow *macWindow(void) {
@@ -232,7 +238,73 @@ static void watchForWindow(int tries) {
         showWindow(window, 0);
         givePointer(window);
         quitShutsDown();
+        giveGreenButton(window);
     });
+}
+
+#pragma mark - The green button
+
+/// The window made able to go fullscreen (its green button), and resizable,
+/// keeping the Mac screen's shape when dragged. Basilisk II opens a fixed-size
+/// window, which macOS gives no fullscreen button.
+static void markFullscreenCapable(NSWindow *window) {
+    if (!(window.styleMask & NSWindowStyleMaskTitled)) return;
+    window.collectionBehavior |= NSWindowCollectionBehaviorFullScreenPrimary;
+    window.styleMask |= NSWindowStyleMaskResizable;
+    NSSize content = window.contentView.frame.size;
+    if (content.width > 0 && content.height > 0 && !(window.styleMask & NSWindowStyleMaskFullScreen)) {
+        window.contentAspectRatio = content;
+    }
+}
+
+/// In fullscreen Basilisk II grabs the pointer and hides the menu bar for
+/// good (video_sdl2.cpp, utils_macosx.mm), so the pointer can't reach the top
+/// edge where macOS shows the title bar again: the grab let go (SDL's own
+/// calls, found in the process) and macOS's auto-hiding menu bar given back.
+static void releaseFullscreenLocks(void) {
+    typedef void *(*GetWindow)(void);
+    typedef void (*SetGrab)(void *, int);
+    typedef int (*GetRelative)(void);
+    typedef int (*SetRelative)(int);
+    GetWindow grabbed = (GetWindow)dlsym(RTLD_DEFAULT, "SDL_GetGrabbedWindow");
+    GetWindow focus = (GetWindow)dlsym(RTLD_DEFAULT, "SDL_GetMouseFocus");
+    SetGrab setGrab = (SetGrab)dlsym(RTLD_DEFAULT, "SDL_SetWindowGrab");
+    GetRelative getRelative = (GetRelative)dlsym(RTLD_DEFAULT, "SDL_GetRelativeMouseMode");
+    SetRelative setRelative = (SetRelative)dlsym(RTLD_DEFAULT, "SDL_SetRelativeMouseMode");
+    void *held = grabbed ? grabbed() : NULL;
+    void *focused = focus ? focus() : NULL;
+    if (setGrab && held) setGrab(held, 0);
+    if (setGrab && focused) setGrab(focused, 0);
+    if (getRelative && setRelative && getRelative()) setRelative(0);
+    [NSMenu setMenuBarVisible:YES];
+    NSApp.presentationOptions = NSApplicationPresentationFullScreen | NSApplicationPresentationAutoHideMenuBar
+        | NSApplicationPresentationAutoHideDock;
+}
+
+/// The green button on the window, and kept there: Basilisk II reacts to
+/// fullscreen a little after AppKit says so, and leaving it SDL puts the
+/// window's fixed size back, so each is answered a few times over a second.
+static void giveGreenButton(NSWindow *window) {
+    markFullscreenCapable(window);
+    NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+    void (^repeat)(void (^)(void)) = ^(void (^work)(void)) {
+        for (int i = 1; i <= 4; i++) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * 250) * NSEC_PER_MSEC), dispatch_get_main_queue(), work);
+        }
+    };
+    [center addObserverForName:NSWindowDidBecomeKeyNotification object:window queue:nil
+                    usingBlock:^(NSNotification *note) { markFullscreenCapable(window); }];
+    [center addObserverForName:NSWindowDidEnterFullScreenNotification object:window queue:nil
+                    usingBlock:^(NSNotification *note) {
+        helperReport(kHelper, "notice", "the Mac's window is fullscreen");
+        repeat(^{ releaseFullscreenLocks(); });
+    }];
+    [center addObserverForName:NSWindowDidExitFullScreenNotification object:window queue:nil
+                    usingBlock:^(NSNotification *note) {
+        helperReport(kHelper, "notice", "the Mac's window left fullscreen");
+        repeat(^{ markFullscreenCapable(window); });
+    }];
+    helperReport(kHelper, "notice", "the Mac's window has its green button");
 }
 
 #pragma mark - Shutting the Mac down

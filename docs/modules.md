@@ -489,6 +489,10 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
     `wait-for`s;
   - gives the Mac a first pointer position, without which the Finder never
     draws its desktop;
+  - gives the window its green button: Basilisk II's fixed-size window is made
+    fullscreen-capable and resizable (keeping the screen's shape), and in
+    fullscreen its pointer grab and hidden menu bar are undone, so the title bar
+    can be reached to leave it;
   - shuts the Mac down when the wrapp quits (SIGUSR2), or Basilisk II's own
     Quit is chosen (⌘Q, which SDL alone would turn into the power key, leaving
     the Mac asking "shut down now?"): the power key, then Return on Shut Down,
