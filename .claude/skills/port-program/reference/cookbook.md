@@ -106,6 +106,38 @@ needs no Wine stage at all (`FROM scratch`), since nothing is installed. Copy on
 needs, not installers and other platforms' executables, unless its
 detection needs them (it often keys on the projector or main exe).
 
+## A classic 68k Mac program (`ingenious-consortium/ingenious`)
+
+The program runs on an emulated Mac booting System 7.5.3: `FROM scratch`,
+`USE basilisk`, the disc as the Mac's CD, and the program named by its path on
+the Mac. What only the Mac can do at build time (an Apple Installer, a Finder
+alias) is a key script the in-process helper runs inside Basilisk II, which
+waits on text read off the screen rather than fixed sleeps; the result is a
+layer, done once per Mac. The Mac's startup disk is the person's own, a store,
+so what the program saves in its Preferences stays.
+
+```dockerfile
+STORE basilisk-disk
+FROM scratch AS disc
+USE basilisk
+BASILISK.CDROM ${input.disc-1}
+BASILISK.RUN --automation=bundle:mac/setup.keys     # manifest: allow-paths: ["mac/"]
+BASILISK.STARTUP "basilisk:System7_5_3:Desktop Folder:Ingenious alias"
+LAUNCH --mount=type=store,source=basilisk-disk,target=basilisk:disk/
+LAUNCH --basilisk.screen=640x480x8 "basilisk:Ingenious CD:Ingenious"
+```
+
+- Write the script from a session by hand first (`sc puppet start`, then `do
+  … key`/`type`/`click` and `text`): the Finder takes type-to-select, Cmd-Down
+  (open), Cmd-O, Cmd-M (make alias) and Cmd-Option-W (close every window, so
+  typing goes to the desktop); a dialog with no default button needs a click
+  at a fixed point (the screen is a fixed 640x480).
+- Wait with `wait-for <seconds> <text>`, and for a restart with
+  `wait-restart`: Basilisk II keeps its window, and the screens between pass
+  too quickly to catch.
+- Its test: a text needle on the program's first screen, tagged `running`,
+  the `basilisk/starts-and-quits` scenario, and `tests: { window: windowed }`.
+
 ## Settings files and the registry
 
 ```dockerfile

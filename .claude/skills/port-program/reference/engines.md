@@ -32,7 +32,7 @@ new engine").
 | Win32 (Win9x/XP era) | Wine (module) | DOSBox-X/86Box running Windows 9x | A 98 licence for the fallback |
 | Win16 (Windows 3.x) | A 32-bit build of the same program, under Wine | DOSBox-X running Windows 3.1 (new engine) | A Windows 3.1 licence and install media |
 | Flash projector | Ruffle (new engine), the SWF extracted | Wine | Nothing |
-| Classic Mac 68k (System 6–7.6) | Basilisk II (new engine) | Snow (compact Macs), QEMU q800, Mini vMac (System ≤ 7.5.5) | **An Apple ROM** and System software |
+| Classic Mac 68k (System 6–7.6) | Basilisk II (the basilisk module) | Snow (compact Macs), QEMU q800, Mini vMac (System ≤ 7.5.5) | **An Apple ROM** and System software |
 | Very early Mac (≤ System 6) | Advanced Mac Substitute / Executor 2000 (no ROM) | Mini vMac | AMS and Executor need nothing, but run few programs |
 | Classic Mac PPC (Mac OS 7.5.2–9.0.4) | SheepShaver (new engine) | QEMU mac99 | **The "Mac OS ROM" file** and Mac OS |
 | Mac OS 9.1–9.2.2, Mac OS X 10.0–10.5 PPC | QEMU `qemu-system-ppc -M mac99,via=pmu` | — | Mac OS install media; OpenBIOS is built in, no ROM |
@@ -75,7 +75,13 @@ older system software for redistribution (System 7.5.3 was once a free
 download from Apple, but isn't licensed to be bundled). A module can't ship
 them; a person would have to give their own, so the proposal must say how
 the app asks for and checks them (a ROM's checksum identifies its model).
-That's why a Windows or ScummVM route on a hybrid disc wins.
+That's why a Windows or ScummVM route on a hybrid disc wins when it works.
+
+The basilisk module settles this for 68k programs (docs/modules.md, "The
+basilisk module's Mac"): System 7.5.3 is fetched by each Mac from archive.org
+as part of the engine, and the ROM is the person's, asked for once and kept
+(a Debug build downloads a development copy). A Quadra 650/800 ROM
+(`F1ACAD13`) is the one it knows.
 
 ## Wine's renderers and helpers (for when wine is the route)
 
