@@ -1,0 +1,1212 @@
+{
+ "head": {
+  "vars": [
+   "item",
+   "itemLabel",
+   "itemDescription",
+   "p",
+   "v"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "1996-03-15T00:00:00Z"
+    },
+    "p": {
+     "type": "literal",
+     "value": "date"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4049240"
+    },
+    "v": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "1998-12-23T00:00:00Z"
+    },
+    "p": {
+     "type": "literal",
+     "value": "date"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1998 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q63116084"
+    },
+    "v": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2010-08-24T00:00:00Z"
+    },
+    "p": {
+     "type": "literal",
+     "value": "date"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill Remastered"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2010 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q63116084"
+    },
+    "v": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2011-07-25T00:00:00Z"
+    },
+    "p": {
+     "type": "literal",
+     "value": "date"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill Remastered"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2010 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q124075943"
+    },
+    "v": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2015-10-28T00:00:00Z"
+    },
+    "p": {
+     "type": "literal",
+     "value": "date"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2015 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q7889"
+    },
+    "p": {
+     "type": "literal",
+     "value": "instance"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4049240"
+    },
+    "v": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q7889"
+    },
+    "p": {
+     "type": "literal",
+     "value": "instance"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1998 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q6404529"
+    },
+    "v": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2351962"
+    },
+    "p": {
+     "type": "literal",
+     "value": "instance"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Kid Pix"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "bitmap drawing program aimed at children"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q63116084"
+    },
+    "v": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q7889"
+    },
+    "p": {
+     "type": "literal",
+     "value": "instance"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill Remastered"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2010 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q124075943"
+    },
+    "v": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q7889"
+    },
+    "p": {
+     "type": "literal",
+     "value": "instance"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2015 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "type": "literal",
+     "value": "logical-journey-of-the-zoombinis"
+    },
+    "p": {
+     "type": "literal",
+     "value": "igdb-slug"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "type": "literal",
+     "value": "zoombinis-logical-journey"
+    },
+    "p": {
+     "type": "literal",
+     "value": "igdb-slug"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "type": "literal",
+     "value": "16801"
+    },
+    "p": {
+     "type": "literal",
+     "value": "mobygames"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "type": "literal",
+     "value": "3ei"
+    },
+    "p": {
+     "type": "literal",
+     "value": "myabandonware"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4049240"
+    },
+    "v": {
+     "type": "literal",
+     "value": "nancy-drew-secrets-can-kill"
+    },
+    "p": {
+     "type": "literal",
+     "value": "igdb-slug"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1998 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4049240"
+    },
+    "v": {
+     "type": "literal",
+     "value": "4907"
+    },
+    "p": {
+     "type": "literal",
+     "value": "mobygames"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1998 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4049240"
+    },
+    "v": {
+     "type": "literal",
+     "value": "rdu"
+    },
+    "p": {
+     "type": "literal",
+     "value": "myabandonware"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1998 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q6404529"
+    },
+    "v": {
+     "type": "literal",
+     "value": "KID_PIX_WIN"
+    },
+    "p": {
+     "type": "literal",
+     "value": "internetarchive"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Kid Pix"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "bitmap drawing program aimed at children"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q63116084"
+    },
+    "v": {
+     "type": "literal",
+     "value": "42210"
+    },
+    "p": {
+     "type": "literal",
+     "value": "steam"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill Remastered"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2010 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q63116084"
+    },
+    "v": {
+     "type": "literal",
+     "value": "nancy-drew-secrets-can-kill-remastered"
+    },
+    "p": {
+     "type": "literal",
+     "value": "igdb-slug"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill Remastered"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2010 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q63116084"
+    },
+    "v": {
+     "type": "literal",
+     "value": "49293"
+    },
+    "p": {
+     "type": "literal",
+     "value": "mobygames"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill Remastered"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2010 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q124075943"
+    },
+    "v": {
+     "type": "literal",
+     "value": "397430"
+    },
+    "p": {
+     "type": "literal",
+     "value": "steam"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2015 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q124075943"
+    },
+    "v": {
+     "type": "literal",
+     "value": "zoombinis"
+    },
+    "p": {
+     "type": "literal",
+     "value": "igdb-slug"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2015 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q124075943"
+    },
+    "v": {
+     "type": "literal",
+     "value": "75839"
+    },
+    "p": {
+     "type": "literal",
+     "value": "mobygames"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2015 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "p": {
+     "type": "literal",
+     "value": "enwiki"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4049240"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "p": {
+     "type": "literal",
+     "value": "enwiki"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1998 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q6404529"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Kid Pix"
+    },
+    "p": {
+     "type": "literal",
+     "value": "enwiki"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Kid Pix"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "bitmap drawing program aimed at children"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Broderbund"
+    },
+    "p": {
+     "type": "literal",
+     "value": "developer"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4049240"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Her Interactive"
+    },
+    "p": {
+     "type": "literal",
+     "value": "developer"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1998 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Microsoft Windows"
+    },
+    "p": {
+     "type": "literal",
+     "value": "platform"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4049240"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Microsoft Windows"
+    },
+    "p": {
+     "type": "literal",
+     "value": "platform"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1998 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q63116084"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Microsoft Windows"
+    },
+    "p": {
+     "type": "literal",
+     "value": "platform"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill Remastered"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2010 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q124075943"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Microsoft Windows"
+    },
+    "p": {
+     "type": "literal",
+     "value": "platform"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2015 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Broderbund"
+    },
+    "p": {
+     "type": "literal",
+     "value": "publisher"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4049240"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "DreamCatcher Interactive"
+    },
+    "p": {
+     "type": "literal",
+     "value": "publisher"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1998 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q124075943"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Android"
+    },
+    "p": {
+     "type": "literal",
+     "value": "platform"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2015 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4049240"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "macOS"
+    },
+    "p": {
+     "type": "literal",
+     "value": "platform"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1998 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q63116084"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "macOS"
+    },
+    "p": {
+     "type": "literal",
+     "value": "platform"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill Remastered"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2010 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q124075943"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "macOS"
+    },
+    "p": {
+     "type": "literal",
+     "value": "platform"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2015 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Classic Mac OS"
+    },
+    "p": {
+     "type": "literal",
+     "value": "platform"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q124075943"
+    },
+    "v": {
+     "type": "literal",
+     "value": "1"
+    },
+    "p": {
+     "type": "literal",
+     "value": "isgame"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2015 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q63116084"
+    },
+    "v": {
+     "type": "literal",
+     "value": "1"
+    },
+    "p": {
+     "type": "literal",
+     "value": "isgame"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill Remastered"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2010 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4049240"
+    },
+    "v": {
+     "type": "literal",
+     "value": "1"
+    },
+    "p": {
+     "type": "literal",
+     "value": "isgame"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1998 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "type": "literal",
+     "value": "1"
+    },
+    "p": {
+     "type": "literal",
+     "value": "isgame"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q124075943"
+    },
+    "v": {
+     "type": "literal",
+     "value": "1"
+    },
+    "p": {
+     "type": "literal",
+     "value": "issoftware"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2015 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q63116084"
+    },
+    "v": {
+     "type": "literal",
+     "value": "1"
+    },
+    "p": {
+     "type": "literal",
+     "value": "issoftware"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill Remastered"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "2010 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4049240"
+    },
+    "v": {
+     "type": "literal",
+     "value": "1"
+    },
+    "p": {
+     "type": "literal",
+     "value": "issoftware"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Nancy Drew: Secrets Can Kill"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1998 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2364982"
+    },
+    "v": {
+     "type": "literal",
+     "value": "1"
+    },
+    "p": {
+     "type": "literal",
+     "value": "issoftware"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Logical Journey of the Zoombinis"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "1996 video game"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q6404529"
+    },
+    "v": {
+     "type": "literal",
+     "value": "1"
+    },
+    "p": {
+     "type": "literal",
+     "value": "issoftware"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Kid Pix"
+    },
+    "itemDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "bitmap drawing program aimed at children"
+    }
+   }
+  ]
+ }
+}

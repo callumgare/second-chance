@@ -1,0 +1,65 @@
+{
+ "count": 5,
+ "next": null,
+ "previous": null,
+ "results": [
+  {
+   "id": 111886,
+   "name": "Logical Journey of the Zoombinis",
+   "slug": "logical-journey-of-the-zoombinis",
+   "year": 1996,
+   "banner_url": "",
+   "icon_url": "",
+   "coverart": "https://lutris.net/media/igdb/cover_big/shlaqctcmxed3gm9vpfh.jpg",
+   "platforms": [
+    {
+     "name": "Windows"
+    }
+   ],
+   "provider_games": [
+    {
+     "name": "Logical Journey of the Zoombinis",
+     "slug": "logical-journey-of-the-zoombinis",
+     "service": "igdb"
+    }
+   ],
+   "aliases": [],
+   "shaders": [],
+   "discord_id": "",
+   "change_for": null
+  },
+  {
+   "id": 5997,
+   "name": "Zoombinis",
+   "slug": "zoombinis",
+   "year": 2015,
+   "banner_url": "https://lutris.net/games/banner/zoombinis.jpg",
+   "icon_url": "https://lutris.net/games/icon/zoombinis.png",
+   "coverart": "https://lutris.net/media/igdb/cover_big/co22dw.jpg",
+   "platforms": [
+    {
+     "name": "Macintosh"
+    },
+    {
+     "name": "Windows"
+    }
+   ],
+   "provider_games": [
+    {
+     "name": "Zoombinis",
+     "slug": "397430",
+     "service": "steam"
+    },
+    {
+     "name": "Zoombinis",
+     "slug": "zoombinis",
+     "service": "igdb"
+    }
+   ],
+   "aliases": [],
+   "shaders": [],
+   "discord_id": "",
+   "change_for": null
+  }
+ ]
+}
