@@ -374,12 +374,27 @@ class WrappBuildHelper {
         // web helper without them), which needs cabextract, which isn't
         // bundled — and Steam signs in fine under the bundled Wine without them.
         let installer = try await steamInstaller()
+        // It's run from the cache, which Wine sees only while its folder is lent.
+        try wine.drives.lend(installer.deletingLastPathComponent())
+        defer { wine.drives.takeBack() }
         do {
-            // It's run from the cache, which Wine sees only while its folder is lent.
-            try wine.drives.lend(installer.deletingLastPathComponent())
-            defer { wine.drives.takeBack() }
-            try await wine.run(.program(installer.path, ["/S"]), timeout: 300)
+            try await runSteamInstaller(installer, in: wine)
+        } catch WineError.noDisplay {
+            // As a Wrappfile's RUN does (WineExecutor.run): a loaded Mac can
+            // still leave a program with no display, which a fresh session fixes.
+            logger.warning("Steam's installer found no display to open its windows on — restarting the Wine session and trying once more")
+            await wine.server.stop()
+            try await runSteamInstaller(installer, in: wine)
         }
+    }
+
+    /// Steam's installer, run silently once Wine's desktop has registered the
+    /// display devices: left to Wine, a loaded Mac runs out its wait and the
+    /// installer's explorer starts with no display (`nodrv_CreateWindow`).
+    private func runSteamInstaller(_ installer: URL, in wine: Wine) async throws {
+        let desktop = await WineDesktop.start(wine, logger: logger, outputLogger: wineOutputLogger)
+        defer { desktop?.release() }
+        try await wine.run(.program(installer.path, ["/S"]), timeout: 300)
     }
 
     // MARK: - Finalization
