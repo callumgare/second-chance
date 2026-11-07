@@ -419,6 +419,13 @@ builds. Wine's:
   padding (`MachOPatch`), as `install_name_tool` would, which only comes
   with Xcode's tools. Every other Wine program finds the frameworks through
   `DYLD_FALLBACK_LIBRARY_PATH` (`Wine`).
+- Winetricks is not the engine's: it's the wine module's package's resource
+  (`Packages/Modules/wine/Sources/WineExecutor/Resources/winetricks`), a copy
+  of Sikarugir's macOS fork (`src/winetricks` on the `sikarugir` branch of
+  Sikarugir-App/winetricks), whose `WINETRICKS_VERSION` line says which. It's
+  updated by copying that file afresh; as every Wine build's prefix runs
+  winetricks (and its hash is in each `WINE.WINETRICKS` step's key), an
+  update is followed by every Wine game's integration test.
 - The wrapper template's `cabextract` is kept in `build-tools/`
   (`EngineTree.buildTools`), for winetricks, which needs it for any verb
   that unpacks a Microsoft redistributable (directmusic, d3dx9, vcrun). It
