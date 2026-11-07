@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 27
+release: 28
 native: "wine"                               # its Swift: Packages/Modules/wine (WineKit, WineExecutor), WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -15,6 +15,42 @@ versions:
           sha256: "2a6bcf2a3bf13cddf825599b6bc1e3659cbf71e1282c6d77141a92f6ac8d4c68"
           size: 166321980
           urls: ["https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir10.0_8.tar.xz"]
+        - id: "wineskin"
+          sha256: "9fa15479e7ff6abd99c1d07be285fb95f41fc6991586502427152b1f7d6ccb8a"
+          size: 84533420
+          urls: ["https://github.com/Sikarugir-App/Wrapper/releases/download/v1.0/Template-1.0.11.tar.xz"]
+  # WineHQ's stable release 11.0, as Gcenx builds it for macOS: laid out
+  # and prepared as 11.21 below is.
+  - version: "11.0_1"
+    package:
+      # EngineTree's hash of the prepared tree (`sc engine prepare`).
+      prepared: "9478906fab58f6c1972d2c348bdf020cb4b87c37c499f28c9d909562467252c8"
+      sources:
+        - id: "winehq"
+          sha256: "b50dc50ec7f41d58b115a6b685d4d1315ba3c797bd3aa0f49213f2703cb82388"
+          size: 185303032
+          urls: ["https://github.com/Gcenx/macOS_Wine_builds/releases/download/11.0_1/wine-stable-11.0_1-osx64.tar.xz"]
+        - id: "wineskin"
+          sha256: "9fa15479e7ff6abd99c1d07be285fb95f41fc6991586502427152b1f7d6ccb8a"
+          size: 84533420
+          urls: ["https://github.com/Sikarugir-App/Wrapper/releases/download/v1.0/Template-1.0.11.tar.xz"]
+  # WineHQ's development release 11.21, as Gcenx builds it for macOS (the
+  # wine-devel package WineHQ links to): Wine and every library it needs,
+  # GStreamer and MoltenVK among them, in one app, with only the wineskin
+  # template's cabextract beside it (for winetricks). Prepared on the Mac
+  # that builds (WineBuild.prepare). A bundle moves to it once its
+  # integration test passes on it. Not Iji: every Wine 11 from 11.6 crashes
+  # it at start (11.0 loads it for minutes), so it stays on 10.0_8 and
+  # WINE.PATCH skip-synth-playout.
+  - version: "11.21"
+    package:
+      # EngineTree's hash of the prepared tree (`sc engine prepare`).
+      prepared: "7859902d33834bab602450547dfcfb721ff2952f08a7beb88ad47bb171381688"
+      sources:
+        - id: "winehq"
+          sha256: "9909b486657e10ab66c7279371ae1f990345b596b3b1b3a0cf21f28af24fa0ce"
+          size: 225612636
+          urls: ["https://github.com/Gcenx/macOS_Wine_builds/releases/download/11.21/wine-devel-11.21-osx64.tar.xz"]
         - id: "wineskin"
           sha256: "9fa15479e7ff6abd99c1d07be285fb95f41fc6991586502427152b1f7d6ccb8a"
           size: 84533420
@@ -50,16 +86,12 @@ build:
     MOUNT: { options: { cdrom: flag }, arguments: { count: 2, roles: [location, text] } }
     # Lays in the in-process helpers the Mac driver loads.
     HELPERS: {}
-    # Wine's 32-bit msvcrt.dll in the tree's own Wine changed so that a
-    # thread _beginthread started keeps its handle when it ends: for a game
-    # that waits on it afterwards (Allegro 4's timer), which can hang for ever
-    # once the closed handle's value is reused.
-    KEEP-THREAD-HANDLES: {}
-    # Wine's 32-bit dmsynth.dll in the tree's own Wine changed so that a
-    # DirectMusic synthesiser's sink stops at once, rather than first playing
-    # out its two-second buffer: for a game that stops one for every sound it
-    # loads (Game Maker 7's), which otherwise loads for minutes.
-    SKIP-SYNTH-PLAYOUT: {}
+    # Changes Wine's own DLLs in the tree's own Wine, each patch by name
+    # (docs/modules.md#the-wine-modules-patches): keep-thread-handles (a
+    # thread _beginthread started keeps its handle, for Allegro 4's timer)
+    # and skip-synth-playout (DirectMusic's synthesiser stops at once, for
+    # Game Maker 7's loading).
+    PATCH: { arguments: { count: "1...", roles: [text] } }
     # Makes the prefix: wineboot's.
     PREFIX: { layer: suggested }
     # Copies the discs it's given into --into (<into>/disk-<n>), and for more

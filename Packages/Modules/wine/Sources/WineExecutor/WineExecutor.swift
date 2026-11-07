@@ -15,14 +15,13 @@ import WrappModuleKit
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WineExecutor")
 
-/// Carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS`, `MOUNT`,
-/// `KEEP-THREAD-HANDLES` and `SKIP-SYNTH-PLAYOUT`, and its
+/// Carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS`, `MOUNT` and `PATCH`,
+/// and its
 /// setup steps `HELPERS` and `PREFIX`, in the step's tree, and runs a
 /// `wine:` program for `RUN` (docs/modules.md#executors). Portable: it needs
 /// nothing of Second Chance's.
 public nonisolated struct WineExecutor: ModuleExecutor {
-    public static let handles = ["DRIVES", "REGISTRY", "WINETRICKS", "MOUNT", "KEEP-DISCS", "HELPERS", "PREFIX", "KEEP-THREAD-HANDLES",
-                                 "SKIP-SYNTH-PLAYOUT"]
+    public static let handles = ["DRIVES", "REGISTRY", "WINETRICKS", "MOUNT", "KEEP-DISCS", "HELPERS", "PREFIX", "PATCH"]
 
     /// The winetricks it runs; nil for the module's own.
     let winetricks: URL?
@@ -48,9 +47,8 @@ public nonisolated struct WineExecutor: ModuleExecutor {
     }
 
     /// What a step makes that its text doesn't say: `HELPERS` lays in this
-    /// build's helpers, `WINETRICKS` runs this winetricks, and
-    /// `KEEP-THREAD-HANDLES` and `SKIP-SYNTH-PLAYOUT` make this revision of
-    /// their patches, so a layer
+    /// build's helpers, `WINETRICKS` runs this winetricks, and `PATCH` makes
+    /// this revision of each patch it names, so a layer
     /// kept by another Second Chance with other ones isn't restored.
     public func keyInputs(for step: PlannedStep, in context: any StepContext) async throws -> KeyInputs {
         switch step.instruction {
@@ -60,10 +58,9 @@ public nonisolated struct WineExecutor: ModuleExecutor {
         case "WINETRICKS":
             guard let script = await Winetricks(wine: Wine(wrapp: context.tree), script: winetricks).resolvedScript() else { return KeyInputs() }
             return KeyInputs([KeyInput("winetricks", try await Blocking.run { try Self.hash(script) })])
-        case "KEEP-THREAD-HANDLES":
-            return KeyInputs([KeyInput("keep-thread-handles", String(KeepThreadHandles.revision))])
-        case "SKIP-SYNTH-PLAYOUT":
-            return KeyInputs([KeyInput("skip-synth-playout", String(SkipSynthPlayout.revision))])
+        case "PATCH":
+            let patches = try WinePatch.named(step.arguments, origin: step.origin)
+            return KeyInputs(patches.map { KeyInput("patch-\($0.name)", String($0.revision)) })
         default:
             return KeyInputs()
         }
@@ -129,26 +126,20 @@ public nonisolated struct WineExecutor: ModuleExecutor {
             try await keepDiscs(step, in: context)
         case "HELPERS":
             try layInHelpers(in: context.tree, step: step)
-        case "KEEP-THREAD-HANDLES":
+        case "PATCH":
             // The tree's own Wine, cloned from the engine store, patched in place.
             let tree = context.tree
-            let outcome: KeepThreadHandles.Outcome
-            do {
-                outcome = try await Blocking.run { try KeepThreadHandles.apply(in: tree) }
-            } catch let error as KeepThreadHandles.PatchError {
-                throw StepFailure.failed("\(step.origin): couldn't keep thread handles: \(error)")
+            for patch in try WinePatch.named(step.arguments, origin: step.origin) {
+                let already: Bool
+                do {
+                    already = try await Blocking.run { try patch.apply(tree) }
+                } catch let error as StepFailure {
+                    throw error
+                } catch {
+                    throw StepFailure.failed("\(step.origin): couldn't make the patch \(patch.name): \(error)")
+                }
+                logger.notice("\(patch.does) (\(patch.name), \(already ? "already patched" : "patched"))")
             }
-            logger.notice("msvcrt.dll's _endthread keeps a thread's handle (\(outcome == .patched ? "patched" : "already patched"))")
-        case "SKIP-SYNTH-PLAYOUT":
-            // The tree's own Wine, cloned from the engine store, patched in place.
-            let tree = context.tree
-            let outcome: SkipSynthPlayout.Outcome
-            do {
-                outcome = try await Blocking.run { try SkipSynthPlayout.apply(in: tree) }
-            } catch let error as SkipSynthPlayout.PatchError {
-                throw StepFailure.failed("\(step.origin): couldn't make DirectMusic's synthesiser stop at once: \(error)")
-            }
-            logger.notice("dmsynth.dll's sink stops without playing out its buffer (\(outcome == .patched ? "patched" : "already patched"))")
         case "PREFIX":
             // wineboot's prefix, Wine's server let finish so it's all written.
             try await wine.run(.wine(["wineboot", "-u"]))

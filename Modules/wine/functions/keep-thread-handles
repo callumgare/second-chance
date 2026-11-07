@@ -11,5 +11,5 @@
 # has Wine (FROM --module=wine… prefix); a game without it gets Wine as it
 # comes. docs/modules.md#the-wine-modules-patches has the details.
 FUNCTION keep-thread-handles
-  WINE.KEEP-THREAD-HANDLES
+  WINE.PATCH keep-thread-handles
 END

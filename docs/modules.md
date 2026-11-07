@@ -215,7 +215,7 @@ its module's executor ([wrapp-build.md](wrapp-build.md#the-runner)).
   arguments, `--env` and a timeout), returning its exit code.
 - **`keyInputs(for:in:)`** names what a step's key needs beyond its text
   (`KeyInputs`: a disc's listing, an installer's fingerprint, the revision
-  of `WINE.KEEP-THREAD-HANDLES`' patch), and **`checkpoint`** makes the
+  of each patch `WINE.PATCH` names), and **`checkpoint`** makes the
   tree safe to keep as a layer, nothing running in it.
 - **`revision`** is part of every one of its steps' keys: raise it when a
   change to its Swift changes what its steps make. A change that touches
@@ -247,7 +247,7 @@ Swift, its **kit**:
 
 | Package | Products | Has |
 | --- | --- | --- |
-| `Packages/Modules/wine` (`WineModule`) | `WineKit`, `WineExecutor` | The kit is the Wine library every process that runs a Windows program uses — `Wine`, `WineCommand`, the registry, server, desktop and drives ([wrapp-build.md](wrapp-build.md#running-wine)) — which `SecondChanceKit` links. The executor carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS`, `MOUNT`, `KEEP-THREAD-HANDLES` and `SKIP-SYNTH-PLAYOUT` ([below](#the-wine-modules-patches)), runs `wine:` programs for `RUN`, and has `Winetricks` and the winetricks script as a package resource. It also carries out the `setup` steps `USE wine` plans, `HELPERS` (the in-process helpers laid in the tree's `Frameworks/`) and `PREFIX` (wineboot's). Beside them, `InProcessHelpers/` and `build-in-process-helpers.sh` ([wine-in-process-helpers.md](wine-in-process-helpers.md)). |
+| `Packages/Modules/wine` (`WineModule`) | `WineKit`, `WineExecutor` | The kit is the Wine library every process that runs a Windows program uses — `Wine`, `WineCommand`, the registry, server, desktop and drives ([wrapp-build.md](wrapp-build.md#running-wine)) — which `SecondChanceKit` links. The executor carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS`, `MOUNT` and `PATCH` ([below](#the-wine-modules-patches)), runs `wine:` programs for `RUN`, and has `Winetricks` and the winetricks script as a package resource. It also carries out the `setup` steps `USE wine` plans, `HELPERS` (the in-process helpers laid in the tree's `Frameworks/`) and `PREFIX` (wineboot's). Beside them, `InProcessHelpers/` and `build-in-process-helpers.sh` ([wine-in-process-helpers.md](wine-in-process-helpers.md)). |
 | `Packages/Modules/scummvm` (`ScummVMModule`) | `ScummVMExecutor` | Carries out `SCUMMVM.KEEP-DATA <file>…` ([below](#the-scummvm-modules-data)). ScummVM's engine is prepared by `ScummVMBuild` in `Packages/WrappBuilder` and started in the wrapp by `ScummVMRuntime`, which haven't moved into the package. |
 | `Packages/Modules/nancy-drew` (`NancyDrewModule`) | `NancyDrewExecutor` | Carries out `NANCY-DREW.CONFIGURE-INI <folder>`: every `.ini` in the folder given what the module's `ini.yaml` says, read through `moduleFile`, each file written back in the encoding it came in (`TextFile`, in `WindowsFormats`). |
 | `Packages/Modules/basilisk` (`BasiliskModule`) | `BasiliskExecutor`, `BasiliskKit` | Carries out `BASILISK.SETUP`, `CDROM`, `RUN` and `STARTUP` ([below](#the-basilisk-modules-mac)); given the in-process helpers and the engine's build tools (hfsutils) by whoever runs it. The kit places `basilisk:` paths (`BasiliskPaths`). Basilisk II is prepared by `BasiliskBuild` in `Packages/WrappBuilder` and started in the wrapp by `BasiliskRuntime`. |
@@ -293,18 +293,24 @@ it found) on a Wine it doesn't know rather than patching blind.
 - **Every Wine gets** `RosettaFaultFix`, in 32-bit `ntdll.dll`, made as the
   engine is prepared, so it is in the engine store
   ([big-fish.md](big-fish.md#armadillo-under-rosetta)).
-- **A game that asks gets `WINE.KEEP-THREAD-HANDLES`**, through
-  `DO wine.keep-thread-handles`, in a stage after it has Wine. It patches the
-  stage tree's own copy of the engine (cloned from the store, and replaced
-  file by file, so the store is never touched) and the prefix's copy of the
-  same DLL (`syswow64`, when it's Wine's). A Wrappfile that doesn't name it
-  gets Wine unchanged.
-- **A game that asks gets `WINE.SKIP-SYNTH-PLAYOUT`**, through
-  `DO wine.skip-synth-playout`, the same way: the stage tree's own engine and
-  the prefix's copy of the DLL, when it's Wine's (Microsoft's, which
-  winetricks' `directmusic` lays in, is left alone).
+- **A game that asks gets the patches it names**, through `WINE.PATCH
+  <name>…`, in a stage after it has Wine: `keep-thread-handles` and
+  `skip-synth-playout` (`WinePatch.all`, in `WineExecutor`), each also a
+  function of the same name (`DO wine.keep-thread-handles`). A patch changes
+  the stage tree's own copy of the engine (cloned from the store, and
+  replaced file by file, so the store is never touched) and the prefix's copy
+  of the same DLL (`syswow64`, when it's Wine's: one winetricks laid in, as
+  Microsoft's `dmsynth.dll`, is left alone). A Wrappfile that doesn't name
+  one gets Wine unchanged. Each patch's revision is in the step's key.
 
-`KEEP-THREAD-HANDLES` (`KeepThreadHandles`, in `WineExecutor`) is for Allegro
+A patch is the last resort for a fault in Wine: a newer Wine that fixes it,
+added as a version of the module, comes first, then a winetricks verb, built
+on where it nearly does. A patch says which Wine it was made for, and fails
+the step on one whose code it doesn't recognise. A new one is a type beside
+these two and an entry in `WinePatch.all`, with tests on a DLL built byte by
+byte and on the real one.
+
+`keep-thread-handles` (`KeepThreadHandles`) is for Allegro
 4.x Windows games that sometimes hang as they exit: the game's own log stops
 at `Exiting Allegro`, the window stays up and it uses no CPU. Allegro's
 `remove_timer` sets its stop event and then waits, with no limit, on the
@@ -328,7 +334,7 @@ at the cost of one handle per `_beginthread` thread for the life of the
 process. Changing what the patch makes means raising
 `KeepThreadHandles.revision`, which only that step's key holds.
 
-`SKIP-SYNTH-PLAYOUT` (`SkipSynthPlayout`, in `WineExecutor`) is for games
+`skip-synth-playout` (`SkipSynthPlayout`) is for games
 whose sounds go through DirectMusic and that stop a synthesiser's sink for
 each one: Game Maker 7's, which give every sound a performance of its own as
 they load. Wine 10's sink (`dlls/dmsynth/synthsink.c`), when it's
@@ -337,10 +343,13 @@ deactivated, writes half a buffer of silence and then waits, in
 holds two seconds of sound, so each stop takes about 1.5 s, and Iji, with
 about 240 sounds, sat on its loading screen for six minutes, logging
 `err:dmsynth:synth_sink_render_thread WaitForMultipleObjects returned 0` at
-each stop. Wine 11.2 rewrote the sink to wait only for its write latency. The
-way round it before was winetricks' `directmusic`, Microsoft's DLLs, which
-load at once but bring Microsoft's `dsound.dll`, under which Wine's
-DirectShow audio renderer plays nothing: MCI's MP3 music was silent.
+each stop. Wine 11.2 rewrote the sink to wait only for its write latency, but
+Iji crashes at start on every Wine 11 from 11.6 on (a stack overflow in its
+exception handlers; 11.0 runs it), so it stays on Wine 10 with this patch.
+Winetricks' `directmusic`, Microsoft's DLLs, loads at once but brings
+Microsoft's `dsound.dll`, under which Wine's DirectShow audio renderer plays
+nothing (MCI's MP3 music was silent), and Microsoft's DirectMusic won't start
+on Wine's own DirectSound. The patch works on Wine 10.0 and 11.0 alike.
 
 The patch changes the play-out loop's `jae <done>` (everything written has
 played) in Wine's 32-bit `dmsynth.dll` into `nop; jmp <done>`, the same
@@ -393,11 +402,18 @@ in `Resources/engines/<module>.files`. It uses only what every macOS has
 (`tar`, `ditto`, `hdiutil`, `codesign`), so it can run on the Mac that
 builds. Wine's:
 
-- Sikarugir's Wine goes in `SharedSupport/wine`, and its wrapper
-  template's frameworks in `Frameworks`.
+- Sikarugir's Wine (source `wine`, 10.0_8) goes in `SharedSupport/wine`,
+  and its wrapper template's frameworks in `Frameworks`. A WineHQ build for
+  macOS (source `winehq`: Gcenx's, 11.0_1 and 11.21) is an app whose
+  `Contents/Resources/wine` holds Wine and every library it needs, GStreamer
+  and MoltenVK among them, found through its own `@loader_path` run paths:
+  that folder goes in `SharedSupport/wine`, `Frameworks` stays empty, and
+  only the template's `cabextract` is taken. `Wine` points GStreamer at the
+  engine's own plugins when it has them (`gstreamerPlugins`).
 - The Mac driver (`winemac.so`) gets a weak dependency on the in-process
-  helpers, and `wineserver`, which asks for `@rpath/libinotify`, a run path
-  to `Frameworks`. Both are load commands written into the file's header
+  helpers, and Sikarugir's `wineserver`, which asks for `@rpath/libinotify`,
+  a run path to `Frameworks` (a WineHQ build's has its own, and no room for
+  another). Both are load commands written into the file's header
   padding (`MachOPatch`), as `install_name_tool` would, which only comes
   with Xcode's tools. Every other Wine program finds the frameworks through
   `DYLD_FALLBACK_LIBRARY_PATH` (`Wine`).
@@ -410,7 +426,9 @@ builds. Wine's:
   hash, as the rest of the tree is.
 - Wine's 32-bit `ntdll.dll` gets the Rosetta fault fix (`RosettaFaultFix`),
   which lets programs wrapped in Armadillo, as Big Fish's games are, run
-  under Rosetta ([big-fish.md](big-fish.md#armadillo-under-rosetta)).
+  under Rosetta ([big-fish.md](big-fish.md#armadillo-under-rosetta)). Its
+  code goes in the unused end of `.text`, zeros in a GNU-linked Wine
+  (Sikarugir's) and `int3`s in an LLVM-linked one (WineHQ's).
 - The wrapper's Swift modules are dropped, and the framework they were in
   is sealed again.
 - Every unsigned program and DLL is signed, deepest first: signing a
@@ -573,7 +591,7 @@ none.
 
 | Module | Data | Read by |
 | --- | --- | --- |
-| `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), then `functions/prefix-settings`: `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `stages/update`, the `wine-prefix` update, which gives an old app's prefix this Wine and those settings again ([wrappfile.md](wrappfile.md#updates)); `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`); `functions/keep-thread-handles`, `WINE.KEEP-THREAD-HANDLES` for an Allegro 4 game that hangs as it exits, and `functions/skip-synth-playout`, `WINE.SKIP-SYNTH-PLAYOUT` for a game that loads its sounds through DirectMusic for minutes ([above](#the-wine-modules-patches)) | `WineManager`, as it makes a prefix, and the wine module's executor, which carries the steps out (through `ModuleSteps`); Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
+| `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), then `functions/prefix-settings`: `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `stages/update`, the `wine-prefix` update, which gives an old app's prefix this Wine and those settings again ([wrappfile.md](wrappfile.md#updates)); `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`); `functions/keep-thread-handles`, `WINE.PATCH keep-thread-handles` for an Allegro 4 game that hangs as it exits, and `functions/skip-synth-playout`, `WINE.PATCH skip-synth-playout` for a game that loads its sounds through DirectMusic for minutes ([above](#the-wine-modules-patches)) | `WineManager`, as it makes a prefix, and the wine module's executor, which carries the steps out (through `ModuleSteps`); Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
 | `wine` | `routine-errors.yaml`: Wine's routine `err:` lines | the wrapp's quit check (`GameQuitCheck`), compiled in by `sc generate` |
 | `steam` | `stages/client`: Steam's client in the wine module's prefix, ⌘ acting as Ctrl in its windows (`FROM --module=steam@1 client`); `functions/install`, the game installed by Steam with the shared sign-in, then signed out (`DO steam.install`) | `SteamWrappBuilder`, which carries the client stage out before the game is known and the edition's steps after ([steam.md](steam.md#building)) |
 | `big-fish` | `stages/manager`: the Game Manager in the wine module's prefix, from its installer pinned by its hash, ⌘ acting as Ctrl in its window (`FROM --module=big-fish@1 manager`); `functions/install`, the game installed and activated, then the account taken out (`DO big-fish.install`); `functions/cnc-ddraw`, cnc-ddraw hooking the functions themselves, as Armadillo rebuilds a game's imports (`DO big-fish.cnc-ddraw`) | `BigFishWrappBuilder`, which carries the manager stage out before the game is known and the edition's steps after ([big-fish.md](big-fish.md#the-build)) |

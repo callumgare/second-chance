@@ -2,7 +2,7 @@
 //  SkipSynthPlayoutTests.swift
 //  WineKitTests
 //
-//  WINE.SKIP-SYNTH-PLAYOUT's patch to Wine's 32-bit dmsynth.dll, on a DLL
+//  WINE.PATCH skip-synth-playout to Wine's 32-bit dmsynth.dll, on a DLL
 //  built here byte by byte, and on the real one where an engine store on
 //  this Mac has it.
 

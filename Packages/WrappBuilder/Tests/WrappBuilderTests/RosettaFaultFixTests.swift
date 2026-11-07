@@ -100,6 +100,26 @@ struct RosettaFaultFixTests {
         }
     }
 
+    /// The fake with the end of .text's file page, past what it uses, set to `fill`.
+    static func fakeNtdll(paddedWith fill: [UInt8]) -> [UInt8] {
+        var bytes = fakeNtdll()
+        for (index, offset) in (0x500..<0x1400).enumerated() { bytes[offset] = fill[index % fill.count] }
+        return bytes
+    }
+
+    @Test func takesLLVMsInt3PaddingForRoom() throws {
+        // WineHQ's macOS builds (Gcenx's) pad .text with int3s, not zeros.
+        let (data, outcome) = try RosettaFaultFix.patch(Data(Self.fakeNtdll(paddedWith: [0xcc])))
+        #expect(outcome == .patched)
+        #expect(Self.rel32Target([UInt8](data), at: 0x440, rva: 0x1040) == 0x1100)
+    }
+
+    @Test func refusesPaddingThatIsntAllOneFill() {
+        #expect(throws: RosettaFaultFix.PatchError.areaInUse) {
+            try RosettaFaultFix.patch(Data(Self.fakeNtdll(paddedWith: [0xcc, 0x90])))
+        }
+    }
+
     @Test func refusesWhenTextHasNoRoomLeft() {
         #expect(throws: RosettaFaultFix.PatchError.noRoom) {
             try RosettaFaultFix.patch(Data(Self.fakeNtdll(textVirtualSize: 0xf00)))

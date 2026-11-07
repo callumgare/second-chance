@@ -24,8 +24,7 @@ nonisolated enum BuilderDeclarations {
             "MOUNT": ["cdrom"],
             "HELPERS": [],
             "PREFIX": [],
-            "KEEP-THREAD-HANDLES": [],
-            "SKIP-SYNTH-PLAYOUT": [],
+            "PATCH": [],
         ],
         // The nancy-drew module's executor.
         "nancy-drew": ["CONFIGURE-INI": []],

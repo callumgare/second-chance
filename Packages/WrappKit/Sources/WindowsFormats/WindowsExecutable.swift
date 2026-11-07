@@ -8,7 +8,7 @@
 //  game an installer is for and which kind of installer it is (GameDetector,
 //  GameInstallerRunner), and the exports, import slots and addresses a patch
 //  to one of Wine's DLLs finds its code by (the wine module's
-//  KEEP-THREAD-HANDLES and SKIP-SYNTH-PLAYOUT).
+//  patches, WINE.PATCH).
 //  Every read is bounds-checked and every loop capped,
 //  so a damaged or truncated file gives less back, never a crash.
 //  The layouts are Microsoft's "PE Format" and "VS_VERSIONINFO" documentation.

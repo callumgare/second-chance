@@ -2,7 +2,7 @@
 //  SkipSynthPlayout.swift
 //  WineExecutor
 //
-//  WINE.SKIP-SYNTH-PLAYOUT: Wine's 32-bit dmsynth.dll changed so that a
+//  WINE.PATCH skip-synth-playout: Wine's 32-bit dmsynth.dll changed so that a
 //  DirectMusic synthesiser's sink stops at once, rather than first playing
 //  out what its sound buffer holds.
 //
@@ -32,7 +32,7 @@ import WindowsFormats
 import WrappFormat
 import WrappModuleKit
 
-/// The patch to Wine's 32-bit dmsynth.dll that `WINE.SKIP-SYNTH-PLAYOUT`
+/// The patch to Wine's 32-bit dmsynth.dll that `WINE.PATCH skip-synth-playout`
 /// makes in a tree's own copy of Wine (docs/modules.md#the-wine-modules-patches).
 public nonisolated enum SkipSynthPlayout {
     /// Part of the step's key: raise it whenever what the patch makes changes,
@@ -150,7 +150,7 @@ public nonisolated enum SkipSynthPlayout {
     public static func apply(in tree: URL) throws -> Outcome {
         let engine = engineDLL(in: tree)
         guard FileManager.default.fileExists(atPath: engine.path) else {
-            throw StepFailure.recipe("this tree has no Wine to patch (no \(engine.lastPathComponent) in its engine): WINE.SKIP-SYNTH-PLAYOUT goes after the stage has Wine")
+            throw StepFailure.recipe("this tree has no Wine to patch (no \(engine.lastPathComponent) in its engine): WINE.PATCH goes after the stage has Wine")
         }
         let original = try Data(contentsOf: engine)
         let (patched, outcome) = try patch(original)

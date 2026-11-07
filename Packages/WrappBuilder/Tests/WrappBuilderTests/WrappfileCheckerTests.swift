@@ -44,7 +44,7 @@ struct WrappfileCheckerTests {
         ("WINE.KEEP-DISCS ${input.disc-1} --into=C:/nancy-drew-installer", "WINE.KEEP-DISCS ${input.disc-1} --into=C:/x --cdrom",
          "line 10: WINE.KEEP-DISCS takes no --cdrom"),
         ("USE nancy-drew AS nd", "USE nancy-drew", "line 12: DO nd.patch: the stage doesn't USE a module called nd"),
-        ("USE wine@10", "USE wine@11", "line 6: USE wine@11: no version of wine is 11"),
+        ("USE wine@10", "USE wine@99", "line 6: USE wine@99: no version of wine is 99"),
         ("DO nd.patch --id=x --into=${const.install-dir}", "DO nd.patch --id=x", "line 12: DO nd.patch needs --into"),
         ("DO nd.patch --id=x --into=${const.install-dir}", "DO nd.nothing", "line 12: DO nd.nothing: the nancy-drew module has no function called nothing"),
         ("assets/disc.iss", "assets/missing.iss", "line 11: INSTALLER.RUN assets/missing.iss: the bundle has no assets/missing.iss"),

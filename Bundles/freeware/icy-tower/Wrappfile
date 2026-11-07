@@ -18,8 +18,13 @@ DO wine.cnc-ddraw
 # up, and switching to it from the options crashed the game. A made-up mode
 # of 640x480 makes the check pass, for this game only (its exe's section).
 EDIT C:/windows/syswow64/ddraw.ini --ini=icytower13.fake_mode=640x480x16
-# Allegro's timer can hang its exit, waiting on a thread's handle Wine has
-# closed and given out again.
+# Patch: a thread msvcrt's _beginthread started keeps its handle when it
+# ends. Why: Allegro's timer waits, with no limit, on its thread's handle as
+# the game exits; the C runtime has closed it by then, and once Wine has given
+# the value to something else the wait never ends (about 3 exits in 11 on
+# macOS 26). To go: Allegro waiting on a handle of its own (it can't be
+# changed in this game), or a Wine that doesn't reuse a closed handle's value
+# that soon; none does yet.
 DO wine.keep-thread-handles
 COPY --from=${input.game} . C:/icy-tower-setup/ # the installer, as it comes
 RUN "C:/icy-tower-setup/icytower13_install.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /NOICONS /DIR=C:\IcyTower

@@ -2,7 +2,7 @@
 //  KeepThreadHandlesTests.swift
 //  WineKitTests
 //
-//  WINE.KEEP-THREAD-HANDLES' patch to Wine's 32-bit msvcrt.dll, on a DLL
+//  WINE.PATCH keep-thread-handles to Wine's 32-bit msvcrt.dll, on a DLL
 //  built here byte by byte, and on the real one where an engine store on
 //  this Mac has it.
 

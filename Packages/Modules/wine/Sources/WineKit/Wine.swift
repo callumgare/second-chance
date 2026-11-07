@@ -81,7 +81,7 @@ nonisolated public struct Wine: Sendable {
             "WINEDEBUG": wineDebug,
             "PATH": "\(binDir.path):\(originalPath):/opt/local/bin:/opt/local/sbin",
             "DYLD_FALLBACK_LIBRARY_PATH": dyldFallbackLibraryPath,
-            "GST_PLUGIN_PATH": frameworksDir.appendingPathComponent("GStreamer.framework/Libraries/gstreamer-1.0").path,
+            "GST_PLUGIN_PATH": gstreamerPlugins.path,
             "WINETRICKS_FALLBACK_LIBRARY_PATH": dyldFallbackLibraryPath,
             "WINEBOOT_HIDE_DIALOG": "1",
             // winemenubuilder turns each Start menu entry and file association
@@ -101,6 +101,16 @@ nonisolated public struct Wine: Sendable {
             "DOTNET_EnableWriteXorExecute": "0"
         ].merging(Self.syncVariables()) { $1 }
             .merging(sessionVariables) { ours, _ in ours }
+    }
+
+    /// GStreamer's plugins, which DirectShow and Media Foundation decode
+    /// through (an MP3 through MCI): the engine's own when it brings GStreamer
+    /// inside Wine (a WineHQ build for macOS), else the wrapper template's,
+    /// in Contents/Frameworks (Sikarugir's).
+    var gstreamerPlugins: URL {
+        let own = wineDir.appendingPathComponent("lib/GStreamer.framework/Libraries/gstreamer-1.0")
+        return FileManager.default.fileExists(atPath: own.path)
+            ? own : frameworksDir.appendingPathComponent("GStreamer.framework/Libraries/gstreamer-1.0")
     }
 
     /// `WINEMSYNC` and `WINEESYNC`: how Wine's programs wait on each other

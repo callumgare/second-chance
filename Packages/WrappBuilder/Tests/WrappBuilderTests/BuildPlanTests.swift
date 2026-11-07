@@ -481,8 +481,8 @@ struct BuildPlanTests {
         let run = try #require(planned.first)
         #expect(run.module == "installer" && run.instruction == "RUN")
         #expect(run.option("into") == "wine:C:/game")
-        #expect(try steps("FROM scratch AS only\nUSE wine\nREMOVE C:/${module.wine.version}").flatMap(\.arguments) == ["wine:C:/10.0_8"])
-        #expect(try steps("FROM scratch AS only\nUSE wine\nREMOVE C:/${wine.version}").flatMap(\.arguments) == ["wine:C:/10.0_8"])
+        #expect(try steps("FROM scratch AS only\nUSE wine@10\nREMOVE C:/${module.wine.version}").flatMap(\.arguments) == ["wine:C:/10.0_8"])
+        #expect(try steps("FROM scratch AS only\nUSE wine@10\nREMOVE C:/${wine.version}").flatMap(\.arguments) == ["wine:C:/10.0_8"])
     }
 
     @Test("A secret input never reaches a step's text")

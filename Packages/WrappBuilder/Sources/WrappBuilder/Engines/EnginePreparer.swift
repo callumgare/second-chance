@@ -164,17 +164,37 @@ nonisolated extension WineBuild {
     /// program asking for `@rpath/` (wineserver's libinotify) needs a run
     /// path to them, which is added as `install_name_tool` would. The
     /// wrapper's cabextract is kept in `build-tools/`, for winetricks.
+    ///
+    /// A WineHQ build for macOS (`winehq`, Gcenx's, an app whose
+    /// `Contents/Resources/wine` holds Wine with every library it needs,
+    /// GStreamer and MoltenVK among them, found through its own run paths)
+    /// goes in `SharedSupport/wine` in its place, and only the wrapper's
+    /// cabextract is taken from the template: its frameworks are Sikarugir's
+    /// Wine's.
     public static func prepare(_ job: EngineJob) async throws -> [URL] {
         var toSign: [URL] = []
         let wine = job.tree.appendingPathComponent("SharedSupport/wine")
         let frameworks = job.tree.appendingPathComponent("Frameworks")
         try FileManager.default.createDirectory(at: wine, withIntermediateDirectories: true)
-        try await job.run("/usr/bin/tar", ["-xf", try job.source("wine").path, "-C", wine.path, "--strip-components=1"])
+        let winehq = job.sources["winehq"] != nil
+        if winehq {
+            try await job.run("/usr/bin/tar", ["-xf", try job.source("winehq").path, "-C", wine.path,
+                                               "--strip-components=4", "--include=*/Contents/Resources/wine/*"])
+        } else {
+            try await job.run("/usr/bin/tar", ["-xf", try job.source("wine").path, "-C", wine.path, "--strip-components=1"])
+        }
+        guard FileManager.default.fileExists(atPath: wine.appendingPathComponent("bin/wine").path) else {
+            throw EngineError("the Wine download has no bin/wine where it was expected")
+        }
 
         let wrapper = job.scratch.appendingPathComponent("wineskin")
         try FileManager.default.createDirectory(at: wrapper, withIntermediateDirectories: true)
         try await job.run("/usr/bin/tar", ["-xf", try job.source("wineskin").path, "-C", wrapper.path, "--strip-components=1"])
-        try await job.run("/usr/bin/ditto", ["--rsrc", wrapper.appendingPathComponent("Contents/Frameworks").path, frameworks.path])
+        if winehq {
+            try FileManager.default.createDirectory(at: frameworks, withIntermediateDirectories: true)
+        } else {
+            try await job.run("/usr/bin/ditto", ["--rsrc", wrapper.appendingPathComponent("Contents/Frameworks").path, frameworks.path])
+        }
 
         // The wrapper's cabextract, which winetricks needs for any verb that
         // unpacks a Microsoft redistributable (directmusic, d3dx9, vcrun):
@@ -184,8 +204,10 @@ nonisolated extension WineBuild {
         try FileManager.default.copyItem(at: wrapper.appendingPathComponent("Contents/Configure.app/Contents/Resources/cabextract"), to: cabextract)
         toSign.append(cabextract)
 
+        // A WineHQ build's programs find its libraries through their own run
+        // paths (`@loader_path/../lib`), and have no room for another.
         for program in try FileManager.default.contentsOfDirectory(at: wine.appendingPathComponent("bin"), includingPropertiesForKeys: nil)
-        where try MachOPatch.dependencies(of: program).contains(where: { $0.hasPrefix("@rpath/") }) {
+        where try !winehq && MachOPatch.dependencies(of: program).contains(where: { $0.hasPrefix("@rpath/") }) {
             if try MachOPatch.addRunPath(program, path: frameworksRunPath) { toSign.append(program) }
         }
 

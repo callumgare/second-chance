@@ -45,8 +45,8 @@ let package = Package(
             ],
             swiftSettings: swiftSettings
         ),
-        // WINE.DRIVES, REGISTRY, WINETRICKS, MOUNT, KEEP-THREAD-HANDLES,
-        // SKIP-SYNTH-PLAYOUT, and its setup steps.
+        // WINE.DRIVES, REGISTRY, WINETRICKS, MOUNT, PATCH, and its setup
+        // steps.
         .target(
             name: "WineExecutor",
             dependencies: [

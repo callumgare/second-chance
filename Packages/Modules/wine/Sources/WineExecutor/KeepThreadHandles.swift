@@ -2,7 +2,7 @@
 //  KeepThreadHandles.swift
 //  WineExecutor
 //
-//  WINE.KEEP-THREAD-HANDLES: Wine's 32-bit msvcrt.dll changed so that a
+//  WINE.PATCH keep-thread-handles: Wine's 32-bit msvcrt.dll changed so that a
 //  thread `_beginthread` started keeps its handle when it ends, for a game
 //  that waits on that handle after the thread may already have ended.
 //
@@ -31,7 +31,7 @@ import WindowsFormats
 import WrappFormat
 import WrappModuleKit
 
-/// The patch to Wine's 32-bit msvcrt.dll that `WINE.KEEP-THREAD-HANDLES`
+/// The patch to Wine's 32-bit msvcrt.dll that `WINE.PATCH keep-thread-handles`
 /// makes in a tree's own copy of Wine (docs/modules.md#the-wine-modules-patches).
 public nonisolated enum KeepThreadHandles {
     /// Part of the step's key: raise it whenever what the patch makes changes,
@@ -132,7 +132,7 @@ public nonisolated enum KeepThreadHandles {
     public static func apply(in tree: URL) throws -> Outcome {
         let engine = engineDLL(in: tree)
         guard FileManager.default.fileExists(atPath: engine.path) else {
-            throw StepFailure.recipe("this tree has no Wine to patch (no \(engine.lastPathComponent) in its engine): WINE.KEEP-THREAD-HANDLES goes after the stage has Wine")
+            throw StepFailure.recipe("this tree has no Wine to patch (no \(engine.lastPathComponent) in its engine): WINE.PATCH goes after the stage has Wine")
         }
         let original = try Data(contentsOf: engine)
         let (patched, outcome) = try patch(original)

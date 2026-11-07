@@ -155,8 +155,14 @@ nonisolated enum ShippedBundles {
                         ?? BuildPlanner.moduleStage(id, name, constraint: nil, modules: modules)
                     files[path] = planned?.plannedTextHash
                 }
-                return WrappLock.ModuleRef(id: id, release: module.manifest.release, version: module.manifest.versions.first?.version,
-                                           files: files.isEmpty ? nil : files, package: module.manifest.package()?.package.prepared)
+                // The version the plan laid in (its ENGINE step, `wine@11.21`),
+                // and that version's package: a module may offer several.
+                let planned = plan?.stages.lazy.flatMap(\.steps).first {
+                    $0.instruction == "ENGINE" && $0.arguments.first?.hasPrefix("\(id)@") == true
+                }?.arguments.first.map { String($0.dropFirst(id.count + 1)) }
+                let version = planned ?? module.manifest.versions.first?.version
+                return WrappLock.ModuleRef(id: id, release: module.manifest.release, version: version,
+                                           files: files.isEmpty ? nil : files, package: module.manifest.package(version: version)?.package.prepared)
             }
             let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
             // The volumes the plan's launch mounts; for an edition with no

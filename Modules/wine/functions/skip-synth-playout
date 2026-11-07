@@ -12,5 +12,5 @@
 # (FROM --module=wine… prefix); a game without it gets Wine as it comes.
 # docs/modules.md#the-wine-modules-patches has the details.
 FUNCTION skip-synth-playout
-  WINE.SKIP-SYNTH-PLAYOUT
+  WINE.PATCH skip-synth-playout
 END

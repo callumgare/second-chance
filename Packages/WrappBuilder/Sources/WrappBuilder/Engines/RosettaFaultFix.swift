@@ -18,7 +18,8 @@ import Foundation
 /// Adds fault_fix.c's code to a 32-bit Wine ntdll.dll, called first thing in
 /// `KiUserExceptionDispatcher`.
 ///
-/// The code goes into the unused end of `.text`'s last file page. The
+/// The code goes into the unused end of `.text`'s last file page (zeros, or
+/// int3s as LLVM's linker pads it). The
 /// dispatcher's first instructions (`push [esp+4]` twice: the record and the
 /// context) become a jump to a short stub that calls the code; if it handled
 /// the fault the stub resumes the thread with `NtContinue`, and otherwise it
@@ -72,7 +73,10 @@ public nonisolated enum RosettaFaultFix {
         let cave = stub(at: caveRVA, dispatcher: dispatcher, ntContinue: ntContinue)
         guard caveRVA + cave.count <= text.virtualAddress + text.rawSize,
               let caveOffset = image.fileOffset(caveRVA) else { throw PatchError.noRoom }
-        guard bytes[caveOffset..<caveOffset + cave.count].allSatisfy({ $0 == 0 }) else { throw PatchError.areaInUse }
+        // Unused: zeros (GNU ld's padding) or int3s (LLVM's, as WineHQ's
+        // macOS builds are linked).
+        let area = bytes[caveOffset..<caveOffset + cave.count]
+        guard area.allSatisfy({ $0 == 0 }) || area.allSatisfy({ $0 == 0xcc }) else { throw PatchError.areaInUse }
 
         bytes.replaceSubrange(caveOffset..<caveOffset + cave.count, with: cave)
         // .text's VirtualSize now covers the code, so the loader maps it.
