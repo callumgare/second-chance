@@ -11,9 +11,11 @@ CONST install-dir = "C:/Iji"
 
 FROM --module=wine@10 prefix AS download
 COPY --from=${input.game} . ${const.install-dir}/ # the zip's files: the game, its music, its manual and its source
-# Game Maker 7 loads every sound through DirectMusic, and Wine's own
-# synthesiser takes 1.5 s over each (err:dmsynth ... WaitForMultipleObjects):
-# Iji sat on "Loading, please wait" for over 6 minutes. Microsoft's own.
-WINE.WINETRICKS directmusic
+# Game Maker 7 gives each of its sounds a DirectMusic performance, and Wine
+# 10's synthesiser plays out two seconds of buffer each time one stops:
+# Iji sat on "Loading, please wait" for over 6 minutes. With this it loads
+# in about 15 s. Not winetricks' directmusic: its Microsoft dsound.dll left
+# the music (MP3s through MCI and DirectShow) silent.
+DO wine.skip-synth-playout
 LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="*.ini;*.sav;*.cfg" \
     --wine.graphics=direct-3d --wine.window=windowed --wine.quit-key=f12:hold=5s "${const.install-dir}/iji.exe"

@@ -23,3 +23,11 @@
   why: >-
     A game's music played through Windows' media stack, stopped as the game
     quits: Iji logs it on every quit from its own menu.
+- pattern: ":err:dmsynth:synth_sink_render_thread WaitForMultipleObjects returned 0"
+  why: >-
+    Wine 10's DirectMusic synthesiser stopping as it should, as a game quits:
+    it logs this on every stop (Iji, from its own menu).
+- pattern: ":err:dmsynth:synth_sink_write_data Underrun detected"
+  why: >-
+    The synthesiser falling behind for a moment: a click in the sound, not a
+    failure.

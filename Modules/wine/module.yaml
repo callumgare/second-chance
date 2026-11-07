@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 26
+release: 27
 native: "wine"                               # its Swift: Packages/Modules/wine (WineKit, WineExecutor), WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -23,7 +23,7 @@ runtime: { save-warning: true }              # Wine games are less stable than S
 data: ["routine-errors.yaml"]
 retired: ["prefix.yaml"]                     # The app's own; the prefix stage replaced it
 stages: ["stages/prefix", "stages/update"]  # FROM --module=wine@<version> prefix
-functions: ["functions/cnc-ddraw", "functions/prefix-settings", "functions/keep-thread-handles"]  # DO wine.cnc-ddraw
+functions: ["functions/cnc-ddraw", "functions/prefix-settings", "functions/keep-thread-handles", "functions/skip-synth-playout"]  # DO wine.cnc-ddraw
 assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a program with no menu, started and quit
 updates:
   # A wrapp whose prefix was set up by another prefix stage gets this
@@ -55,6 +55,11 @@ build:
     # that waits on it afterwards (Allegro 4's timer), which can hang for ever
     # once the closed handle's value is reused.
     KEEP-THREAD-HANDLES: {}
+    # Wine's 32-bit dmsynth.dll in the tree's own Wine changed so that a
+    # DirectMusic synthesiser's sink stops at once, rather than first playing
+    # out its two-second buffer: for a game that stops one for every sound it
+    # loads (Game Maker 7's), which otherwise loads for minutes.
+    SKIP-SYNTH-PLAYOUT: {}
     # Makes the prefix: wineboot's.
     PREFIX: { layer: suggested }
     # Copies the discs it's given into --into (<into>/disk-<n>), and for more

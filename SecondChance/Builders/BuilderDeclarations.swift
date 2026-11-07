@@ -25,6 +25,7 @@ nonisolated enum BuilderDeclarations {
             "HELPERS": [],
             "PREFIX": [],
             "KEEP-THREAD-HANDLES": [],
+            "SKIP-SYNTH-PLAYOUT": [],
         ],
         // The nancy-drew module's executor.
         "nancy-drew": ["CONFIGURE-INI": []],

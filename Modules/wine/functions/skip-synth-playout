@@ -1,0 +1,16 @@
+# DO wine.skip-synth-playout
+#
+# For a game whose sounds go through DirectMusic and that sits on its loading
+# screen for minutes, logging err:dmsynth:synth_sink_render_thread
+# "WaitForMultipleObjects returned 0" every second and a half or so: Game
+# Maker 7's games, which give every sound a DirectMusic performance of its
+# own and stop it again as they load. Wine 10's synthesiser plays out its
+# two-second buffer each time one stops; this makes it stop at once, in this
+# stage's own Wine (its 32-bit dmsynth.dll), as Wine 11.2 and later do. Use it
+# in place of winetricks' directmusic, whose Microsoft dsound.dll leaves
+# DirectShow's music (MCI's MP3s) silent. Put it after the stage has Wine
+# (FROM --module=wine… prefix); a game without it gets Wine as it comes.
+# docs/modules.md#the-wine-modules-patches has the details.
+FUNCTION skip-synth-playout
+  WINE.SKIP-SYNTH-PLAYOUT
+END

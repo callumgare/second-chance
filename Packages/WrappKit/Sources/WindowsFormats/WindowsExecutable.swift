@@ -6,8 +6,9 @@
 //  Windows program: the DLLs it imports, which say what a game draws with
 //  (GameGraphicsAPI), and the strings in its version info, which say which
 //  game an installer is for and which kind of installer it is (GameDetector,
-//  GameInstallerRunner), and the exports and import slots a patch to one of
-//  Wine's DLLs finds its code by (the wine module's KEEP-THREAD-HANDLES).
+//  GameInstallerRunner), and the exports, import slots and addresses a patch
+//  to one of Wine's DLLs finds its code by (the wine module's
+//  KEEP-THREAD-HANDLES and SKIP-SYNTH-PLAYOUT).
 //  Every read is bounds-checked and every loop capped,
 //  so a damaged or truncated file gives less back, never a crash.
 //  The layouts are Microsoft's "PE Format" and "VS_VERSIONINFO" documentation.
@@ -278,6 +279,13 @@ nonisolated public struct WindowsExecutable: Sendable {
     public func fileOffset(ofRVA rva: Int) -> Int? {
         sections.first { rva >= $0.virtualAddress && rva < $0.virtualAddress + $0.size }
             .map { $0.rawOffset + (rva - $0.virtualAddress) }
+    }
+
+    /// The RVA the byte at `offset` in the file is loaded at, by the section
+    /// whose raw data holds it; nil for one in no section (the headers).
+    public func rva(ofFileOffset offset: Int) -> Int? {
+        sections.first { offset >= $0.rawOffset && offset < $0.rawOffset + $0.size && $0.rawOffset > 0 }
+            .map { $0.virtualAddress + (offset - $0.rawOffset) }
     }
 
     private func cString(atRVA rva: Int) -> String? {

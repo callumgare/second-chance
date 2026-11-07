@@ -29,6 +29,12 @@ nonisolated extension GameQuitCheck {
         // A game's music played through Windows' media stack, stopped as the
         // game quits: Iji logs it on every quit from its own menu.
         ":err:quartz:send_buffer Failed to get a sample",
+        // Wine 10's DirectMusic synthesiser stopping as it should, as a game
+        // quits: it logs this on every stop (Iji, from its own menu).
+        ":err:dmsynth:synth_sink_render_thread WaitForMultipleObjects returned 0",
+        // The synthesiser falling behind for a moment: a click in the sound, not
+        // a failure.
+        ":err:dmsynth:synth_sink_write_data Underrun detected",
     ]
 
     /// What Steam logs as it starts, as well, for a game launched through it (the steam module's).
