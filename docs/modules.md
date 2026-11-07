@@ -560,14 +560,22 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
     so the disk is left clean.
   - with `LAUNCH --basilisk.shut-down=with-program` (`BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM`),
     shuts the Mac down the same way once the program it opened has quit, so the
-    app closes with it rather than leaving the player at the Finder. Which
-    application is running is read four times a second from the Mac's own
-    memory (Basilisk II exports `RAMBaseHost`; low memory's `CurApName`, which
-    the Process Manager switches with each application it runs), which costs
-    Basilisk II nothing, where a picture would stall it. A program counts as
-    quit once only the Finder has run for 5 s, after a program has run since the
-    Mac last started (`Ticks` going back says it restarted), so the Finder alone
-    at boot or after a restart the program asked for isn't taken for a quit.
+    app closes with it rather than leaving the player at the Finder, and never
+    while the program is open, in front or behind the Finder. Which
+    applications are open is read four times a second from the Mac's own
+    memory (Basilisk II exports `RAMBaseHost` and `RAMSize`), which costs
+    Basilisk II nothing, where a picture would stall it: the Process Manager's
+    Application menu (menu ID -16489, found in the system menu list, the
+    handle at low memory's `0x286`), whose items below its first "-" are the
+    open applications, an item added as one opens and taken out as it quits,
+    whether or not the menu bar shows. Low memory's `CurApName` wouldn't do: it
+    names only the application that has time at that moment, so a program
+    left open behind the Finder reads "Finder" there for as long as it's left.
+    The menu is believed when two reads in a row agree, since the Mac may be
+    changing it; the Mac shuts down as soon as only the Finder is listed,
+    after a program has been since the Mac last started (`Ticks` going back
+    says it restarted), so the Finder alone at boot or after a restart the
+    program asked for isn't taken for a quit.
     System 7.5.3's disk has no AppleScript, so this couldn't be the Mac's own
     startup item.
 

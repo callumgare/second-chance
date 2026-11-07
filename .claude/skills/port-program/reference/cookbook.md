@@ -137,8 +137,10 @@ LAUNCH --basilisk.screen=640x480x8 --basilisk.shut-down=with-program "basilisk:I
   too quickly to catch.
 - `--basilisk.shut-down=with-program` closes the app when the player quits
   the program, rather than leaving them at the Finder: the helper reads which
-  application is running from the Mac's memory (no pictures, so it costs the
-  game nothing). Leave it off for a program meant to be left for the Finder.
+  applications are open (the Process Manager's Application menu) from the
+  Mac's memory (no pictures, so it costs the game nothing), and shuts down
+  once only the Finder is, never while the program is open behind it. Leave
+  it off for a program meant to be left for the Finder.
 - System 7.5.3's disk has no AppleScript (no extension, no Script Editor) and
   only HyperCard 2.4, which can't shut the Mac down by itself: anything to do
   while the program runs is the helper's, outside the Mac, not a script in it.

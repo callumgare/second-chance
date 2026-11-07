@@ -43,8 +43,9 @@
 //    BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM=1 (`LAUNCH
 //    --basilisk.shut-down=with-program`), once the program the Mac opened
 //    has quit, leaving the Finder alone, the Mac is shut down the same way,
-//    so the app closes with the game. Told from the Mac's memory (the
-//    application running, low memory's CurApName), never from pictures.
+//    so the app closes with the game; never while it's open, even behind
+//    the Finder. Told from the Mac's memory (the applications open, as the
+//    Process Manager's Application menu lists them), never from pictures.
 //  - **A build's automation.** With BASILISK_MAC_AUTOMATION naming a script
 //    (the basilisk module's BASILISK.RUN), the Mac is driven by it once its
 //    window is up, a line at a time: puppet control's requests (`click 440
@@ -370,28 +371,103 @@ static void quitShutsDown(void) {
 #pragma mark - Shutting down with the program
 
 /// The Mac's memory as Basilisk II keeps it in this process (its globals
-/// RAMBaseHost and RAMBaseMac, which its build exports), from address 0; NULL
-/// until the Mac has its memory, or if it isn't laid out from 0 in one piece.
-static const volatile uint8_t *macMemory(void) {
+/// RAMBaseHost, RAMBaseMac and RAMSize, which its build exports), from
+/// address 0, and how much of it there is; NULL until the Mac has its
+/// memory, or if it isn't laid out from 0 in one piece.
+static const volatile uint8_t *macMemory(uint32_t *size) {
     static uint8_t **host;
     static uint32_t *mac;
+    static uint32_t *ramSize;
     if (!host) host = (uint8_t **)dlsym(RTLD_DEFAULT, "RAMBaseHost");
     if (!mac) mac = (uint32_t *)dlsym(RTLD_DEFAULT, "RAMBaseMac");
-    if (!host || !mac || !*host || *mac != 0) return NULL;
+    if (!ramSize) ramSize = (uint32_t *)dlsym(RTLD_DEFAULT, "RAMSize");
+    if (!host || !mac || !ramSize || !*host || *mac != 0 || *ramSize < 0x10000) return NULL;
+    *size = *ramSize;
     return *host;
 }
 
-/// The Mac's low-memory CurApName (0x910): the name of the application that
-/// is running at this moment, a Pascal string. The Process Manager switches
-/// it with each application it gives time to, so while a program is open it
-/// is that program's name most of the time and the Finder's now and then,
-/// and with only the Finder open, always "Finder". nil when it can't be read.
-static NSString *runningApplication(const volatile uint8_t *memory) {
-    uint8_t name[32];
-    for (int i = 0; i < 32; i++) name[i] = memory[0x910 + i];
-    if (name[0] == 0 || name[0] > 31) return nil;
-    CFStringRef text = CFStringCreateWithPascalString(NULL, name, kCFStringEncodingMacRoman);
-    return text ? (__bridge_transfer NSString *)text : nil;
+/// The Mac's memory read a field at a time, big-endian, every read checked
+/// against its size, since the addresses come from the Mac itself.
+typedef struct {
+    const volatile uint8_t *memory;
+    uint32_t size;
+    BOOL ok;
+} MacReader;
+
+static uint32_t macLong(MacReader *reader, uint32_t address) {
+    if (address > reader->size - 4) { reader->ok = NO; return 0; }
+    const volatile uint8_t *p = reader->memory + address;
+    return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
+}
+
+static int16_t macWord(MacReader *reader, uint32_t address) {
+    if (address > reader->size - 2) { reader->ok = NO; return 0; }
+    const volatile uint8_t *p = reader->memory + address;
+    return (int16_t)((uint16_t)p[0] << 8 | p[1]);
+}
+
+static uint8_t macByte(MacReader *reader, uint32_t address) {
+    if (address >= reader->size) { reader->ok = NO; return 0; }
+    return reader->memory[address];
+}
+
+/// A handle's block: the address its master pointer holds (only the low 24
+/// bits while the Mac runs in 24-bit mode, low memory's MMU32Bit, 0xCB2, 0).
+static uint32_t macDeref(MacReader *reader, uint32_t handle) {
+    uint32_t pointer = macLong(reader, handle);
+    return macByte(reader, 0xCB2) ? pointer : (pointer & 0x00FFFFFF);
+}
+
+/// The menu ID of the Application menu, the Process Manager's, at the right
+/// of the menu bar (Inside Macintosh's kApplicationMenuID).
+static const int16_t kApplicationMenuID = -16489;
+
+/// The applications open on the Mac, as the Process Manager lists them in
+/// its Application menu: the names after the menu's first "-" (above it are
+/// Hide …, Hide Others and Show All). The Process Manager adds an
+/// application's name as it opens and takes it out as it quits, whichever
+/// application is in front and whether or not the menu bar shows (Ingenious
+/// hides it), so it says what is open, where low memory's CurApName says
+/// only which application has time at this moment: a program left open
+/// behind the Finder reads "Finder" there for as long as it's left.
+/// The menu is found from the system menu list (the handle at low memory's
+/// 0x286; the Help menu and this one), not from MenuList, which is the
+/// application in front's and is empty while Ingenious runs. nil when it
+/// can't be read, as before the Process Manager has made the menu.
+static NSArray<NSString *> *openApplications(const volatile uint8_t *memory, uint32_t size) {
+    MacReader reader = { memory, size, YES };
+    MacReader *r = &reader;
+    uint32_t list = macDeref(r, macLong(r, 0x286));
+    int16_t lastMenu = macWord(r, list);
+    if (!reader.ok || list == 0 || lastMenu < 0 || lastMenu > 6 * 16) return nil;
+    for (int16_t offset = 6; offset <= lastMenu; offset += 6) {
+        uint32_t menu = macDeref(r, macLong(r, list + (uint32_t)offset));
+        if (!reader.ok) return nil;
+        if (menu == 0 || macWord(r, menu) != kApplicationMenuID) continue;
+        // MenuInfo: menuID, menuWidth, menuHeight, menuProc, enableFlags,
+        // then the title and the items, each a Pascal string and four bytes
+        // (icon, key, mark, style), up to an empty one.
+        uint32_t item = menu + 14;
+        item += 1 + macByte(r, item);
+        NSMutableArray<NSString *> *names = [NSMutableArray array];
+        BOOL separated = NO;
+        for (int i = 0; i < 64; i++) {
+            uint8_t length = macByte(r, item);
+            if (!reader.ok) return nil;
+            if (length == 0) return separated ? names : nil;
+            uint8_t text[256];
+            for (int c = 0; c <= length; c++) text[c] = macByte(r, item + (uint32_t)c);
+            if (!reader.ok) return nil;
+            item += 1 + length + 4;
+            CFStringRef name = CFStringCreateWithPascalString(NULL, text, kCFStringEncodingMacRoman);
+            if (!name) return nil;
+            NSString *string = (__bridge_transfer NSString *)name;
+            if (!separated) separated = [string isEqualToString:@"-"];
+            else [names addObject:string];
+        }
+        return nil;
+    }
+    return nil;
 }
 
 /// The Mac's low-memory Ticks (0x16A): sixtieths of a second since it
@@ -400,28 +476,29 @@ static uint32_t macTicks(const volatile uint8_t *memory) {
     return (uint32_t)memory[0x16A] << 24 | (uint32_t)memory[0x16B] << 16 | (uint32_t)memory[0x16C] << 8 | memory[0x16D];
 }
 
-/// How long only the Finder must have run, after a program has, for the
-/// program to count as quit: twenty looks in a row, where a program that is
-/// open is seen in nearly every one.
-static const double kQuitSeconds = 5;
-
 /// BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM (`LAUNCH --basilisk.shut-down=with-program`):
-/// once the program the Mac opened has quit, leaving only the Finder, the
-/// Mac is shut down, and with it the app. Told from the Mac's own memory,
-/// four times a second, which costs Basilisk II nothing (a picture of its
-/// window would stall it). A program must have run since the Mac last
-/// started: the Finder alone at boot, before it opens its startup items, or
-/// after a restart, isn't a quit.
+/// once the program the Mac opened has quit, leaving only the Finder open,
+/// the Mac is shut down, and with it the app; never while a program is open,
+/// in front or not. Told from the Mac's own memory, its Application menu
+/// (openApplications), four times a second, which costs Basilisk II
+/// nothing (a picture of its window would stall it). The menu is read twice
+/// in a row each time and believed only when both agree, since the Mac may
+/// be changing it as it's read; nothing waits beyond that, as the menu says
+/// what's open, not what ran last. A program must have been open since the
+/// Mac last started (Ticks going back says it restarted): the Finder alone
+/// at boot, before it opens its startup items, or after a restart, isn't a
+/// quit.
 static void watchProgram(void) {
     static dispatch_source_t timer;
     static BOOL seen = NO;
     static uint32_t lastTicks = 0;
-    static NSDate *finderSince = nil;
+    static NSArray<NSString *> *lastOpen = nil;
     static BOOL said = NO;
     timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
     dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), NSEC_PER_SEC / 4, NSEC_PER_SEC / 20);
     dispatch_source_set_event_handler(timer, ^{
-        const volatile uint8_t *memory = macMemory();
+        uint32_t size = 0;
+        const volatile uint8_t *memory = macMemory(&size);
         if (!memory) {
             if (!said) helperReport(kHelper, "notice", "waiting for the Mac's memory to watch its program");
             said = YES;
@@ -431,24 +508,23 @@ static void watchProgram(void) {
         if (ticks < lastTicks && seen) {
             helperReport(kHelper, "notice", "the Mac restarted: waiting for its program again");
             seen = NO;
-            finderSince = nil;
         }
         lastTicks = ticks;
-        NSString *running = runningApplication(memory);
-        if (!running) {
-            finderSince = nil;
-            return;
+        NSArray<NSString *> *open = openApplications(memory, size);
+        if (!open || ![open isEqualToArray:openApplications(memory, size) ?: @[]]) return;
+        if (![open isEqualToArray:lastOpen ?: @[]]) {
+            helperReport(kHelper, "notice", "open on the Mac: %s", [open componentsJoinedByString:@", "].UTF8String);
+            lastOpen = open;
         }
-        if (![running isEqualToString:@"Finder"]) {
-            if (!seen) helperReport(kHelper, "notice", "the Mac is running %s: shutting it down once that quits", running.UTF8String);
+        NSArray<NSString *> *programs = [open filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF != 'Finder'"]];
+        if (programs.count > 0) {
+            if (!seen) helperReport(kHelper, "notice", "the Mac has %s open: shutting it down once only the Finder is",
+                                    [programs componentsJoinedByString:@", "].UTF8String);
             seen = YES;
-            finderSince = nil;
             return;
         }
         if (!seen) return;
-        if (!finderSince) finderSince = [NSDate date];
-        if (-[finderSince timeIntervalSinceNow] < kQuitSeconds) return;
-        helperReport(kHelper, "notice", "the Mac's program has quit (only the Finder for %.0f s)", kQuitSeconds);
+        helperReport(kHelper, "notice", "the Mac's program has quit: only the Finder is open");
         dispatch_source_cancel(timer);
         dispatch_async(dispatch_get_main_queue(), ^{ startShutDown(); });
     });
