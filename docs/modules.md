@@ -223,7 +223,12 @@ its module's executor ([wrapp-build.md](wrapp-build.md#the-runner)).
 - **`finish`** ends whatever the executor started, and is called at the end
   of every build, on failure and cancel too.
 - A failure is a `StepFailure`: `.recipe` for what the Wrappfile or module
-  says can't be done, `.failed` for a step that was tried and failed.
+  says can't be done, `.failed` for a step that was tried and failed. Second
+  Chance shows the first as a problem with its instructions
+  (`WrappBuildError.buildRecipeProblem`, which updating may fix) and the
+  second as a part of setting the game up that didn't work
+  (`WrappBuildError.stepFailed`, which trying again may get past), each its
+  own failure report `kind`.
 
 An executor is made once per build. It may keep what lasts between steps (a
 running Steam), but a step's only results are its tree and its events, so a

@@ -72,7 +72,8 @@ checkpoints and events work as for any other.
   calls, so it can't tell it from the runner's own.
 - **Errors are JSON-RPC error objects**: `-32000`, a recipe problem, which
   becomes `StepFailure.recipe` (and `WrappBuildError.buildRecipeProblem`);
-  `-32001`, the step failed; `-32800`, cancelled (LSP's code). Cancelling is
+  `-32001`, the step failed (`StepFailure.failed`, and
+  `WrappBuildError.stepFailed`); `-32800`, cancelled (LSP's code). Cancelling is
   LSP's `$/cancelRequest` notification, either way.
 - **A broken pipe never ends the build**: writing to a program that has
   gone fails as an error rather than raising SIGPIPE.

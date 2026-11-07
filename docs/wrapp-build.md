@@ -471,7 +471,8 @@ on the build's bus, reading the `EMIT` strings Second Chance knows
 lone wine step for code outside a plan (Steam's `REMOVE` undoing its client
 stage's registry settings), with the shipped modules'
 executors (`ModuleSteps.executors()`). A `StepFailure` from one becomes
-`WrappBuildError.buildRecipeProblem`.
+a `WrappBuildError` through `WrappBuildError(stepFailure:)`: `.recipe` is
+`buildRecipeProblem`, `.failed` is `stepFailed`.
 
 `wrapp-builder build` runs the same runner from the command line, with the
 executors the tool has ([dev-cli.md](dev-cli.md#wrapp-builder)).

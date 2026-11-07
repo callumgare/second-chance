@@ -13,12 +13,17 @@
 import Foundation
 import GameCatalog
 import SecondChanceKit
+import WrappBuilder
 
 enum WrappBuildError: LocalizedError, Equatable {
     case unsupportedEngine
     /// The game's bundle can't be planned, or its plan has a step this
     /// builder can't run; the detail is for the log.
     case buildRecipeProblem(String)
+    /// A step of the build was tried and failed (`StepFailure.failed`): an
+    /// installer that failed, an automation that didn't finish. The detail
+    /// is for the log.
+    case stepFailed(String)
     /// The signed-in Steam account doesn't own the game.
     case steamGameNotOwned(title: String)
     /// The signed-in Steam account owns none of the games on Steam.
@@ -143,10 +148,22 @@ enum WrappBuildError: LocalizedError, Equatable {
             self = .userCancelled
         case let discImage as DiscImageError:
             self = .discImage(discImage)
+        case let step as StepFailure:
+            self.init(stepFailure: step)
         default:
             self = ErrorChain.isOutOfSpace(error)
                 ? .notEnoughSpace(needed: nil, available: nil)
                 : .internalError(ErrorChain.describe(error))
+        }
+    }
+
+    /// A step's failure as a build error: one the Wrappfile or a module
+    /// says can't be done is a problem with the recipe; one tried that
+    /// failed is a failed step, which trying again may get past.
+    init(stepFailure: StepFailure) {
+        switch stepFailure {
+        case .recipe(let message): self = .buildRecipeProblem(message)
+        case .failed(let message): self = .stepFailed(message)
         }
     }
 
@@ -166,6 +183,8 @@ enum WrappBuildError: LocalizedError, Equatable {
             return String(localized: "Second Chance can't install the game from that. Choose the game's disc, or the file you downloaded from Her Interactive.")
         case .installIncomplete:
             return String(localized: "The game didn't install completely. Try again.")
+        case .stepFailed:
+            return String(localized: "Part of setting up the game didn't work. Try again, and if it happens again, the failure report helps get it fixed.")
         case .steamInstallFailed:
             return String(localized: "Steam couldn't install the game. Try again.")
         case .bigFishSignInRequired:
@@ -334,6 +353,8 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "Second Chance can't install from that: \(message)"
         case .internalError(let detail):
             return detail
+        case .stepFailed(let detail):
+            return "A step of the build failed: \(detail)"
         case .saveFailed(let destination, let reason):
             return "Couldn't save the game's app to \(destination): \(reason)"
         case .wrongGame(let expected, let detected):

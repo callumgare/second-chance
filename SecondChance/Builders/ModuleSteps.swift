@@ -105,7 +105,7 @@ struct ModuleSteps {
             try await PlanRunner(plan: plan, configuration: configuration).runStep(step, stage: "", index: 0, in: wrappPath)
         } catch let error as StepFailure {
             await emitter.finish()
-            throw WrappBuildError.buildRecipeProblem(error.description)
+            throw WrappBuildError(stepFailure: error)
         } catch {
             await emitter.finish()
             throw error

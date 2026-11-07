@@ -191,7 +191,7 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
             tree = try await PlanRunner(plan: plan, configuration: configuration).build(in: folder)
         } catch let error as StepFailure {
             await emitter.finish()
-            throw WrappBuildError.buildRecipeProblem(error.description)
+            throw WrappBuildError(stepFailure: error)
         } catch {
             await emitter.finish()
             throw error

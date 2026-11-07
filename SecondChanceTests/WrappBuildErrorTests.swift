@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import SecondChance
+import WrappBuilder
 
 /// Every error a build can end with reaches the error screen as plain words.
 @Suite("Build errors")
@@ -20,6 +21,15 @@ struct WrappBuildErrorTests {
         }
     }
 
+    @Test("A step that failed isn't called a problem with the instructions; one the instructions can't do is")
+    func stepFailures() {
+        let failed = WrappBuildError(StepFailure.failed("Wrappfile:12: the installer exited 1"))
+        #expect(failed == .stepFailed("Wrappfile:12: the installer exited 1"))
+        #expect(WrappBuildError(stepFailure: .recipe("Wrappfile:3: no stage")) == .buildRecipeProblem("Wrappfile:3: no stage"))
+        #expect(failed.playerMessage != WrappBuildError.buildRecipeProblem("x").playerMessage)
+        #expect(failed.errorDescription?.contains("the installer exited 1") == true)
+    }
+
     @Test("Out of space is found beneath the error it caused")
     func underlyingOutOfSpace() {
         let wrapped = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError,
@@ -36,6 +46,7 @@ struct WrappBuildErrorTests {
         .unsupportedMacDownload(reason: "tar exited 1"),
         .templateDamaged("WrappTemplate.app not found"),
         .saveFailed(destination: "/Volumes/Games/Nancy Drew - X.app", reason: "NSCocoaErrorDomain 513"),
+        .stepFailed("Wrappfile:19: the Mac's automation failed: automation failed at line 7"),
     ])
     func plainMessages(error: WrappBuildError) {
         let message = error.playerMessage

@@ -136,7 +136,7 @@ final class UpdateWrappBuilder {
                         .build(in: folder.appendingPathComponent("update-\(index + 1)"))
                 } catch let error as StepFailure {
                     await emitter.finish()
-                    throw WrappBuildError.buildRecipeProblem(error.description)
+                    throw WrappBuildError(stepFailure: error)
                 } catch {
                     await emitter.finish()
                     throw error
