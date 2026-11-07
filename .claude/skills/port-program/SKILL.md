@@ -604,9 +604,19 @@ earlier one didn't do:
    rather than rewritten. Use the latest winetricks: the wine module's copy
    (`Packages/Modules/wine/Sources/WineExecutor/Resources/winetricks`) is
    updated as any module change is.
-3. **Our own patch** (the wine module's `WINE.KEEP-THREAD-HANDLES` kind,
+3. **Our own patch** (the wine module's `WINE.PATCH <name>`, one named patch
+   among others rather than an instruction of its own,
    [docs/modules.md](../../../docs/modules.md#the-wine-modules-patches)) only
    when neither of those is there or workable.
+
+**Every patch a Wrappfile applies has a comment just above the line that
+applies it** (the user's rule, 2026-11-07), saying what the patch does, why
+this program needs it (the symptom, and the fault behind it), and what would
+have to change for it to go: the engine release that fixes it, or the
+winetricks verb or setting that would replace it, and what stops the program
+using that today (Iji: Wine 11.2 fixes the synthesiser, but every Wine 11
+from 11.6 crashes Iji at start). The same goes for a winetricks verb or a
+registry setting that works round an engine's fault.
 
 **Adding an engine version** is a change to what other programs get. Add it
 beside the existing one (a module's `versions:`), so nothing moves until a
