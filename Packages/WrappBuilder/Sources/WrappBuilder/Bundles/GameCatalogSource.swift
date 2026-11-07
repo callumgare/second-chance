@@ -79,7 +79,7 @@ public nonisolated enum GameCatalogSource {
             id: manifest.name,
             title: manifest.title,
             diskCount: disc?.inputs?.count ?? 1,
-            gameEngine: launcher == .scummvm ? .scummvm : launcher == .dosbox ? .dosbox : .wine,
+            gameEngine: Self.engine(of: launcher),
             graphics: launch?.graphics,
             internalGameExePath: exe,
             steam: steam,
@@ -156,6 +156,17 @@ public nonisolated enum GameCatalogSource {
         "\"" + text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
     }
 
+    /// Today's engine for a program its launcher starts: Wine for every
+    /// launcher but ScummVM, DOSBox and Basilisk II.
+    static func engine(of launcher: ModuleID?) -> GameInfo.GameEngine {
+        switch launcher {
+        case .scummvm?: .scummvm
+        case .dosbox?: .dosbox
+        case .basilisk?: .basilisk
+        default: .wine
+        }
+    }
+
     private static func engineCase(_ engine: GameInfo.GameEngine) -> String {
         switch engine {
         case .wine: "wine"
@@ -163,6 +174,7 @@ public nonisolated enum GameCatalogSource {
         case .wineSteam: "wineSteam"
         case .wineSteamSilent: "wineSteamSilent"
         case .dosbox: "dosbox"
+        case .basilisk: "basilisk"
         }
     }
 

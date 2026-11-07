@@ -119,7 +119,7 @@ into `GameInfo`, by field:
 | `id` (the part after the `/`) | `id`, the game's slug |
 | `title` | `title` |
 | the `disc` edition's `build.inputs`, one per disc | `diskCount` |
-| the module of the first planned edition's `LAUNCH` | `gameEngine`: `.scummvm`, `.dosbox`, otherwise `.wine` |
+| the module of the first planned edition's `LAUNCH` | `gameEngine`: `.scummvm`, `.dosbox`, `.basilisk`, otherwise `.wine` |
 | that launch's program, on Wine's or DOSBox's C: | `internalGameExePath`, without `C:` |
 | that launch's `--wine.graphics` | `graphics`: what the game draws with, for an `.exe` that can't say (`GameGraphicsAPI`) |
 | the `steam` edition's `steam-game` input: `app-id`, `common-folder` | `steamAppID`, `steamInstallDir` |

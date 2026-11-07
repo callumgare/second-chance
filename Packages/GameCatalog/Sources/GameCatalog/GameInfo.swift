@@ -63,9 +63,11 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         case wineSteam = "wine-steam"
         case wineSteamSilent = "wine-steam-silent"
         case dosbox
+        /// Basilisk II, a classic 68k Mac emulated (the basilisk module).
+        case basilisk
 
-        /// Wine runs the game: every engine but ScummVM and DOSBox.
-        public var runsInWine: Bool { self != .scummvm && self != .dosbox }
+        /// Wine runs the game: every engine but ScummVM, DOSBox and Basilisk II.
+        public var runsInWine: Bool { self != .scummvm && self != .dosbox && self != .basilisk }
 
         /// Steam has to be running, and signed in, before the game starts.
         public var needsSteam: Bool { self == .wineSteam || self == .wineSteamSilent }

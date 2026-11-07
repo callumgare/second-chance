@@ -42,6 +42,18 @@ struct ProgramBundleTests {
         #expect(generated == checkedIn, "\(GameCatalogSource.path) is stale: run `sc generate`")
     }
 
+    @Test("A program's engine in the catalogue is its launcher's: Basilisk II's is basilisk, not Wine")
+    func catalogueEnginesFollowTheLauncher() throws {
+        #expect(GameCatalogSource.engine(of: .basilisk) == .basilisk)
+        #expect(GameCatalogSource.engine(of: .scummvm) == .scummvm)
+        #expect(GameCatalogSource.engine(of: .dosbox) == .dosbox)
+        #expect(GameCatalogSource.engine(of: .wine) == .wine)
+        #expect(GameCatalogSource.engine(of: nil) == .wine)
+        let ingenious = try #require(GameInfoProvider.shared.allGames().first { $0.id == "ingenious" })
+        #expect(ingenious.gameEngine == .basilisk)
+        #expect(!ingenious.gameEngine.runsInWine)
+    }
+
     @Test func theCatalogueRoundTripsThroughTheSourceItIsMadeOf() throws {
         let loader = try ProgramBundleLoader(root: bundlesRoot, modules: try shippedModules())
         let games = try GameCatalogSource.games(from: try loader.loadAll().get(), modules: try shippedModules(), places: shippedPlaces)

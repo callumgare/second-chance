@@ -64,6 +64,7 @@ nonisolated extension GameInfoProvider {
             id: "ingenious",
             title: "Ingenious!",
             diskCount: 1,
+            gameEngine: .basilisk,
             detectionAliases: ["Ingenious CD"],
             program: "ingenious-consortium/ingenious",
             displayName: "Ingenious"

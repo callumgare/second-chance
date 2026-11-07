@@ -101,6 +101,7 @@ nonisolated public struct Composition: Codable, Sendable, Hashable, CustomString
         case .wineSteamSilent: self.init(launcher: .wine, services: [.steam])
         case .wineSteam: self.init(launcher: .steam, services: [.steam])
         case .dosbox: self.init(launcher: .dosbox)
+        case .basilisk: self.init(launcher: .basilisk)
         }
     }
 
