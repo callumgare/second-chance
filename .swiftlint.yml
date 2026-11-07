@@ -10,12 +10,14 @@ included:
   - Tools/sc/Sources
   - Tools/sc/AudioTap
   - Tools/sc/Tests
+  - Tools/icon-lab-server/Sources
 
 excluded:
   # SwiftPM's checkouts and build products when a package is built on its own.
   - Packages/*/.build
   - Packages/Modules/*/.build
   - Tools/sc/.build
+  - Tools/icon-lab-server/.build
   # Generated: ajv's minified script, as a Swift string (Packages/WrappBuilder/JavaScript/build.sh).
   - Packages/WrappBuilder/Sources/WrappBuilder/Bundles/AjvScript.swift
 
