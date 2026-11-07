@@ -3,7 +3,10 @@
 Read the logs first: the build's (`sc wrapp build` prints where; every step
 under `DerivedData/sc-logs/`), and the wrapp's own (`docs/logging.md`
 says where). Wine's `err:` lines usually name the cause. For more,
-`SECOND_CHANCE_WINEDEBUG=+seh,+loaddll open -n <app>` (keep runs short).
+`SECOND_CHANCE_WINEDEBUG=+seh,+loaddll open -n <app>`, or in a puppet
+session `sc puppet start <name> --wrapp <app> --debug wine=+seh,+loaddll`
+(keep runs short). `--keep-saves` keeps a session's saves for the next
+`start` of the same name, to test loading a save after a relaunch.
 
 ## Wine
 

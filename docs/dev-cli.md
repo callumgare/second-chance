@@ -1007,11 +1007,20 @@ to quit, then ends the wrapp and anything left in its Wine prefix
 (`WineServer.kill`), and says when the screen was held. Each session keeps
 its files in `~/Library/Caches/SecondChance/puppet/<name>/`: its logs, its
 shots, and an app-support folder of its own, so the player's saves are
-never touched. The `SECOND_CHANCE_*` debug switches `start` is run with
-(`SECOND_CHANCE_WINEDEBUG=+cursor,+event`, …) go into the server's LaunchAgent
-and so reach the wrapp; launchd would otherwise start the server with none of
-them. Over `--on` they don't travel, as ssh passes no environment: set them in
-a shell on that Mac.
+never touched. A new `start` of the same name begins with an empty folder,
+unless it's given `--keep-saves`: then the last session's saves stay, its
+app-support folder, an engine's `HOME` and a `--wine` session's own prefix,
+so a save made in one session can be loaded after a relaunch.
+
+`start --debug` takes the values `sc wrapp run --debug` does
+([Debug options](#debug-options)): `--debug wine=+seh,+d3d9` traces Wine's
+channels, for a wrapp and for `--wine` alike. They go into the server's
+LaunchAgent as variables (and a value that is an argument, as `log-window`,
+to the wrapp), and travel over `--on`, as arguments do. The `SECOND_CHANCE_*`
+switches in the environment `start` is run with
+(`SECOND_CHANCE_WINEDEBUG=+cursor,+event`, …) go there too; launchd would
+otherwise start the server with none of them. Over `--on` those don't travel,
+as ssh passes no environment: use `--debug`.
 
 The other verbs are clients, and `--on` doesn't sync for them:
 

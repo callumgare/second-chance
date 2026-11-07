@@ -529,7 +529,8 @@ failed attempts with no new lead mean it's time to look rather than try
 another variation:
 
 - **Make the engine say more.** Wine's `WINEDEBUG` channels
-  (`docs/logging.md`); ScummVM's `--list-debugflags=<engine>` then
+  (`docs/logging.md`; in a puppet session `sc puppet start … --debug
+  wine=+seh,+loaddll`, for `--wine` too); ScummVM's `--list-debugflags=<engine>` then
   `--debuglevel=5 --debugflags=…` (for Director, `lingoexec`, `paths`,
   `xobj`, `screenshot`). A trace usually shows the exact call the program
   is stuck on.

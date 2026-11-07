@@ -29,6 +29,10 @@ struct PuppetSession: Codable {
     /// The program bundle whose needles name its screens, as `--bundle`
     /// named it (`PuppetNeedles.library`); nil for the wrapp's own.
     var bundle: String?
+    /// What `start --debug` asked for: variables for the server, and so the
+    /// program, and arguments for a wrapp (`DebugOption`'s, as for `sc wrapp run`).
+    var debugEnvironment: [String: String]?
+    var debugArguments: [String]?
 
     static let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("SecondChance/puppet")
@@ -48,6 +52,10 @@ struct PuppetSession: Codable {
     /// HOME for a command, so an engine's settings and saves start empty
     /// and stay out of the user's own.
     var home: URL { folder.appendingPathComponent("home") }
+    /// What `start --keep-saves` keeps from the session of the same name
+    /// before it: the wrapp's saves, an engine's, and a Wine prefix of its own.
+    static let savedItems = ["app-support", "home", "prefix"]
+
     /// Short, as a Unix socket's path must be (104 bytes with the helper's
     /// `game-<pid>.sock`), and private to this user.
     var sockets: URL { URL(fileURLWithPath: "/tmp/sc-puppet-\(getuid())-\(name)") }
@@ -56,6 +64,28 @@ struct PuppetSession: Codable {
 
     static func validName(_ name: String) -> Bool {
         name.range(of: #"^[a-z0-9][a-z0-9-]{0,30}$"#, options: .regularExpression) != nil
+    }
+
+    /// The session's folder emptied for a new start of `name`; with
+    /// `keepingSaves`, what `savedItems` names of the last one's put back.
+    static func clearFolder(_ name: String, keepingSaves: Bool, in root: URL = PuppetSession.root) throws {
+        let files = FileManager.default
+        let folder = root.appendingPathComponent(name)
+        guard keepingSaves else {
+            try? files.removeItem(at: folder)
+            return
+        }
+        let aside = root.appendingPathComponent(".\(name)-saves-\(UUID().uuidString)")
+        try files.createDirectory(at: aside, withIntermediateDirectories: true)
+        for item in savedItems where files.fileExists(atPath: folder.appendingPathComponent(item).path) {
+            try files.moveItem(at: folder.appendingPathComponent(item), to: aside.appendingPathComponent(item))
+        }
+        try? files.removeItem(at: folder)
+        try files.createDirectory(at: folder, withIntermediateDirectories: true)
+        for item in savedItems where files.fileExists(atPath: aside.appendingPathComponent(item).path) {
+            try files.moveItem(at: aside.appendingPathComponent(item), to: folder.appendingPathComponent(item))
+        }
+        try? files.removeItem(at: aside)
     }
 
     static func load(_ name: String) throws -> PuppetSession {

@@ -61,6 +61,12 @@ struct PuppetStartCommand: AsyncParsableCommand {
     @Option(help: ArgumentHelp("With --wine: AutoIt's folder (default: this checkout's build's).", valueName: "dir"))
     var autoit: String?
 
+    @Flag(help: ArgumentHelp("Keep the saves of the last session of this name: its app-support folder, an engine's HOME "
+                             + "and a --wine prefix of its own, so a save can be loaded after a relaunch."))
+    var keepSaves = false
+
+    @OptionGroup var debug: WrappDebugOptions
+
     @Option(help: ArgumentHelp("Stop it after this long with no command: 10m, 30m, 1h.", valueName: "time"))
     var idle: String = "10m"
 
@@ -81,7 +87,8 @@ struct PuppetStartCommand: AsyncParsableCommand {
         if let existing = try? PuppetSession.load(name), existing.isRunning {
             throw SCError("\(name) is already running \(existing.app).", hints: ["Stop it first: sc puppet stop \(name)"])
         }
-        try? FileManager.default.removeItem(at: PuppetSession.folder(name))
+        let debugEffect = try debug.effect()
+        try PuppetSession.clearFolder(name, keepingSaves: keepSaves)
         let app: URL
         var program: [String]?
         var helperPath: String?
@@ -107,6 +114,8 @@ struct PuppetStartCommand: AsyncParsableCommand {
         var puppet = PuppetSession(name: name, app: app.path, command: program, helper: helperPath, purpose: global.purpose,
                                    started: Date(), idleMinutes: (ScreenLease.parseDuration(idle) ?? 600) / 60,
                                    maxMinutes: (ScreenLease.parseDuration(max) ?? 7200) / 60)
+        puppet.debugEnvironment = debugEffect.environment.isEmpty ? nil : debugEffect.environment
+        puppet.debugArguments = debugEffect.arguments.isEmpty ? nil : debugEffect.arguments
         try FileManager.default.createDirectory(at: puppet.shots, withIntermediateDirectories: true)
         try puppet.save()
         puppet.touch()
@@ -124,8 +133,11 @@ struct PuppetStartCommand: AsyncParsableCommand {
             "WorkingDirectory": session.repo.root.path,
             // The debug switches (SECOND_CHANCE_WINEDEBUG, …) reach the wrapp
             // through the server, which launchd starts with none of ours.
+            // --debug's go too, and win: they travel over --on, as
+            // arguments do, where a shell's variables don't.
             "EnvironmentVariables": ProcessInfo.processInfo.environment
                 .filter { $0.key.hasPrefix("SECOND_CHANCE_") && $0.key != "SECOND_CHANCE_PUPPET_DIR" }
+                .merging(debugEffect.environment) { _, debug in debug }
                 .merging([ScreenLease.holderVariable: ScreenLease.encodeHolder(holder)]) { _, holder in holder },
             "StandardOutPath": puppet.serverLog.path,
             "StandardErrorPath": puppet.serverLog.path,
@@ -237,6 +249,7 @@ struct PuppetServeCommand: AsyncParsableCommand {
             process.currentDirectoryURL = URL(fileURLWithPath: command[0]).deletingLastPathComponent()
         } else {
             process.executableURL = URL(fileURLWithPath: puppet.app).appendingPathComponent("Contents/MacOS/WrappTemplate")
+            process.arguments = puppet.debugArguments ?? []
             environment["SECOND_CHANCE_APP_SUPPORT_DIR"] = puppet.appSupport.path
             // Its log, the game's output in it, into wrapp.log for `log`: the
             // wrapp copies it to stderr only when that's a terminal, and here
