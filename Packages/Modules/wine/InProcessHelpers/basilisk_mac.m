@@ -39,8 +39,10 @@
 //    window is up, a line at a time: puppet control's requests (`click 440
 //    418`, `key cmd+down`), `type <text>`, `wait <seconds>`, and `wait-for
 //    <seconds> <text>`, which waits for the text to be on the Mac's screen
-//    (read from a picture of the window by Vision), and `wait-gone
-//    <seconds> <text>`, for it to go. A request the window
+//    (read from a picture of the window by Vision), `wait-gone <seconds>
+//    <text>`, for it to go, and `wait-restart <seconds>`, for the Mac to
+//    restart (its startup disk marked unmounted cleanly, then mounted again).
+//    A request the window
 //    can't take yet, as while the Mac restarts, is tried again for a while.
 //    Then the Mac is shut down. How it went is a report line,
 //    `automation finished` or `automation failed at line <n>`, and a
@@ -87,7 +89,8 @@ typedef struct {
 } SDLWindowEvent;
 
 /// Have Basilisk II redraw the whole Mac screen: an SDL "exposed" event,
-/// which its event loop answers with force_complete_window_refresh(). SDL2
+/// which its event loop answers with force_complete_window_refresh(); said
+/// in the log with `why`, unless it's NULL. SDL2
 /// is Basilisk II's, found when needed, as this dylib goes into other
 /// programs too.
 static void redrawAll(const char *why) {
@@ -100,7 +103,7 @@ static void redrawAll(const char *why) {
     }
     SDLWindowEvent event = { .type = 0x200, .windowID = 1, .event = 3 };
     if (push(&event) < 0) helperReport(kHelper, "warning", "can't redraw the Mac's screen: SDL_PushEvent failed");
-    else helperReport(kHelper, "notice", "redrawing the Mac's screen (%s)", why);
+    else if (why) helperReport(kHelper, "notice", "redrawing the Mac's screen (%s)", why);
 }
 
 /// Whether the person (or puppet control) has moved the pointer over the
@@ -268,23 +271,22 @@ static void startShutDown(void) {
 
 /// The app's Quit (⌘Q, the Dock's Quit, puppet control's `quit`) shuts the
 /// Mac down as SIGUSR2 does, rather than asking the Mac "shut down now?"
-/// and waiting there, as SDL's own answer (the power key) would.
-static NSApplicationTerminateReply shutDownForQuit(id self, SEL _cmd, NSApplication *app) {
+/// and waiting there. SDL's own NSApplication subclass answers -terminate:
+/// itself with SDL's quit event, which Basilisk II makes the power key alone,
+/// so it's -terminate: on that class that's replaced (the app delegate's
+/// -applicationShouldTerminate: is never asked).
+static void shutDownForTerminate(id self, SEL _cmd, id sender) {
     startShutDown();
-    return NSTerminateCancel;
 }
 
 static void quitShutsDown(void) {
-    id delegate = NSApp.delegate;
-    if (!delegate) {
-        helperReport(kHelper, "warning", "the app's Quit can't shut the Mac down: it has no app delegate");
+    Class app = object_getClass(NSApp);
+    if (!app) {
+        helperReport(kHelper, "warning", "the app's Quit can't shut the Mac down: there's no app yet");
         return;
     }
-    SEL selector = @selector(applicationShouldTerminate:);
-    Method method = class_getInstanceMethod([delegate class], selector);
-    if (method) method_setImplementation(method, (IMP)shutDownForQuit);
-    else class_addMethod([delegate class], selector, (IMP)shutDownForQuit, "Q@:@");
-    helperReport(kHelper, "notice", "the app's Quit shuts the Mac down");
+    class_replaceMethod(app, @selector(terminate:), (IMP)shutDownForTerminate, "v@:@");
+    helperReport(kHelper, "notice", "the app's Quit shuts the Mac down (%s)", class_getName(app));
 }
 
 #pragma mark - A build's automation
@@ -401,6 +403,11 @@ static NSString *waitForText(NSString *text, double seconds, BOOL gone) {
     NSString *last = @"(no picture of the window)";
     do {
         @autoreleasepool {
+            // A full redraw first: in a background login what the window
+            // presented since the last picture may never have reached it, and
+            // the picture would read a screen long gone.
+            dispatch_sync(dispatch_get_main_queue(), ^{ redrawAll(NULL); });
+            usleep(300 * 1000);
             CGImageRef picture = copyWindowPicture();
             if (picture) {
                 NSString *read = textIn(picture) ?: @"";
@@ -409,10 +416,65 @@ static NSString *waitForText(NSString *text, double seconds, BOOL gone) {
                 last = read.length ? [read stringByReplacingOccurrencesOfString:@"\n" withString:@" | "] : @"(no text)";
             }
         }
-        sleep(1);
+        // Looked at again almost at once: a screen that shows only for a
+        // moment, as "Welcome to Macintosh" at a restart, is caught, and each
+        // picture holds Basilisk II up for a while anyway.
+        usleep(100 * 1000);
     } while ([deadline timeIntervalSinceNow] > 0);
     return [NSString stringWithFormat:gone ? @"\"%@\" was still on the screen after %.0f s; it read: %@"
                                            : @"\"%@\" wasn't on the screen in %.0f s; it read: %@", text, seconds, last];
+}
+
+/// The Mac's startup disk: the first `disk` of the prefs Basilisk II was
+/// started with (`--config <file>`); nil when it can't be told.
+static NSString *startupDisk(void) {
+    NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+    NSUInteger at = [arguments indexOfObject:@"--config"];
+    if (at == NSNotFound || at + 1 >= arguments.count) return nil;
+    NSString *prefs = [NSString stringWithContentsOfFile:arguments[at + 1] encoding:NSUTF8StringEncoding error:nil];
+    for (NSString *line in [prefs componentsSeparatedByString:@"\n"]) {
+        if ([line hasPrefix:@"disk "]) return [line substringFromIndex:5];
+    }
+    return nil;
+}
+
+/// Whether the HFS volume in `disk` is marked unmounted cleanly (its Master
+/// Directory Block's drAtrb bit 8): -1 when it can't be read.
+static int markedClean(NSString *disk) {
+    int fd = open(disk.fileSystemRepresentation, O_RDONLY);
+    if (fd < 0) return -1;
+    unsigned char header[12];
+    ssize_t got = pread(fd, header, sizeof(header), 1024);
+    close(fd);
+    if (got != (ssize_t)sizeof(header) || header[0] != 0x42 || header[1] != 0x44) return -1;
+    return (header[10] & 0x01) != 0;
+}
+
+/// `wait-restart <seconds>`: until the Mac has restarted. Basilisk II keeps
+/// its window, and the screens between are gone in a moment, so it's told
+/// by the startup disk: Mac OS marks it unmounted cleanly as it restarts, and
+/// clears the mark when it mounts it again at boot. nil when so.
+static NSString *waitForRestart(double seconds) {
+    NSString *disk = startupDisk();
+    if (!disk) return @"wait-restart can't tell which is the Mac's startup disk";
+    BOOL unmounted = NO;
+    int last = -2;
+    NSDate *start = [NSDate date];
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
+    while ([deadline timeIntervalSinceNow] > 0) {
+        int clean = markedClean(disk);
+        if (clean < 0) return [NSString stringWithFormat:@"wait-restart can't read %@ as an HFS disk", disk];
+        if (clean != last) {
+            helperReport(kHelper, "notice", "the Mac's disk is marked %s (%.2f s)", clean ? "clean" : "in use",
+                         -[start timeIntervalSinceNow]);
+            last = clean;
+        }
+        if (clean) unmounted = YES;
+        else if (unmounted) return nil;
+        usleep(20 * 1000);
+    }
+    return [NSString stringWithFormat:unmounted ? @"the Mac shut its disk for a restart but didn't boot again in %.0f s"
+                                                : @"the Mac didn't restart in %.0f s", seconds];
 }
 
 /// One request through puppet control, tried again while the window can't
@@ -446,6 +508,11 @@ static NSString *runLine(NSString *line) {
         double seconds = rest.doubleValue;
         if (gap.location == NSNotFound || seconds <= 0) return [command stringByAppendingString:@" needs a number of seconds, then the text"];
         return waitForText([rest substringFromIndex:gap.location + 1], seconds, [command isEqualToString:@"wait-gone"]);
+    }
+    if ([command isEqualToString:@"wait-restart"]) {
+        double seconds = rest.doubleValue;
+        if (seconds <= 0) return @"wait-restart needs a number of seconds";
+        return waitForRestart(seconds);
     }
     if ([command isEqualToString:@"type"]) {
         NSString *encoded = [rest stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.alphanumericCharacterSet];

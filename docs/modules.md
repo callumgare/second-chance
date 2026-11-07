@@ -450,10 +450,13 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
   [docs/wine-in-process-helpers.md](wine-in-process-helpers.md#puppet-control)),
   `type <text>`, `wait <seconds>`, `wait-for <seconds> <text>`, which waits for the
   text to be on the Mac's screen (Vision reading a picture of the window), or
-  `wait-gone <seconds> <text>`, for it to go. Basilisk II keeps its window when
-  the Mac restarts, so a restart is waited for by its screen: "Welcome to
-  Macintosh" coming and going. A request the window can't take yet (no window, or
-  none to take it) is tried again for 90 s. The
+  `wait-gone <seconds> <text>`, for it to go, or `wait-restart <seconds>`, for the
+  Mac to restart. Basilisk II keeps its window at a restart, and the screens
+  between are gone too soon to be caught reliably, so a restart is told by the
+  startup disk (the first `disk` of Basilisk II's prefs): Mac OS marks it
+  unmounted cleanly as it restarts and clears the mark as it mounts it again. A
+  request the window can't take yet (no window, or none to take it) is tried
+  again for 90 s. The
   helper reports `automation finished` or `automation failed at line <n>` (with a
   picture of the screen left in the temporary folder's `basilisk-automation/`),
   and the step fails on the second, or when the Mac hasn't shut down in
