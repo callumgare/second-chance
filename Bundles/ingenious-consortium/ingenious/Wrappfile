@@ -39,4 +39,6 @@ BASILISK.RUN --automation=bundle:mac/setup.keys
 # The game opened at every boot.
 BASILISK.STARTUP "basilisk:System7_5_3:Desktop Folder:Ingenious alias"
 LAUNCH --mount=type=store,source=basilisk-disk,target=basilisk:disk/
-LAUNCH --basilisk.screen=640x480x8 "basilisk:Ingenious CD:Ingenious"
+# When the player quits the game, the Mac shuts down and the app closes,
+# rather than leaving them at the Finder.
+LAUNCH --basilisk.screen=640x480x8 --basilisk.shut-down=with-program "basilisk:Ingenious CD:Ingenious"

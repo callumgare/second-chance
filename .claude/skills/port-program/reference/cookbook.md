@@ -124,7 +124,7 @@ BASILISK.CDROM ${input.disc-1}
 BASILISK.RUN --automation=bundle:mac/setup.keys     # manifest: allow-paths: ["mac/"]
 BASILISK.STARTUP "basilisk:System7_5_3:Desktop Folder:Ingenious alias"
 LAUNCH --mount=type=store,source=basilisk-disk,target=basilisk:disk/
-LAUNCH --basilisk.screen=640x480x8 "basilisk:Ingenious CD:Ingenious"
+LAUNCH --basilisk.screen=640x480x8 --basilisk.shut-down=with-program "basilisk:Ingenious CD:Ingenious"
 ```
 
 - Write the script from a session by hand first (`sc puppet start`, then `do
@@ -135,6 +135,13 @@ LAUNCH --basilisk.screen=640x480x8 "basilisk:Ingenious CD:Ingenious"
 - Wait with `wait-for <seconds> <text>`, and for a restart with
   `wait-restart`: Basilisk II keeps its window, and the screens between pass
   too quickly to catch.
+- `--basilisk.shut-down=with-program` closes the app when the player quits
+  the program, rather than leaving them at the Finder: the helper reads which
+  application is running from the Mac's memory (no pictures, so it costs the
+  game nothing). Leave it off for a program meant to be left for the Finder.
+- System 7.5.3's disk has no AppleScript (no extension, no Script Editor) and
+  only HyperCard 2.4, which can't shut the Mac down by itself: anything to do
+  while the program runs is the helper's, outside the Mac, not a script in it.
 - Its test: a text needle on the program's first screen, tagged `running`,
   the `basilisk/starts-and-quits` scenario, and `tests: { window: windowed }`.
 

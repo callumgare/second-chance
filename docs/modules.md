@@ -551,6 +551,18 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
     Quit is chosen (⌘Q, which SDL alone would turn into the power key, leaving
     the Mac asking "shut down now?"): the power key, then Return on Shut Down,
     so the disk is left clean.
+  - with `LAUNCH --basilisk.shut-down=with-program` (`BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM`),
+    shuts the Mac down the same way once the program it opened has quit, so the
+    app closes with it rather than leaving the player at the Finder. Which
+    application is running is read four times a second from the Mac's own
+    memory (Basilisk II exports `RAMBaseHost`; low memory's `CurApName`, which
+    the Process Manager switches with each application it runs), which costs
+    Basilisk II nothing, where a picture would stall it. A program counts as
+    quit once only the Finder has run for 5 s, after a program has run since the
+    Mac last started (`Ticks` going back says it restarted), so the Finder alone
+    at boot or after a restart the program asked for isn't taken for a quit.
+    System 7.5.3's disk has no AppleScript, so this couldn't be the Mac's own
+    startup item.
 
 ### The engine store
 

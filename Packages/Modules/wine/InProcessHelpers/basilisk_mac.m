@@ -39,6 +39,12 @@
 //    Return, Shut Down being the dialog's default, until the Mac has shut
 //    down and Basilisk II exits: its disk is left clean, the person's files
 //    on it safe. The wrapp ends it only if this hasn't in its time.
+//  - **Shutting down with the program.** With
+//    BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM=1 (`LAUNCH
+//    --basilisk.shut-down=with-program`), once the program the Mac opened
+//    has quit, leaving the Finder alone, the Mac is shut down the same way,
+//    so the app closes with the game. Told from the Mac's memory (the
+//    application running, low memory's CurApName), never from pictures.
 //  - **A build's automation.** With BASILISK_MAC_AUTOMATION naming a script
 //    (the basilisk module's BASILISK.RUN), the Mac is driven by it once its
 //    window is up, a line at a time: puppet control's requests (`click 440
@@ -361,6 +367,95 @@ static void quitShutsDown(void) {
     helperReport(kHelper, "notice", "the app's Quit shuts the Mac down (%s)", class_getName(app));
 }
 
+#pragma mark - Shutting down with the program
+
+/// The Mac's memory as Basilisk II keeps it in this process (its globals
+/// RAMBaseHost and RAMBaseMac, which its build exports), from address 0; NULL
+/// until the Mac has its memory, or if it isn't laid out from 0 in one piece.
+static const volatile uint8_t *macMemory(void) {
+    static uint8_t **host;
+    static uint32_t *mac;
+    if (!host) host = (uint8_t **)dlsym(RTLD_DEFAULT, "RAMBaseHost");
+    if (!mac) mac = (uint32_t *)dlsym(RTLD_DEFAULT, "RAMBaseMac");
+    if (!host || !mac || !*host || *mac != 0) return NULL;
+    return *host;
+}
+
+/// The Mac's low-memory CurApName (0x910): the name of the application that
+/// is running at this moment, a Pascal string. The Process Manager switches
+/// it with each application it gives time to, so while a program is open it
+/// is that program's name most of the time and the Finder's now and then,
+/// and with only the Finder open, always "Finder". nil when it can't be read.
+static NSString *runningApplication(const volatile uint8_t *memory) {
+    uint8_t name[32];
+    for (int i = 0; i < 32; i++) name[i] = memory[0x910 + i];
+    if (name[0] == 0 || name[0] > 31) return nil;
+    CFStringRef text = CFStringCreateWithPascalString(NULL, name, kCFStringEncodingMacRoman);
+    return text ? (__bridge_transfer NSString *)text : nil;
+}
+
+/// The Mac's low-memory Ticks (0x16A): sixtieths of a second since it
+/// started, big-endian; it goes back to nothing when the Mac restarts.
+static uint32_t macTicks(const volatile uint8_t *memory) {
+    return (uint32_t)memory[0x16A] << 24 | (uint32_t)memory[0x16B] << 16 | (uint32_t)memory[0x16C] << 8 | memory[0x16D];
+}
+
+/// How long only the Finder must have run, after a program has, for the
+/// program to count as quit: twenty looks in a row, where a program that is
+/// open is seen in nearly every one.
+static const double kQuitSeconds = 5;
+
+/// BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM (`LAUNCH --basilisk.shut-down=with-program`):
+/// once the program the Mac opened has quit, leaving only the Finder, the
+/// Mac is shut down, and with it the app. Told from the Mac's own memory,
+/// four times a second, which costs Basilisk II nothing (a picture of its
+/// window would stall it). A program must have run since the Mac last
+/// started: the Finder alone at boot, before it opens its startup items, or
+/// after a restart, isn't a quit.
+static void watchProgram(void) {
+    static dispatch_source_t timer;
+    static BOOL seen = NO;
+    static uint32_t lastTicks = 0;
+    static NSDate *finderSince = nil;
+    static BOOL said = NO;
+    timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), NSEC_PER_SEC / 4, NSEC_PER_SEC / 20);
+    dispatch_source_set_event_handler(timer, ^{
+        const volatile uint8_t *memory = macMemory();
+        if (!memory) {
+            if (!said) helperReport(kHelper, "notice", "waiting for the Mac's memory to watch its program");
+            said = YES;
+            return;
+        }
+        uint32_t ticks = macTicks(memory);
+        if (ticks < lastTicks && seen) {
+            helperReport(kHelper, "notice", "the Mac restarted: waiting for its program again");
+            seen = NO;
+            finderSince = nil;
+        }
+        lastTicks = ticks;
+        NSString *running = runningApplication(memory);
+        if (!running) {
+            finderSince = nil;
+            return;
+        }
+        if (![running isEqualToString:@"Finder"]) {
+            if (!seen) helperReport(kHelper, "notice", "the Mac is running %s: shutting it down once that quits", running.UTF8String);
+            seen = YES;
+            finderSince = nil;
+            return;
+        }
+        if (!seen) return;
+        if (!finderSince) finderSince = [NSDate date];
+        if (-[finderSince timeIntervalSinceNow] < kQuitSeconds) return;
+        helperReport(kHelper, "notice", "the Mac's program has quit (only the Finder for %.0f s)", kQuitSeconds);
+        dispatch_source_cancel(timer);
+        dispatch_async(dispatch_get_main_queue(), ^{ startShutDown(); });
+    });
+    dispatch_resume(timer);
+    helperReport(kHelper, "notice", "the Mac shuts down when its program quits");
+}
+
 #pragma mark - A build's automation
 
 /// puppet_control.m's requests, answered in this process.
@@ -669,6 +764,8 @@ static void armBasiliskMac(void) {
     dispatch_resume(shutDown);
     dispatch_async(dispatch_get_main_queue(), ^{ watchForWindow(0); });
     helperReport(kHelper, "notice", "armed in %s", getenv("BASILISK_MAC_EXE"));
+    const char *withProgram = getenv("BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM");
+    if (withProgram && strcmp(withProgram, "1") == 0) watchProgram();
     const char *automation = getenv("BASILISK_MAC_AUTOMATION");
     if (automation && *automation) {
         NSString *path = @(automation);
