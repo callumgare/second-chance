@@ -101,6 +101,14 @@ IMPORT_HINTS = {
     "flash.ocx": "Flash ActiveX", "steam_api.dll": "Steamworks", "gdi32.dll": "GDI",
 }
 
+# A Director projector's Xtras (.x32 in its Xtras folder) that need something
+# installed beside it under Wine. ScummVM needs none of them.
+DIRECTOR_XTRAS = {
+    "qt3asset.x32": "QuickTime for Windows 3+ installed (QT3Asset; the game may check quickTimeVersion()): "
+                    "prefer the disc's own QuickTime installer; Apple's 7.6 (winetricks quicktime76) fails to "
+                    "initialise under Wine 10 (Bioscopia, 2026-11)",
+}
+
 PE_MACHINES = {0x14C: "i386 (32-bit)", 0x8664: "x86-64 (64-bit)", 0x1C0: "ARM", 0xAA64: "ARM64", 0x200: "Itanium"}
 PE_SUBSYSTEMS = {1: "native", 2: "Windows GUI", 3: "Windows console", 5: "OS/2", 7: "POSIX", 9: "Windows CE"}
 
@@ -371,6 +379,12 @@ def identify_dir(root: Path) -> dict:
     auto = next((p for p in files if p.name.lower() == "autorun.inf"), None)
     if auto:
         rep["autorun.inf"] = auto.read_text(errors="replace")[:1000]
+    xtras = sorted({p.name for p in files if p.suffix.lower() == ".x32"})
+    if xtras:
+        rep["director xtras"] = xtras
+        needs = [note for name, note in DIRECTOR_XTRAS.items() if name in {x.lower() for x in xtras}]
+        if needs:
+            rep["director xtras need"] = needs
     picks = [p for p in files if INTERESTING.search(p.name) and p.stat().st_size > 0]
     picks.sort(key=lambda p: (len(p.relative_to(root).parts), -p.stat().st_size))
     rep["identified"] = []
