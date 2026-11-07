@@ -55,6 +55,26 @@ struct ShardedRunTests {
         #expect(plan.unrunnable.isEmpty)
     }
 
+    @Test("Games that sign in to an account all go to one shard, the rest balancing around them")
+    func signingInTogether() {
+        let games = [
+            Game(slug: "steam-big", weight: 10, needs: [], signsIn: true),
+            Game(slug: "steam-small", weight: 1, needs: [], signsIn: true),
+            Game(slug: "disc", weight: 9, needs: []),
+            Game(slug: "big-fish", weight: 5, needs: [], signsIn: true),
+            Game(slug: "trial", weight: 2, needs: []),
+        ]
+        let plan = ShardPlan.assign(games, to: [Slot(name: "one", has: []), Slot(name: "two", has: [])])
+        #expect(plan.shards.map { $0.map(\.slug) } == [["steam-big", "big-fish", "steam-small"], ["disc", "trial"]])
+    }
+
+    @Test("Steam and owned Big Fish games sign in; trials and other sources don't")
+    func signsIn() {
+        #expect(ShardPlan.signsIn([.disk, .steam]))
+        #expect(ShardPlan.signsIn([.bigFish]))
+        #expect(!ShardPlan.signsIn([.disk, .herDownload, .bigFishTrial, .download]))
+    }
+
     @Test("With no Mac, every game is unrunnable")
     func noMacs() {
         let plan = ShardPlan.assign([game("a")], to: [])

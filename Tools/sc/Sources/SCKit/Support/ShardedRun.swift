@@ -36,6 +36,10 @@ enum ShardPlan {
         var slug: String
         var weight: Int64
         var needs: Set<String>
+        /// It signs in to a shared account (Steam, or the Big Fish test
+        /// account), which a run takes a game at a time; every such game
+        /// goes to one shard, so two sessions never sign in to it at once.
+        var signsIn = false
     }
 
     /// Somewhere a shard runs: one test session, and the installers its Mac
@@ -56,11 +60,13 @@ enum ShardPlan {
     /// installers (which, with sizes unknown, goes round-robin). A slot
     /// that lacks them can still run a game whose installers this Mac will
     /// send it (`sentFromHere`, which every `--on` sync copies), but only
-    /// when no slot already has them.
+    /// when no slot already has them. Games that sign in to an account all go
+    /// to the slot the first of them went to (`Game.signsIn`).
     static func assign(_ games: [Game], to slots: [Slot], sentFromHere: Set<String> = []) -> Assignment {
         var shards = Array(repeating: [Game](), count: slots.count)
         var load = Array(repeating: Int64(0), count: slots.count)
         var unrunnable: [Game] = []
+        var signingInSlot: Int?
         let ordered = games.enumerated().sorted { lhs, rhs in
             lhs.element.weight != rhs.element.weight ? lhs.element.weight > rhs.element.weight : lhs.offset < rhs.offset
         }.map(\.element)
@@ -68,6 +74,9 @@ enum ShardPlan {
             var candidates = slots.indices.filter { game.needs.isSubset(of: slots[$0].has) }
             if candidates.isEmpty {
                 candidates = slots.indices.filter { game.needs.isSubset(of: slots[$0].has.union(sentFromHere)) }
+            }
+            if game.signsIn, let signingInSlot {
+                candidates = candidates.filter { $0 == signingInSlot }
             }
             let best = candidates.min { lhs, rhs in
                 if load[lhs] != load[rhs] { return load[lhs] < load[rhs] }
@@ -80,6 +89,7 @@ enum ShardPlan {
             }
             shards[best].append(game)
             load[best] += game.weight
+            if game.signsIn, signingInSlot == nil { signingInSlot = best }
         }
         return Assignment(shards: shards, unrunnable: unrunnable)
     }
@@ -113,6 +123,12 @@ enum ShardPlan {
             case .steam, .bigFish, .bigFishTrial, .download: nil
             }
         })
+    }
+
+    /// Whether testing a game from `sources` signs in to a shared account:
+    /// Steam, or Big Fish's test account (its trials sign in to nothing).
+    static func signsIn(_ sources: [IntegrationSource]) -> Bool {
+        sources.contains { $0 == .steam || $0 == .bigFish }
     }
 }
 
@@ -514,7 +530,7 @@ struct ShardCoordinator: Sendable {
             let measured = entry.sources.compactMap { sizes["\($0.rawValue)/\(slug)"] }.reduce(0, +)
             // Unmeasured: a disc's worth for each disc, so bigger games still go first.
             let weight = measured > 0 ? measured : Int64(max(1, entry.game.diskCount)) * 700_000_000
-            return ShardPlan.Game(slug: slug, weight: weight, needs: ShardPlan.needs(slug, sources: entry.sources))
+            return ShardPlan.Game(slug: slug, weight: weight, needs: ShardPlan.needs(slug, sources: entry.sources), signsIn: ShardPlan.signsIn(entry.sources))
         }
         let slots = macs.map { ShardPlan.Slot(name: $0.name, has: $0.installers) }
         let assignment = ShardPlan.assign(toAssign, to: slots, sentFromHere: local)
