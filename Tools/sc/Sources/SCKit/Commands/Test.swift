@@ -423,6 +423,32 @@ enum TestCommandSupport {
         (suites ?? []).flatMap { ["--filter", $0] }
     }
 
+    /// A run's line in the totals. An integration run counts its games, as
+    /// its table shows them: the result bundle counts test functions, and
+    /// every game is an argument of one parameterized test, beside the check
+    /// that the slugs asked for are known (three games read "2 passed").
+    static func total(_ run: TestRun) -> String {
+        let time = run.summary?.seconds.map { String(format: " in %.0fs", $0) } ?? ""
+        if !run.games.isEmpty {
+            let passed = run.games.filter { $0.status == "passed" }.count
+            let skipped = run.games.filter { $0.status == "skipped" }.count
+            let notRun = run.games.filter { ["pending", "running"].contains($0.status) }.count
+            let failed = run.games.count - passed - skipped - notRun
+            var parts = ["\(passed) of \(run.games.count) \(run.games.count == 1 ? "game" : "games") passed"]
+            if failed > 0 { parts.append("\(failed) failed") }
+            if skipped > 0 { parts.append("\(skipped) skipped") }
+            if notRun > 0 { parts.append("\(notRun) not run") }
+            return "\(run.name): \(parts.joined(separator: ", "))\(time)"
+        }
+        if let summary = run.summary {
+            var parts = ["\(summary.passedTests ?? 0) passed"]
+            if let failed = summary.failedTests, failed > 0 { parts.append("\(failed) failed") }
+            if let skipped = summary.skippedTests, skipped > 0 { parts.append("\(skipped) skipped") }
+            return "\(run.name): \(parts.joined(separator: ", "))\(time)"
+        }
+        return "\(run.name): \(run.status == 0 ? "passed" : "failed (exit \(run.status))")"
+    }
+
     /// Totals, the HTML report, and the verdict (a non-zero exit when anything failed).
     static func finish(_ runs: [TestRun], stamp: String, policy: ReportPolicy, session: Session, extraFailure: Int32 = 0) async throws {
         let ui = session.ui
@@ -430,17 +456,7 @@ enum TestCommandSupport {
         let report = await TestReports.writeHTML(for: runs.map(\.bundle), into: reportDir)
         let failed = runs.contains { $0.status != 0 } || extraFailure != 0
 
-        var totals: [String] = []
-        for run in runs {
-            if let summary = run.summary {
-                var parts = ["\(summary.passedTests ?? 0) passed"]
-                if let failed = summary.failedTests, failed > 0 { parts.append("\(failed) failed") }
-                if let skipped = summary.skippedTests, skipped > 0 { parts.append("\(skipped) skipped") }
-                totals.append("\(run.name): \(parts.joined(separator: ", "))\(summary.seconds.map { String(format: " in %.0fs", $0) } ?? "")")
-            } else {
-                totals.append("\(run.name): \(run.status == 0 ? "passed" : "failed (exit \(run.status))")")
-            }
-        }
+        var totals = runs.map(Self.total)
 
         if let report, policy.shouldOpen(failed: failed) {
             _ = try? await Proc.collect("/usr/bin/open", [report.path])

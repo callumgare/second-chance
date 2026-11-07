@@ -1326,7 +1326,9 @@ launchd starts one again when it's next wanted; a reboot clears them too.
 `…-integration.xcresult`, converts them with `xchtmlreport` into
 `test-results/<timestamp>/index.html`, and opens that when something failed
 (`--open-report always|never` to change that). The terminal ends with a table
-of suites or games and the totals. Per-run logs and WrappPuppeteer output are
+of suites or games and the totals: tests for a unit run, games for an
+integration run (the result bundle counts test functions, and every game is
+an argument of one). Per-run logs and WrappPuppeteer output are
 attached to the test case inside the `.xcresult`. A sharded run's results and
 reports stay on the Macs that ran each shard
 ([Sharding a run across Macs](#sharding-a-run-across-macs)).
