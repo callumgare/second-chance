@@ -75,6 +75,43 @@ nonisolated public struct UserFilesLayout: Sendable, Equatable {
     /// The names of Second Chance's own settings files, which a wrapp kept
     /// loose in its folder before volumes and which go in `settings`.
     public static let settingsFileNames: Set<String> = ["dont-show-save-warning"]
+
+    /// How a wrapp lays out its folder, as its lock says.
+    public enum Arrangement: Sendable, Equatable {
+        /// No lock: built before volumes, so everything is loose in the
+        /// folder, Second Chance's settings files included.
+        case loose
+        /// The store a module keeps the person's saves in, by name.
+        case savesStore(String)
+        /// No module keeps saves in a store: the program keeps nothing
+        /// (SkiFree), or keeps its files beside itself through files mounts
+        /// of its own stores (Iji). Its settings are still in `settings`,
+        /// and a Wine program's Documents in the wine module's default store.
+        case defaultStore
+    }
+
+    public static func arrangement(of lock: WrappLock?) -> Arrangement {
+        guard let lock else { return .loose }
+        return lock.savesVolume.map(Arrangement.savesStore) ?? .defaultStore
+    }
+
+    /// Moves Second Chance's settings files left loose in the folder into
+    /// `settings`, where none is there already: a wrapp whose stores are
+    /// all files mounts kept them loose until 2026-11-08. The names moved.
+    @discardableResult
+    public func moveLooseSettings() throws -> [String] {
+        let files = FileManager.default
+        var moved: [String] = []
+        for name in Self.settingsFileNames.sorted() {
+            let loose = folder.appendingPathComponent(name)
+            let kept = settings.appendingPathComponent(name)
+            guard files.fileExists(atPath: loose.path), !files.fileExists(atPath: kept.path) else { continue }
+            try files.createDirectory(at: settings, withIntermediateDirectories: true)
+            try files.moveItem(at: loose, to: kept)
+            moved.append(name)
+        }
+        return moved
+    }
 }
 
 /// A volume, as moving files into it needs to know it.

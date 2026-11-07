@@ -361,17 +361,26 @@ func userFiles(layout: WrappLayout, bundleId: String) -> (saves: URL, settings: 
     }
     let preferences = fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Preferences")
 
-    // A program whose bundle declares no volumes (SkiFree keeps nothing)
+    // A program no module keeps saves for in a store (SkiFree keeps
+    // nothing; Iji keeps its files beside itself, through files mounts)
     // still has the wrapp's layout: its settings in wrapp-settings/, and a
     // Wine program's Documents in the wine module's default volume.
-    if let lock, lock.savesVolume == nil, lock.volumes == nil {
+    let arrangement = UserFilesLayout.arrangement(of: lock)
+    if arrangement == .defaultStore {
+        do {
+            for name in try userFiles.moveLooseSettings() {
+                configLogger.notice("[User files] Moved \(name) into wrapp-settings/")
+            }
+        } catch {
+            configLogger.error("[User files] Couldn't move settings left loose into wrapp-settings/: \(error)")
+        }
         let saves = userFiles.volume("wine-documents")
         try? fileManager.createDirectory(at: saves, withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: userFiles.settings, withIntermediateDirectories: true)
         return (saves, userFiles.settings, userFiles.settings.appendingPathComponent("scummvm.ini"))
     }
 
-    guard let lock, let savesVolume = lock.savesVolume else {
+    guard let lock, case .savesStore(let savesVolume) = arrangement else {
         // Built before volumes: everything loose in its folder, ScummVM's
         // settings in Preferences, as such a wrapp always had them.
         let folder = userFiles.folder

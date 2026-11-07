@@ -439,7 +439,12 @@ its folder, so every launch, and every build, moves that folder in
 With nothing to move it is one `lstat` per former id. A build under test moves
 files only in the folder `SECOND_CHANCE_APP_SUPPORT_DIR` names, never the real
 one. A wrapp with no lock, one built before bundles, keeps everything loose in
-its folder, as it always did.
+its folder, as it always did (`UserFilesLayout.arrangement`). One whose launch
+mounts no store a module keeps saves in (SkiFree keeps nothing; Iji, Icy Tower
+and LaserTank keep theirs beside the program through files mounts) still has
+`wrapp-settings/`, and a Wine program's Documents in `wine-documents`. Until
+2026-11-08 such a wrapp kept its settings loose instead, so its launch moves
+any it finds there into `wrapp-settings/` (`UserFilesLayout.moveLooseSettings`).
 
 ## Measurements
 
