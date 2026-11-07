@@ -60,8 +60,10 @@ nonisolated enum Ranking {
         }
 
         // Images found together as one icon (a group's sizes, a Mac family).
+        // A classic Mac's SICN (a generic small-icon list, which aliases share) is no icon's member: it mustn't join
+        // the icons it's found beside into one family.
         var byKey: [String: Int] = [:]
-        for (position, image) in images.enumerated() {
+        for (position, image) in images.enumerated() where !image.chains.allSatisfy({ $0.contains { $0.name.hasPrefix("SICN") } }) {
             for key in image.familyKeys {
                 if let first = byKey[key] { union(first, position) } else { byKey[key] = position }
             }
@@ -77,10 +79,16 @@ nonisolated enum Ranking {
             let aspect = Int((Double(image.image.width) / Double(image.image.height) * 8).rounded())
             buckets[aspect, default: []].append(position)
         }
+        // Only images of different sizes or depths join this way (the same art at the same size and depth would
+        // be the same pixels, which dedupe already merged), and small ones need a closer match: at 32×32, two
+        // different icons can hash within a few bits.
         for members in buckets.values {
             for (offset, a) in members.enumerated() {
-                for b in members[(offset + 1)...] where (hashes[a] ^ hashes[b]).nonzeroBitCount <= 6 {
-                    union(a, b)
+                for b in members[(offset + 1)...] {
+                    let left = images[a].image, right = images[b].image
+                    guard (left.width, left.height, left.bitDepth) != (right.width, right.height, right.bitDepth) else { continue }
+                    let small = max(left.width, left.height, right.width, right.height) <= 64
+                    if (hashes[a] ^ hashes[b]).nonzeroBitCount <= (small ? 2 : 6) { union(a, b) }
                 }
             }
         }

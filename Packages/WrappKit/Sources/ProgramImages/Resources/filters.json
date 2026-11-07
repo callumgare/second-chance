@@ -6,6 +6,7 @@
   ],
   "skip": [
     { "pattern": "*.txt", "reason": "text" },
+    { "pattern": "system folder/**", "reason": "a classic Mac's system, not the program" },
     { "pattern": "*.rtf", "reason": "text" },
     { "pattern": "*.doc", "reason": "text" },
     { "pattern": "*.htm", "reason": "text" },
@@ -62,7 +63,9 @@
   ],
   "wrapp": [
     { "pattern": "contents/resources/?*", "reason": "the wrapp's own resources, not the program's" },
-    { "pattern": "contents/resources/*/**", "reason": "the wrapp's own resources, not the program's" }
+    { "pattern": "contents/resources/*/**", "reason": "the wrapp's own resources, not the program's" },
+    { "pattern": "contents/sharedsupport/basilisk/boot.hfv", "reason": "the emulator's system disk, not the program's" },
+    { "pattern": "contents/sharedsupport/basilisk/system.hfv", "reason": "the emulator's system disk, not the program's" }
   ],
   "demote": [
     { "pattern": "msvcr*.dll", "reason": "runtime library" },
