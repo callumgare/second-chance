@@ -9,6 +9,9 @@ STORE saves
 STORE replays
 CONST install-dir = "C:/IcyTower"
 
+# Wine 10: its keep-thread-handles patch knows only Wine 10's msvcrt.dll
+# (11.21's _endthread uses CloseHandle's result, so the patch refuses it),
+# and Icy Tower needs the patch to exit cleanly.
 FROM --module=wine@10 prefix AS download
 DO wine.cnc-ddraw
 # Allegro's windowed driver (its Fullscreen: No, and its first try at every

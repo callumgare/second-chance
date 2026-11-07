@@ -22,6 +22,11 @@ FUNCTION post-install-setup
   DO nancy-drew.configure-ini --into=${const.install-dir}
 END
 
+# Wine 10: the Nancy Drew games stay on the Wine they were made and tested
+# with. On Wine 11.21 (tried 2026-11-08) two of their installers failed
+# (Alibi in Ashes', and Blackmoor Manor's InstallShield, which never
+# finished) and a launch took four times as long, so none moves until a
+# newer Wine is tried with all of them.
 FROM --module=wine@10 prefix AS prefix
 DO pre-install-setup
 LAUNCH --wine.graphics=direct-3d ${const.program}

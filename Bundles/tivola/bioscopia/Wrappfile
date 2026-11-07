@@ -10,6 +10,8 @@ CONST install-dir = "C:/Program Files/Tivola/Bioscopia"
 CONST program = "${const.install-dir}/Bioscopia.exe"
 
 # The Windows projector under Wine, set up as the disc's installer would.
+# Wine 10: on 11.21 it stops after the intro's first frame, Rosetta saying
+# "LDT … not supported".
 FROM --module=wine@10 prefix AS disc
 # Director's QuickTime Xtra (QT3Asset) needs QuickTime 4 or later, and the
 # game won't start without it. Apple's QuickTime 7.6 (winetricks quicktime76)
