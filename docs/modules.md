@@ -522,7 +522,10 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
   picture of the screen left in the temporary folder's `basilisk-automation/`),
   and the step fails on the second, or when the Mac hasn't shut down in
   `--limit` seconds (15 minutes). Its prefs are the wrapp's, silent. Its layer
-  is suggested: what it installs is kept, once per Mac.
+  is suggested: what it installs is kept, once per Mac. Its key holds the
+  script, as a file the step names, and the hash of the helpers'
+  `in_process_helpers.dylib` (`keyInputs`), so a change to `basilisk_mac.m`
+  runs the automation again rather than restoring what the old helper made.
 - **`BASILISK.STARTUP <basilisk:disk:…:item>`** moves an item on the startup disk
   (an alias the script made) into `System Folder:Startup Items`, so the Mac opens
   it at every boot. It changes the disk with the engine's hfsutils

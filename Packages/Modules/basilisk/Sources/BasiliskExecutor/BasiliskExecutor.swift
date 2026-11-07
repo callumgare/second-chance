@@ -55,9 +55,22 @@ public nonisolated struct BasiliskExecutor: ModuleExecutor {
         case "CDROM":
             let image = try await Self.image(step, in: context)
             return KeyInputs([KeyInput("disc", try await Blocking.run { try Self.fingerprint(image) })])
+        case "RUN":
+            return try await Self.runKeyInputs(helpers: helpers)
         default:
             return KeyInputs()
         }
+    }
+
+    /// What `RUN` makes depends on the helper that drives the Mac as much as
+    /// on its script: another `in_process_helpers.dylib` (a change to
+    /// `basilisk_mac.m`) is another run. The script is a file the step
+    /// names, which the runner keys itself (`StepKeys`).
+    static func runKeyInputs(helpers: URL?) async throws -> KeyInputs {
+        guard let helpers, FileManager.default.fileExists(atPath: helpers.path) else {
+            return KeyInputs([KeyInput("helpers", "missing")])
+        }
+        return KeyInputs([KeyInput("helpers", try await Blocking.run { try Self.hash(helpers) })])
     }
 
     public func run(_ step: PlannedStep, in context: any StepContext) async throws {

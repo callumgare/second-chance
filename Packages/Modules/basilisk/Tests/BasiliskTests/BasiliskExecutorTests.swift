@@ -1,6 +1,7 @@
 @testable import BasiliskExecutor
 import Foundation
 import Testing
+import WrappModuleKit
 
 struct BasiliskExecutorTests {
     @Test("A disc image is told from another by its size and first megabyte")
@@ -44,5 +45,22 @@ struct BasiliskExecutorTests {
         #expect(failed.result == .failed("automation failed at line 7 (wait-for 60 Agree): not there"))
         failed.observe("second-chance-helper[PuppetControl] notice: automation finished")
         #expect(failed.result == .failed("automation failed at line 7 (wait-for 60 Agree): not there"))
+    }
+
+    @Test("RUN's key changes with the helper that drives the Mac")
+    func runKeyFollowsHelper() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("basilisk-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let helpers = folder.appendingPathComponent("in_process_helpers.dylib")
+        try Data("one".utf8).write(to: helpers)
+        let first = try await BasiliskExecutor.runKeyInputs(helpers: helpers)
+        #expect(try await BasiliskExecutor.runKeyInputs(helpers: helpers) == first)
+        try Data("two".utf8).write(to: helpers)
+        let second = try await BasiliskExecutor.runKeyInputs(helpers: helpers)
+        #expect(second != first)
+        #expect(second.inputs.map(\.name) == ["helpers"])
+        let missing = try await BasiliskExecutor.runKeyInputs(helpers: folder.appendingPathComponent("none.dylib"))
+        #expect(missing != first && missing != second)
     }
 }

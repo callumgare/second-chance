@@ -543,7 +543,8 @@ step and keeps a layer after the expensive ones (`StepKeys`, `Layering`).
   core's `CoreInstructions.revision`, raised by hand when the Swift changes
   what it makes), each input it reads by its fingerprint (a file's size and
   time, a folder's listing), the key of a stage it copies from, and what its
-  executor adds (`keyInputs`: a Steam install's app id, a Big Fish install's
+  executor adds (`keyInputs`: a Steam install's app id, the helper that
+  drives a `BASILISK.RUN`'s Mac, a Big Fish install's
   edition). So a change anywhere changes every key after it, and none before.
   `LayerKey.formatVersion` is raised when what goes into a key changes.
 - **A build restores the deepest layer each stage has kept**, replays its
