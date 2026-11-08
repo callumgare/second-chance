@@ -188,7 +188,7 @@ struct BuildPlanTests {
         #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.mouse=locked") }
     }
 
-    @Test("--wine.display-mode is recorded as a width and height, and anything else is refused when planning")
+    @Test("--wine.display-mode is recorded as a width and height, and a depth when it names one; anything else is refused when planning")
     func displayMode() throws {
         func plan(_ options: String) throws -> BuildPlan {
             let (planner, _, bundle) = try planner("""
@@ -199,10 +199,48 @@ struct BuildPlanTests {
                                     conditions: BuildConditions(arch: "arm64", macos: 15))
         }
         #expect(try plan("--wine.display-mode=800x600").launch?.displayMode == RecordedLaunch.DisplayMode(width: 800, height: 600))
+        #expect(try plan("--wine.display-mode=800x600x8").launch?.displayMode == RecordedLaunch.DisplayMode(width: 800, height: 600, depth: 8))
+        #expect(try plan("--wine.display-mode=800x600x32").launch?.displayMode?.depth == 32)
         #expect(try plan("").launch?.displayMode == nil)
-        for bad in ["800", "800x", "x600", "800*600", "100x100", "800x600x32", "wide"] {
+        for bad in ["800", "800x", "x600", "800*600", "100x100", "800x600x24", "800x600x", "800x600x8x8", "wide"] {
             #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.display-mode=\(bad)") }
         }
+    }
+
+    @Test("--wine.colors is recorded as a colour depth, and a count it can't show is refused when planning")
+    func colors() throws {
+        func plan(_ options: String) throws -> BuildPlan {
+            let (planner, _, bundle) = try planner("""
+            FROM --module=wine@10 prefix AS only
+            LAUNCH --wine.graphics=unknown \(options) C:/Game/Game.exe
+            """)
+            return try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
+                                    conditions: BuildConditions(arch: "arm64", macos: 15))
+        }
+        #expect(try plan("--wine.colors=256").launch?.screenDepth == 8)
+        #expect(try plan("--wine.colors=65536").launch?.screenDepth == 16)
+        #expect(try plan("").launch?.screenDepth == nil)
+        for bad in ["16", "8", "16777216", "lots"] {
+            #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.colors=\(bad)") }
+        }
+    }
+
+    @Test("A RUN takes --wine.colors and --wine.display-mode for its program's session, checked as a launch's are")
+    func runScreenOptions() throws {
+        func plan(_ options: String) throws -> BuildPlan {
+            let (planner, _, bundle) = try planner("""
+            FROM --module=wine@10 prefix AS only
+            RUN \(options) D:/Setup.exe
+            LAUNCH --wine.graphics=unknown C:/Game/Game.exe
+            """)
+            return try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
+                                    conditions: BuildConditions(arch: "arm64", macos: 15))
+        }
+        let run = try #require(try plan("--wine.colors=256 --wine.display-mode=800x600x8").target?.steps.first { $0.instruction == "RUN" })
+        #expect(run.option("wine.colors") == "256")
+        #expect(run.option("wine.display-mode") == "800x600x8")
+        #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.colors=16") }
+        #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.display-mode=800") }
     }
 
     @Test("--wine.quit-confirm-key is recorded beside a quit key, and refused without one")

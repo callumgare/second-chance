@@ -663,7 +663,7 @@ mode lasts the session: explorer.exe puts back only a fullscreen change, as
 its program exits, and win32u keeps the current mode in the session's
 volatile registry, so the next session starts from the display's own. With
 `EmulateModeset` the Mac's display is never touched. The wrapp's log says
-`[Display mode] Set to 800x600 for the game (result 0, now 800x600)`, or why
+`[Display mode] Set to 800x600 for the program (result 0, now 800x600x32)`, or why
 not, and the game then starts at the display's own size.
 
 The projector then sees an 800x600 screen, makes its window 800x600, and Wine
@@ -715,6 +715,18 @@ scaled up in a Space (66 ms), and the game used about 6–8% of a core idle
 either way. Its cursor's lag is its own: it draws the cursor as a sprite,
 once a frame, at the movies' tempo of 10 frames a second.
 
+A mode may name its colour depth, `--wine.display-mode=800x600x8`, which
+`display_mode.exe` passes on as `dmBitsPerPel` (its third argument), and
+the line then ends with the depth the screen reports (`now 800x600x8`). Naming
+the depth also keeps the display's own refresh rate out of the request:
+Wine fills in what a program leaves out from the current mode, and every
+mode it emulates is 60 Hz, so on a 120 Hz display a request for 8-bit
+colour alone matches none (`ChangeDisplaySettings … returned -2`). A `RUN`
+takes the option too, set in its session the same way once Wine's desktop
+is up ([wrappfile.md](wrappfile.md#a-build-steps-screen)). Wine 10's Mac
+driver still tells a program the screen is 32-bit after an 8-bit mode is
+set; [screen depth](#screen-depth) is what changes that.
+
 ### Which games get it
 
 `EmulateModeset` is on for the whole prefix, but the helper arms only in a
@@ -752,6 +764,62 @@ same refusal as Wine's desktop starts, before the game's window appears, as
 `Changing (null) display settings returned -2`; a game refused its own mode
 names the display instead (`Changing L"\\.\DISPLAY1" …`), which is how
 [quit watch](#quit-watch)'s check tells the two apart.
+
+## Screen depth
+
+### The problem it solves
+
+Some old programs refuse to run on a screen of more than 256 colours.
+Webmaster's installer, a Director projector, says "Your screen is not set to
+256 colors" and offers to change it; its change fails and it quits. Such a
+program asks `GetDeviceCaps(BITSPIXEL)` of the screen. The prefix's
+`EmulateModeset` lets a session switch to an 8-bit mode, and Wine 10 offers
+one at every size it emulates, but Wine 10's Mac driver answers `BITSPIXEL`
+itself (`macdrv_GetDeviceCaps`, `dlls/winemac.drv/gdi.c`), with the depth
+of the Mac display's own mode, read once: always 32, whatever mode the
+session is in. Upstream stopped overriding it in Wine 10.20 (commit
+`1907a5b039`), so there `BITSPIXEL` follows the emulated mode, but
+Director's projector dies at once under Rosetta on every later Wine the wine
+module has (`rosetta error: LDT … not supported`), so a program like it
+runs on Wine 10.
+
+### What it does
+
+`screen_depth.m` shows Wine's Mac driver a display of fewer colours. The
+driver reads the depth of the display's mode, for `GetDeviceCaps` and for
+each mode it lists (`display_mode_bits_per_pixel` in `display.c`), through
+`CGDisplayModeCopyPixelEncoding`, so the helper points `winemac.so`'s
+imported address of it (its `__got` entry, as the
+[notch helper](#on-a-display-with-a-notch) does for its imports) at one
+that answers with the pixel encoding of the depth asked for
+(`IO8BitIndexedPixels` for 8, `IO16BitDirectPixels` for 16). Wine then sees
+a Mac display of that depth, everywhere it looks: `GetDeviceCaps` says it,
+and the modes `EmulateModeset` offers are of that depth and those below it
+(win32u's virtual modes are 8-bit, 16-bit and the display's own). What
+Wine draws is unchanged: its window surfaces are 32-bit whatever the display
+says, and the program's 8-bit picture is converted to them as any DIB is.
+
+It acts in every Wine process of the session, since explorer.exe registers
+the displays and their modes and the program takes them from there. It is
+armed by `SCREEN_DEPTH` (8 or 16), which `--wine.colors=256` or `65536`
+([wrappfile.md](wrappfile.md#the-launch-volumes-and-app)) sets:
+
+- **for a launch**, as the session's variables (`GameConfig.wineSessionVariables`,
+  `Wine.sessionVariables`), so Wine's desktop has it as well as the game,
+  and among the game's own variables with `SCREEN_DEPTH_EXE`, the game's
+  `.exe`, which says which process reports arming (`Wine.inProcessHelperVariables`);
+- **for a build step's `RUN`**, as its Wine session's variables (the wine
+  module's executor), its desktop's and its program's alike
+  ([wrappfile.md](wrappfile.md#a-build-steps-screen)).
+
+### Checking it
+
+The process that reports logs
+`second-chance-helper[ScreenDepth] notice: armed: the screen has 8-bit colour`,
+which the wrapp logs as `[Helpers] Screen depth armed`; in a build step,
+with no game to name, every process of the session reports. It reports an
+error when `winemac.so` doesn't import the function, and does nothing in a
+process without `winemac.so` (ScummVM loads the same dylib).
 
 ## Quit watch
 

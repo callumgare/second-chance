@@ -29,7 +29,8 @@ IFS=$'\n\t'
 # wrappers, so it is linked after it) and audio_levels.m (measures the game's
 # sound for puppet control's `audio`), basilisk_mac.m (Basilisk II's first
 # picture, shutting its Mac down when the wrapp quits, and hiding the Mac's own
-# screens from the player), with key_names.m, the keys puppet control and
+# screens from the player), screen_depth.m (shows Wine a display of fewer
+# colours, for a program that won't run on more), with key_names.m, the keys puppet control and
 # the quit watch press by name, and helper_common.m, the code they share. ScummVM wrapps load the same dylib into scummvm, for
 # puppet_control.m alone. ScreenCaptureKit is weak-linked: puppet_control.m
 # needs macOS 14.4 and checks for it.
@@ -58,6 +59,7 @@ clang -dynamiclib \
     "${HELPERS_DIR}/key_names.m" \
     "${HELPERS_DIR}/audio_levels.m" \
     "${HELPERS_DIR}/basilisk_mac.m" \
+    "${HELPERS_DIR}/screen_depth.m" \
     -framework Cocoa \
     -framework OpenGL \
     -framework ImageIO \

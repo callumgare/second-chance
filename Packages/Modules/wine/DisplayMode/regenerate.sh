@@ -12,7 +12,7 @@ trap 'rm -rf "$out"' EXIT
 # No C runtime: it calls ChangeDisplaySettingsExW and prints one line, and
 # without one it's 3.5 KB.
 i686-w64-mingw32-gcc -Os -s -nostdlib -ffreestanding -fno-stack-protector -fno-asynchronous-unwind-tables \
-    -e _start -Wl,--subsystem,console -Wl,--no-insert-timestamp -o "$out/display_mode.exe" display_mode.c -lkernel32 -luser32
+    -e _start -Wl,--subsystem,console -Wl,--no-insert-timestamp -o "$out/display_mode.exe" display_mode.c -lkernel32 -luser32 -lgdi32
 
 swift_file=../Sources/WineKit/WineDisplayMode+Program.swift
 {

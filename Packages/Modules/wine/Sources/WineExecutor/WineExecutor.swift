@@ -161,7 +161,8 @@ public nonisolated struct WineExecutor: ModuleExecutor {
     }
 
     /// A `wine:` program, its arguments in Windows's style, run in the
-    /// tree's Wine with its environment, on a desktop of its own, its exit
+    /// tree's Wine with its environment, on a desktop of its own (at the
+    /// step's `--wine.colors` and `--wine.display-mode`), its exit
     /// code returned once every program it started has finished too. A
     /// program that found no display is run once more in a fresh session:
     /// on a loaded Mac a desktop reported ready has failed a program, and the
@@ -179,10 +180,22 @@ public nonisolated struct WineExecutor: ModuleExecutor {
     func runOnce(_ program: ProgramRun, in context: any StepContext) async throws -> Int32 {
         let path = program.program.hasPrefix("wine:") ? String(program.program.dropFirst("wine:".count)) : program.program
         let arguments = program.arguments.map(Self.windowsStyle)
-        let wine = Wine(wrapp: context.tree)
+        let options = program.step.options.compactMapValues(\.first)
+        var wine = Wine(wrapp: context.tree)
+        // --wine.colors: every program of the session, explorer.exe among
+        // them, sees a screen of that depth (docs/wine-in-process-helpers.md#screen-depth).
+        if let depth = RecordedLaunch.screenDepth(options) {
+            wine.sessionVariables = Wine.screenDepthVariables(depth)
+        }
         let timeout = program.timeout.map { TimeInterval($0.components.seconds) } ?? programTimeout
         let desktop = await WineDesktop.start(wine, logger: logger, outputLogger: logger)
         defer { desktop?.release() }
+        // --wine.display-mode: the session in that mode before the program
+        // looks at the screen, as a launch's is. It needs the desktop, which
+        // registers Wine's displays.
+        if let mode = RecordedLaunch.displayMode(options) {
+            await WineDisplayMode.set(mode, in: wine, logger: logger)
+        }
         let code: Int32
         do {
             try await wine.run(.program(Self.windowsStyle(path), arguments), environment: program.environment, timeout: timeout)

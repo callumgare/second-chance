@@ -3,7 +3,7 @@
 //  Shared
 //
 //  What the in-process helpers (native fullscreen, cursor lock, mode
-//  scaling, quit watch, puppet control) say about
+//  scaling, quit watch, puppet control, screen depth) say about
 //  themselves, gathered from the game's output, and a check that the ones the
 //  wrapp armed did arm. A helper that never arms is otherwise silent — the
 //  game just runs in a window, or swallows its first click — which is how
@@ -20,6 +20,7 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
         case modeScaling = "EmulatedMode"
         case quitWatch = "QuitWatch"
         case puppetControl = "PuppetControl"
+        case screenDepth = "ScreenDepth"
 
         var name: String {
             switch self {
@@ -28,6 +29,7 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
             case .modeScaling: return "Mode scaling"
             case .quitWatch: return "Quit watch"
             case .puppetControl: return "Puppet control"
+            case .screenDepth: return "Screen depth"
             }
         }
 
@@ -39,6 +41,7 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
             case .modeScaling: return "EMULATED_MODE_SCALING_EXE"
             case .quitWatch: return "QUIT_WATCH_EXE"
             case .puppetControl: return "PUPPET_CONTROL_EXE"
+            case .screenDepth: return "SCREEN_DEPTH_EXE"
             }
         }
 
@@ -50,6 +53,7 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
             case .modeScaling: return "a game that switches the display mode will draw into a corner of the screen"
             case .quitWatch: return "a game that quits before it has drawn anything won't be reported as failing"
             case .puppetControl: return "WrappPuppeteer can't see or click the game"
+            case .screenDepth: return "a game that needs fewer colours will say the screen has too many"
             }
         }
 
