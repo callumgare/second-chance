@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "tivola/webmaster"
+version: 1
+title: "Webmaster"
+display-name: "Webmaster"
+allow-paths: ["quicktime/", "scummvm/", "assets/"]  # QuickTime 4's setup script; the unfinished ScummVM stage's Lingo.ini; its icon
+
+volumes:
+  saves:
+    display-name: "saved games"   # Webmaster.rup, beside the game: its settings and save slots
+
+editions:
+  - id: "cd"
+    source: "disc"
+    build:
+      target: "disc"   # the Windows side under Wine; the Wrappfile's scummvm stage is unfinished, and no edition builds it
+      inputs:
+        disc-1: { type: "disc" }
+    detect:
+      matchers:
+        - { file-exists: "Webmaster.exe" }   # the Windows projector, at the disc's root
+        - { volume-name: "WEBMASTER" }
+
+tests:
+  scenario: "wine/starts-and-quits"
+  window: "fullscreen"   # its 800x600 window, scaled up from the display mode its launch sets, in a Space

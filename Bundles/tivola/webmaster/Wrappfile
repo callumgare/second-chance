@@ -1,0 +1,41 @@
+# Webmaster: a Macromedia Director 8 title on two hybrid Mac/PC discs. Disc 1
+# installs (its Transfer folder, and QuickTime 4), disc 2 holds the game and
+# must be in the drive while it runs.
+INPUT disc-1
+# The saved games: Webmaster.rup beside the game, which holds its settings and
+# its save slots (the names, and each slot's page, objects and e-mails).
+STORE saves
+CONST install-dir = "C:/Program Files/Tivola/Webmaster"
+CONST program = "${const.install-dir}/Webmaster.exe"
+
+# The Windows projector under Wine, set up as the disc's installer would.
+# Wine 10: on 11.21 it stops after the intro's first frame, Rosetta saying
+# "LDT … not supported".
+FROM --module=wine@10 prefix AS disc
+# Director's QuickTime Xtra (QT3Asset) needs QuickTime 4 or later, and the
+# game won't start without it. Apple's QuickTime 7.6 (winetricks quicktime76)
+# installs, but its QuickTime.qts fails to initialise under Wine (its DllMain
+# returns 0, and the game asks for QuickTime 4), and its installer's msiexec
+# crashes at the end. The disc's own QuickTime 4 works: its setup clicked
+# through by AutoIt, with its defaults.
+COPY --from=${input.disc-1} "QuickTime Installer" C:/quicktime-setup/
+RUN --mount=type=bind,source=quicktime/setup.au3,target=C:/quicktime-setup.au3 \
+    --mount=type=bind,source=module:installer:/autoit,target=C:/autoit \
+    C:/autoit/AutoIt3.exe /ErrorStdOut C:/quicktime-setup.au3 C:/quicktime-setup/QuickTimeInstaller.exe
+REMOVE C:/quicktime-setup
+
+WINE.KEEP-DISCS ${input.disc-1} --into=C:/webmaster-cd
+# Webmaster.exe is the installer as well as the game. It insists on a
+# 256-colour screen, which Wine 10's Mac driver never reports unless told
+# (--wine.colors), and its own switch to one fails on a 120 Hz display, so the
+# session starts in an 8-bit mode.
+RUN --wine.colors=256 --wine.display-mode=800x600x8 D:/Webmaster.exe
+
+# It draws with GDI (Dirapi.dll imports neither ddraw nor d3d). The projector
+# never sets a display mode: its window covers whatever screen it finds, its
+# 800x600 stage drawn small in the middle. Started in an 800x600 mode, which
+# Wine emulates, its window is the stage, and Wine scales it up to fill the
+# display, which native fullscreen puts in a Space. (It then also skips its
+# start screen, which only asks for an 800x600 desktop.)
+LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="Webmaster.rup" \
+    --wine.graphics=unknown --wine.colors=256 --wine.display-mode=800x600x8 ${const.program}
