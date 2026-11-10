@@ -1100,3 +1100,34 @@ struct SigningIdentityTests {
         #expect(try run(SigningIdentity.checkScript(hashes: hashes), home: home) == 1)
     }
 }
+
+@Suite("Which games a test run takes")
+struct TestGameSelectionTests {
+    private let ui = UI(environment: TerminalEnvironment(isInteractive: false, isColored: false, canReadKeys: false),
+                        mode: .raw, logsDir: FileManager.default.temporaryDirectory)
+
+    @Test("Games named are the games run")
+    func named() throws {
+        #expect(try TestCommandSupport.resolve(["old-clock", "skifree"], ui: ui).map(\.slug) == ["old-clock", "skifree"])
+    }
+
+    @Test("Only !<game>s: every game but those")
+    func allBut() throws {
+        let games = try TestCommandSupport.resolve(["!white-wolf", "!skifree"], ui: ui).map(\.slug)
+        #expect(games.count == Catalog.games.count - 2)
+        #expect(!games.contains("white-wolf") && !games.contains("skifree"))
+        #expect(games.contains("old-clock"))
+    }
+
+    @Test("!<game> beside games named leaves it out of them")
+    func namedBut() throws {
+        #expect(try TestCommandSupport.resolve(["old-clock", "skifree", "!skifree"], ui: ui).map(\.slug) == ["old-clock"])
+    }
+
+    @Test("An unknown game, a bare !, or leaving out every game named is an error")
+    func errors() {
+        #expect(throws: SCError.self) { try TestCommandSupport.resolve(["!not-a-game"], ui: ui) }
+        #expect(throws: SCError.self) { try TestCommandSupport.resolve(["!"], ui: ui) }
+        #expect(throws: SCError.self) { try TestCommandSupport.resolve(["skifree", "!skifree"], ui: ui) }
+    }
+}

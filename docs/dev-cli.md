@@ -331,7 +331,9 @@ CompositionTests` runs each where it's declared (`UnitTestSelection`): the
 app's through xcodebuild's `-only-testing`, a package's or sc's own through
 `swift test --filter`, and the app is built for testing only when one of them
 is the app's. `Suite/test()` runs one test. `sc test integration [<slug>…]` runs the per-game integration
-suite with one worker; `sc test all` runs both, as two separate xcodebuild
+suite with one worker, for every game or those named; `!<slug>` leaves one out, of
+those named or, given alone, of every game (`sc test integration '!white-wolf'
+'!skifree'`: quoted, as bash and zsh take `!` for history); `sc test all` runs both, as two separate xcodebuild
 runs. A bare `sc test` runs nothing: it prints its help and exits 64, so a
 script that once relied on it meaning the unit tests fails rather than
 passing, and the hours-long run is never had by accident.

@@ -177,7 +177,7 @@ struct TestAllCommand: AsyncParsableCommand {
     @OptionGroup var integration: IntegrationOptions
     @OptionGroup var report: ReportOptions
 
-    @Argument(help: "Limit the integration half to these games (slugs).")
+    @Argument(help: "Limit the integration half to these games (slugs); !<slug> leaves one out.")
     var games: [String] = []
 
     func run() async throws {
@@ -255,7 +255,13 @@ struct TestIntegrationCommand: AsyncParsableCommand {
     @OptionGroup var integration: IntegrationOptions
     @OptionGroup var report: ReportOptions
 
-    @Argument(help: "The games to test (slugs). Default: all of them.")
+    @Argument(help: ArgumentHelp(
+        "The games to test (slugs). Default: all of them.",
+        discussion: """
+        !<slug> leaves a game out: of the others named, or of all of them when only ! ones are given \
+        (!white-wolf !skifree). Quote it in bash or zsh, where ! recalls history.
+        """
+    ))
     var games: [String] = []
 
     @Option(help: ArgumentHelp(
@@ -347,18 +353,31 @@ struct TestIntegrationCommand: AsyncParsableCommand {
 enum TestCommandSupport {
     /// The games `slugs` name; with none, those `--bundle` named, else none
     /// (every game).
+    /// The games `slugs` name. One written `!<slug>` is left out: of the
+    /// others named, or of every game when only `!` ones are given
+    /// (`!white-wolf !skifree`). None at all is the `--bundle` games, which
+    /// leaves the run every game when there are none.
     static func resolve(_ slugs: [String], ui: UI) throws -> [CatalogGame] {
         if slugs.isEmpty {
             return ExtraBundleOptions.ids.compactMap { id in Catalog.games.first { $0.programID == id } }
         }
-        return try slugs.map { slug in
-            guard let game = Catalog.game(slug: slug) else {
-                var hints: [String] = []
-                if let guess = Games.closest(to: slug) { hints.append("Did you mean \(guess.slug)?") }
-                throw SCError("No game called '\(slug)'.", hints: hints)
-            }
-            return game
+        let excluded = try slugs.filter { $0.hasPrefix("!") }.map { try game(String($0.dropFirst())) }
+        let included = try slugs.filter { !$0.hasPrefix("!") }.map(game)
+        guard !excluded.isEmpty else { return included }
+        let left = Set(excluded.map(\.slug))
+        let games = (included.isEmpty ? Catalog.games : included).filter { !left.contains($0.slug) }
+        guard !games.isEmpty else { throw SCError("Leaving out \(left.sorted().joined(separator: ", ")) leaves no games to test.") }
+        return games
+    }
+
+    private static func game(_ slug: String) throws -> CatalogGame {
+        guard !slug.isEmpty else { throw SCError("A '!' needs a game after it, as in !white-wolf.") }
+        guard let game = Catalog.game(slug: slug) else {
+            var hints: [String] = []
+            if let guess = Games.closest(to: slug) { hints.append("Did you mean \(guess.slug)?") }
+            throw SCError("No game called '\(slug)'.", hints: hints)
         }
+        return game
     }
 
     /// What a shard reports to the coordinator (`--results-json`).
