@@ -163,6 +163,12 @@ Answering no, or running with no terminal to ask, prints those commands
 instead. A failed push or `gh release create` leaves the commit and tag in
 place and names what is left to run.
 
+A tag for the new version that's already there stops the release when origin
+has it too, as that version is out. When only this clone has it, usually left
+by an attempt you took back without publishing, the release says which commit
+it's on and asks whether to delete it and carry on; no, or no terminal to ask,
+stops the release. `--dry-run` only says it would ask.
+
 So that last step can't be the first to find out the account is wrong, the
 preflight checks that the account `gh` is signed in as can write to the repo,
 and stops before anything is written if not. For the same reason it fetches the

@@ -866,9 +866,38 @@ private struct Release {
         }
         guard ProjectVersion.isSemanticVersion(version) else { throw SCError("'\(version)' isn't a three-part semantic version.") }
         if try await git(["rev-parse", "-q", "--verify", "refs/tags/v\(version)"]).succeeded {
-            throw SCError("Tag v\(version) already exists.")
+            try await clearLocalTag("v\(version)")
         }
         return version
+    }
+
+    /// A tag for this version is here already. On origin, that version is
+    /// released, so the release stops. Only here, it's usually left by an
+    /// earlier attempt that was taken back, so ask whether to delete it.
+    private func clearLocalTag(_ tag: String) async throws {
+        // --exit-code: 2 when origin has no such tag.
+        let remote = try await git(["ls-remote", "--tags", "--exit-code", "origin", "refs/tags/\(tag)"])
+        if remote.status == 0 {
+            throw SCError("Tag \(tag) already exists, on origin too: that version has been released.",
+                          hints: ["Use --version to release another version."])
+        }
+        guard remote.status == 2 else {
+            throw SCError("Tag \(tag) already exists here, and checking whether origin has it failed.",
+                          hints: [remote.error.trimmingCharacters(in: .whitespacesAndNewlines), "If it's only here: git tag -d \(tag)"])
+        }
+        let commit = try await git(["log", "-1", "--format=%h %s", "\(tag)^{commit}"]).output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let onBranch = try await git(["merge-base", "--is-ancestor", "\(tag)^{commit}", "HEAD"]).succeeded
+        let place = "\(commit)\(onBranch ? "" : ", which isn't on this branch")"
+        if dryRun {
+            ui.warning("Tag \(tag) exists only here (on \(place)). A release would ask whether to delete it.")
+            return
+        }
+        guard try ui.confirm("Tag \(tag) exists here but not on origin (on \(place)), likely left by an earlier attempt. Delete it and carry on?") == true else {
+            throw SCError("Tag \(tag) already exists here (not on origin).", hints: ["Delete it with git tag -d \(tag), or use --version to release another version."])
+        }
+        let deleted = try await git(["tag", "-d", tag])
+        guard deleted.succeeded else { throw SCError("Couldn't delete tag \(tag).", hints: [deleted.error]) }
+        ui.line(ui.format("\(.success("✔︎ Deleted the local tag \(tag)"))"))
     }
 
     private func diff(_ old: String, _ new: String) async throws -> String {
