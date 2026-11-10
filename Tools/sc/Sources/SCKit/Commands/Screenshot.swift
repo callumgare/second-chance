@@ -9,7 +9,8 @@ struct ScreenshotCommand: AsyncParsableCommand {
         Each app draws the states in its UIStateCatalog. By default in windows it never shows, so nothing comes \\
         on screen and no permission is needed, into DerivedData/screenshots/ with an index.html to look through. \\
         --on-screen shows each in a real window and captures it with its title bar and shadow, as the README's \\
-        pictures are: sc screenshot app --on-screen --state welcome --out docs/
+        pictures are: sc screenshot app --on-screen --state welcome --out docs/. --in-session does the same in one \\
+        of this Mac's test sessions, off your screen, at the scale of the session's display rather than your monitor's.
         """
     )
 
@@ -29,6 +30,15 @@ struct ScreenshotCommand: AsyncParsableCommand {
     @Flag(name: .customLong("on-screen"), help: "Show each in a real window and capture it with its title bar and shadow.")
     var onScreen = false
 
+    @Flag(name: .customLong("in-session"), help: ArgumentHelp(
+        "Picture them on screen in one of this Mac's test sessions, not on yours.",
+        discussion: "The first free one, or --session's. They take the scale of the session's own display (2×), not your monitor's."
+    ))
+    var inSession = false
+
+    @Option(name: .customLong("session"), help: ArgumentHelp("The test session to use (implies --in-session).", valueName: "user"))
+    var sessionUser: String?
+
     @Flag(name: .customLong("list"), help: "List the catalogued states' names, without picturing any.")
     var list = false
 
@@ -42,7 +52,9 @@ struct ScreenshotCommand: AsyncParsableCommand {
             }
             return
         }
-        try await GUISession.ensure(session, need: .windows)
+        let inTestSession = inSession || sessionUser != nil
+        // In a test session nothing comes up on this Mac's screen.
+        if !inTestSession { try await GUISession.ensure(session, need: .windows) }
         try await Xcode(session: session).ensureAppBuild(appBuild)
         let repo = session.repo
         let folder = out.map { URL(fileURLWithPath: $0, relativeTo: repo.root).standardizedFileURL }
@@ -51,11 +63,12 @@ struct ScreenshotCommand: AsyncParsableCommand {
             // Gone first, so an old picture can't pass for a new one.
             try? FileManager.default.removeItem(at: folder)
         }
-        let pictures = try await Screenshots(session: session, app: repo.app).take(
-            targets: target.map { [$0] } ?? Screenshots.Target.allCases,
-            states: states.flatMap { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } },
-            onScreen: onScreen, into: folder
-        )
+        let screenshots = Screenshots(session: session, app: repo.app)
+        let targets = target.map { [$0] } ?? Screenshots.Target.allCases
+        let wanted = states.flatMap { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
+        let pictures = inTestSession
+            ? try await screenshots.takeInTestSession(sessionUser, targets: targets, states: wanted, into: folder)
+            : try await screenshots.take(targets: targets, states: wanted, onScreen: onScreen, into: folder)
         guard out == nil else {
             session.ui.success("\(pictures.count) pictures in \(repo.display(folder))")
             return
@@ -86,6 +99,11 @@ struct Screenshots {
     }
 
     private func executable(of target: Target) -> URL {
+        Self.executable(of: target, in: app)
+    }
+
+    /// What draws `target`'s states, in the Second Chance.app at `app`.
+    static func executable(of target: Target, in app: URL) -> URL {
         switch target {
         case .app: app.appendingPathComponent("Contents/MacOS/Second Chance")
         case .wrapp: app.appendingPathComponent("Contents/Resources/WrappTemplate.app/Contents/MacOS/WrappTemplate")
@@ -117,7 +135,7 @@ struct Screenshots {
         return drawn.sorted { $0.path < $1.path }
     }
 
-    private static func pictures(in folder: URL) -> [URL] {
+    static func pictures(in folder: URL) -> [URL] {
         ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.pathExtension == "png" }
     }

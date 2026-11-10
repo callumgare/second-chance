@@ -356,7 +356,7 @@ private struct Release {
         if buildOnly { return (version, branch, false) }
 
         // The README's pictures of the app, retaken from this build.
-        let screenshots = await retakeReadmeScreenshots(app: app, rollback: rollback)
+        let screenshots = try await retakeReadmeScreenshots(app: app, rollback: rollback)
 
         // 7. Debug symbols, so crash reports from this version can be read.
         try await uploadDebugSymbols()
@@ -576,34 +576,77 @@ private struct Release {
     /// only where it looks different from the committed one
     /// (`ImageComparison`): the files changed, for the release commit. A
     /// failure is only warned about: a release doesn't stop for a picture.
-    private func retakeReadmeScreenshots(app: URL, rollback: FileRollback) async -> [URL] {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("sc-release-screenshots-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: folder) }
-        var changed: [URL] = []
-        do {
-            let pictures = try await Screenshots(session: session, app: app)
-                .take(targets: [.app], states: ["welcome"], onScreen: true, into: folder)
-            for picture in pictures {
-                let committed = repo.root.appendingPathComponent("docs").appendingPathComponent(picture.lastPathComponent)
-                guard readmeScreenshots.contains(committed) else { continue }
-                let new = try Data(contentsOf: picture)
-                let verdict = (try? Data(contentsOf: committed)).map { ImageComparison.compare($0, new) } ?? .different
-                switch verdict {
-                case .same:
+    /// A picture that came out at a lower resolution than the committed one
+    /// (a 1× display) is asked about: try again, once a Retina display is
+    /// connected, or go on without it. With no one to ask, it's warned about.
+    private func retakeReadmeScreenshots(app: URL, rollback: FileRollback) async throws -> [URL] {
+        while true {
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("sc-release-screenshots-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: folder) }
+            var changed: [(file: URL, picture: Data)] = []
+            var lowerResolution: [URL] = []
+            do {
+                let pictures = try await takeReadmeScreenshots(Screenshots(session: session, app: app), into: folder)
+                for picture in pictures {
+                    let committed = repo.root.appendingPathComponent("docs").appendingPathComponent(picture.lastPathComponent)
+                    guard readmeScreenshots.contains(committed) else { continue }
+                    let new = try Data(contentsOf: picture)
+                    switch (try? Data(contentsOf: committed)).map({ ImageComparison.compare($0, new) }) ?? .different {
+                    case .same: continue
+                    case .lowerResolution: lowerResolution.append(committed)
+                    case .different: changed.append((committed, new))
+                    }
+                }
+            } catch {
+                ui.warning("Couldn't retake the README's screenshots, so they're left as they are: \(error.localizedDescription)")
+                return []
+            }
+            if !lowerResolution.isEmpty {
+                let names = lowerResolution.map(repo.display).joined(separator: " and ")
+                let question = "\(names) came out at a lower resolution than the committed ones, as this Mac's display isn't Retina."
+                switch try ui.choose(question, from: LowResolutionAnswer.allCases) {
+                case .retry?:
                     continue
-                case .lowerResolution:
-                    ui.warning("\(repo.display(committed)) came out at a lower resolution on this Mac's display — keeping the committed one.")
-                case .different:
-                    try await rollback.write(new, to: committed)
-                    changed.append(committed)
+                case .keep?:
+                    ui.line(ui.format("\(.muted("Keeping the committed \(names)."))"))
+                case nil:
+                    ui.warning("\(names) came out at a lower resolution on this Mac's display — keeping the committed ones.")
                 }
             }
-        } catch {
-            ui.warning("Couldn't retake the README's screenshots, so they're left as they are: \(error.localizedDescription)")
-            return []
+            // Only once it's settled, so a retry doesn't leave a 1× picture written.
+            for (file, picture) in changed {
+                try await rollback.write(picture, to: file)
+            }
+            let files = changed.map(\.file)
+            ui.line(ui.format("\(.success(files.isEmpty ? "✔︎ README screenshots unchanged" : "✔︎ README screenshots updated: \(files.map(repo.display).joined(separator: ", "))"))"))
+            return files
         }
-        ui.line(ui.format("\(.success(changed.isEmpty ? "✔︎ README screenshots unchanged" : "✔︎ README screenshots updated: \(changed.map(repo.display).joined(separator: ", "))"))"))
-        return changed
+    }
+
+    /// What to do about README pictures that came out at a lower resolution.
+    private enum LowResolutionAnswer: CaseIterable, CustomStringConvertible {
+        case retry, keep
+
+        var description: String {
+            switch self {
+            case .retry: "Try again (connect a Retina display first, or free a test session)"
+            case .keep: "Go on with the release, keeping the committed pictures"
+            }
+        }
+    }
+
+    /// The README's pictures, in a free test session where there is one: off
+    /// the screen of whoever is at the Mac, and at its own display's 2×.
+    /// Without one, or when that fails, on this Mac's own screen.
+    private func takeReadmeScreenshots(_ screenshots: Screenshots, into folder: URL) async throws -> [URL] {
+        if await Screenshots.freeTestSession() {
+            do {
+                return try await screenshots.takeInTestSession(nil, targets: [.app], states: ["welcome"], into: folder)
+            } catch {
+                ui.warning("Couldn't take the README's screenshots in a test session, so taking them on this screen: \(error.localizedDescription)")
+            }
+        }
+        return try await screenshots.take(targets: [.app], states: ["welcome"], onScreen: true, into: folder)
     }
 
     /// The release commit and its tag. If either fails, whatever was done is

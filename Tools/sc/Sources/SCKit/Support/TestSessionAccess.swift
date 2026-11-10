@@ -23,9 +23,11 @@ enum TestSessionAccess {
     /// and streams its output back through a named pipe, so nothing it prints
     /// is written to disk.
     /// `timeout`: how long to wait for its output, longer for one that waits
-    /// on the person (a prompt on the Mac's screen).
-    static func inGUISession(_ arguments: [String], timeout: Int = 30) -> String {
+    /// on the person (a prompt on the Mac's screen). `withErrors`: its
+    /// stderr comes back too, merged with its stdout.
+    static func inGUISession(_ arguments: [String], timeout: Int = 30, withErrors: Bool = false) -> String {
         let program = arguments.map { "<string>\($0.replacingOccurrences(of: "&", with: "&amp;"))</string>" }.joined()
+        let errors = withErrors ? "<key>StandardErrorPath</key><string>$dir/out</string>" : ""
         return """
         set -eu
         label=au.gare.callum.second-chance.once-$$
@@ -36,7 +38,7 @@ enum TestSessionAccess {
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0"><dict><key>Label</key><string>$label</string>
         <key>ProgramArguments</key><array>\(program)</array>
-        <key>StandardOutPath</key><string>$dir/out</string><key>RunAtLoad</key><true/></dict></plist>
+        <key>StandardOutPath</key><string>$dir/out</string>\(errors)<key>RunAtLoad</key><true/></dict></plist>
         P
         launchctl bootstrap gui/$(id -u) "$dir/job.plist"
         perl -e 'alarm \(timeout); exec "cat", @ARGV' "$dir/out"

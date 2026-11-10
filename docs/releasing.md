@@ -49,15 +49,22 @@ alone, as it writes nothing).
   after running the unit tests and a Release build (`--notes-only` stops before
   those, `--skip-tests` skips the tests).
 - **The README's pictures**, `docs/app-welcome-light.png` and `-dark.png`,
-  retaken from the Release build (`sc screenshot app --on-screen --state
-  welcome`, [dev-cli.md](dev-cli.md#screenshots)), which puts the app's
-  window on screen for a moment. Each goes into the release commit only when
+  retaken from the Release build. Where one of the Mac's test sessions is
+  free, they're taken there (`sc screenshot app --in-session --state
+  welcome`, [dev-cli.md](dev-cli.md#screenshots)), off your screen and at
+  the scale of the session's own display (2× when this was made), not of
+  the Mac's monitors; otherwise, or when that fails, on this Mac's
+  screen (`--on-screen`), which puts the app's window up for a moment and
+  gives 1× pictures on a 1× display. Each goes into the release commit only when
   it looks different from the committed one (`ImageComparison`: more than 8
   pixels changed noticeably, where one changed character is over a hundred
   and a capture of the same window changes none), so a picture that was only
-  encoded again isn't committed; nor is one taken on a display of a lower scale than
-  the committed one's, which is warned about. A picture that can't be taken
-  is warned about too, and the release goes on. `--build-only` skips this.
+  encoded again isn't committed. One that came out at a lower scale than the
+  committed one (a 1× display, with no test session free) is never committed
+  either: the release asks whether to try again, once a Retina display is
+  connected or a test session is free, or to go on keeping the committed
+  pictures, and with no terminal to ask it warns and goes on. A picture that
+  can't be taken is warned about, and the release goes on. `--build-only` skips this.
 - **A check that the build has a Sentry DSN.** It comes from `SENTRY_DSN` in
   `.env`. Without it the release would send no failure reports, so the
   release stops ([failure-reports.md](failure-reports.md#the-dsn)).

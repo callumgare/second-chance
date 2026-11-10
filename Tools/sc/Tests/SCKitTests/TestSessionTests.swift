@@ -218,6 +218,13 @@ struct PeekabooSetupTests {
         #expect(script.contains("mkfifo -m 600"))
         #expect(script.contains("<string>x?a&amp;b</string>"))
         #expect(script.contains("launchctl bootstrap gui/$(id -u)"))
+        #expect(!script.contains("StandardErrorPath"))
+    }
+
+    @Test("A program run in the GUI session can hand back its stderr too, through the same pipe")
+    func guiSessionScriptWithErrors() {
+        let script = TestSessionAccess.inGUISession(["/usr/bin/true"], withErrors: true)
+        #expect(script.contains("<key>StandardOutPath</key><string>$dir/out</string><key>StandardErrorPath</key><string>$dir/out</string>"))
     }
 
     @Test("A new test user's Setup Assistant is marked done for this macOS")

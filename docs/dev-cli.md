@@ -14,6 +14,7 @@ nearest command's help.
 ./sc app run                           # …and run it, logs in this terminal
 ./sc screenshot                        # Picture the app's and a wrapp's screens for review, light and dark
 ./sc screenshot app --on-screen --state welcome --out docs/   # Retake the README's pictures
+./sc screenshot app --in-session --state welcome --out docs/  # The same, in a test session: off your screen
 ./sc wrapp build stay-tuned            # Build a wrapp headlessly from its disc image in the installers store
 ./sc wrapp run stay-tuned              # Launch it (building it first if there's none)
 ./sc wrapp update stay-tuned           # Put the latest WrappTemplate into it
@@ -205,6 +206,19 @@ commits a picture only when it looks different
 `activate(ignoringOtherApps:)`: the plain `activate()` is only a request
 since macOS 14, and it's turned down for an app that hasn't finished
 launching through its own run loop, leaving the window drawn inactive.
+
+**`--in-session`** takes them on screen as `--on-screen` does, but in one of
+this Mac's [test sessions](#test-sessions): the first free one, or the one
+`--session <user>` names. It claims the session for the while, copies the app
+into the test user's home with `tar` (so its signature arrives whole), runs it
+in that user's GUI login, copies the pictures back and gives the session back.
+Nothing comes up on the screen of whoever is at the Mac, and the pictures
+take the test session's own display's scale, not the Mac's monitors': the
+display Screen Sharing gives a session was 2× when this was made, so they
+were Retina ones on a Mac with only a 1× monitor attached. A login that isn't on the console never
+calls a window visible, though it draws it and ScreenCaptureKit captures it,
+so there `UIStateShots` takes the window being key as the sign it's up.
+`sc release` takes the README's pictures this way when a test session is free.
 
 ## Debug options
 

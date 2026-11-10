@@ -183,11 +183,17 @@ public enum UIStateShots {
         // for an app that hasn't finished launching through its own run
         // loop; this one is still honoured as an app starts up.
         NSApp.activate(ignoringOtherApps: true)
+        // A login that isn't on the console, as a test session isn't
+        // (docs/dev-cli.md#test-sessions), never calls a window visible,
+        // though it draws it and ScreenCaptureKit captures it: there, being
+        // key is the sign it's up.
+        let onConsole = isOnConsole()
+        let isUp = { window.isKeyWindow && (!onConsole || window.occlusionState.contains(.visible)) }
         let deadline = Date().addingTimeInterval(10)
-        while !(window.occlusionState.contains(.visible) && window.isKeyWindow), Date() < deadline {
+        while !isUp(), Date() < deadline {
             handleEvents(for: 0.1)
         }
-        guard window.occlusionState.contains(.visible) else { throw ShotError("the window never came on screen") }
+        guard isUp() else { throw ShotError("the window never came on screen") }
         // Drawn as key, with nothing left to settle.
         handleEvents(for: 0.5)
         let outcome = Outcome()
@@ -197,6 +203,12 @@ public enum UIStateShots {
         while outcome.result == nil { handleEvents(for: 0.05) }
         guard let result = outcome.result else { throw ShotError("the capture never finished") }
         return try result.get()
+    }
+
+    /// Whether this process's login is the one on the Mac's console.
+    private static func isOnConsole() -> Bool {
+        guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else { return true }
+        return (session[kCGSessionOnConsoleKey] as? Bool) ?? true
     }
 
     /// Where the capture's task leaves its result for the loop waiting on it.
