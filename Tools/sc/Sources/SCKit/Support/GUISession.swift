@@ -203,6 +203,12 @@ final class LaunchAgentJob: @unchecked Sendable {
             script += "export \(key)=\(Self.quote(value))\n"
         }
         script += "cd \(Self.quote(FileManager.default.currentDirectoryPath)) || exit 1\n"
+        // `script`'s pty takes no size from the pipe it reads, so it's 0×0
+        // and tables fall back to 80 columns: given this terminal's (over
+        // `ssh -t`, the one sc was run from), they use its whole width.
+        if let size = TerminalEnvironment.size() {
+            script += "stty cols \(size.columns) rows \(size.rows) 2>/dev/null\n"
+        }
         script += command.map(Self.quote).joined(separator: " ") + "\n"
         script += "echo $? > \(Self.quote(exitFile.path))\n"
         let jobScript = workDir.appendingPathComponent("job.sh")
