@@ -957,7 +957,11 @@ game's recorded splash screens says so, as a warning
 (`WRAPP_PUPPETEER: warning: No splash screen was recognised…`). One
 recognised while the click waited on the cursor lock counts, though another
 handler, such as the Her logo's text, clicked it in the end. The
-references may no longer match the game. The test attaches each warning
+references may no longer match the game. A launch whose first look at the
+screen came after its intros had played isn't warned about: the warning needs
+more than a handful (`unrecognisedLooksAllowed`, 5) of unrecognised pictures,
+not blank screens, before the menu, as any launch shows a few (the Her logo,
+the menu fading in) and a splash screen left unrecognised shows many. The test attaches each warning
 (`warning-<source>-<slug>.txt`), and the launch's screen recording, which
 shows what the game showed instead, and `sc` lists them under its table, passed
 or not, so one that starts appearing gets noticed.

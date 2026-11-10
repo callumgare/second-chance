@@ -763,6 +763,12 @@ struct NancyDrewQuitScenario {
         /// cursor lock: none at all, when some are known, is warned about once
         /// the menu is up.
         var screensRecognised: Set<String> = []
+        /// Looks before the menu at a picture (not a blank screen) that no
+        /// recorded screen matched. A few are any launch's (the Her logo, the
+        /// menu fading in); only more than that means a splash screen was up
+        /// to be recognised. A launch whose first look came after its intros
+        /// had played has seen none.
+        var unrecognisedLooks = 0
         var loggedLockWait: String?
         var ended = false
         var reachedMenu = false
@@ -863,6 +869,7 @@ struct NancyDrewQuitScenario {
                 break
             }
             if actedOnScreen { continue }
+            if fingerprint != nil, !reachedMenu { unrecognisedLooks += 1 }
 
             let searchStartTime = Date()
             let found = MainMenuScreen.analyze(screenshotPath: shotPath, needles: readNeedles, app: app)
@@ -880,7 +887,7 @@ struct NancyDrewQuitScenario {
                 if target != nil, ends, !ended, !reachedMenu {
                     reachedMenu = true
                     let known = screens.values.reduce(0) { $0 + $1.count }
-                    if known > 0, screensRecognised.isEmpty {
+                    if known > 0, screensRecognised.isEmpty, unrecognisedLooks > Self.unrecognisedLooksAllowed {
                         warnForTest("No splash screen was recognised: none of the \(known) recorded for \(wrapp.gameSlug) "
                             + "was recognised, so the recordings may no longer match the game (docs/testing.md#splash-screens)")
                     }
@@ -1024,6 +1031,11 @@ struct NancyDrewQuitScenario {
 
     /// The tag a handler waits on for a screen with nothing on it.
     static let blankTag = "blank"
+    /// How many unrecognised pictures any launch shows before its menu (the
+    /// Her logo, the menu fading in) without a splash screen having been up:
+    /// a launch that saw no more isn't warned about recognising none. Kapu
+    /// Cave's second launch, its intros over before the first look, saw four.
+    static let unrecognisedLooksAllowed = 5
 
     /// A check a handler asks for (`check: menu`): the menu, fully drawn,
     /// is what every run reaches, so its frame is checked the first time
