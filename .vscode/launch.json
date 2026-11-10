@@ -39,6 +39,26 @@
             "target": "wrapp-module-fixture",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release wrapp-module-fixture (Packages/WrappBuilder)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:second-chance}/Packages/WrappBuilderCLI",
+            "name": "Debug wrapp-builder (Packages/WrappBuilderCLI)",
+            "target": "wrapp-builder",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug wrapp-builder (Packages/WrappBuilderCLI)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:second-chance}/Packages/WrappBuilderCLI",
+            "name": "Release wrapp-builder (Packages/WrappBuilderCLI)",
+            "target": "wrapp-builder",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release wrapp-builder (Packages/WrappBuilderCLI)"
         }
     ]
 }
