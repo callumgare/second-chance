@@ -303,7 +303,7 @@ struct TestRunner {
     static func gameTable(_ gameRows: [GameBoard.Row], showSource: Bool) -> (headers: [String], rows: [StyledTableRow]) {
         let showWaited = gameRows.contains { ($0.queuedSeconds ?? 0) >= 1 }
         let showDisk = gameRows.contains { $0.peakBytes != nil }
-        let seconds: (Double?) -> TableCellStyle = { .muted($0.map { String(format: "%.0fs", $0) } ?? "") }
+        let seconds: (Double?) -> TableCellStyle = { .muted($0.map(DurationText.text) ?? "") }
         let rows: [StyledTableRow] = gameRows.map { game in
             (showSource ? [.muted(game.source)] : [])
                 + [.plain(game.slug), .muted(game.engine), Self.statusCell(game.status), seconds(game.buildSeconds), seconds(game.launchSeconds)]

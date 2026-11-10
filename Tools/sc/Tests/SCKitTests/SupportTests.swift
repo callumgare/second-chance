@@ -688,6 +688,11 @@ struct XcodeActivityTests {
     func durations() {
         #expect(ActivityLine.duration(41) == "41s")
         #expect(ActivityLine.duration(125) == "2m 05s")
+        #expect(DurationText.text(0) == "0s")
+        #expect(DurationText.text(60) == "1m 00s")
+        #expect(DurationText.text(2798.4) == "46m 38s")
+        #expect(DurationText.text(3600) == "1h 00m 00s")
+        #expect(DurationText.text(3998.6) == "1h 06m 39s")
     }
 }
 

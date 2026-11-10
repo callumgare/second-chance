@@ -904,8 +904,7 @@ private final class StepStatus: @unchecked Sendable {
     }
 
     func redraw() {
-        let seconds = Int(Date().timeIntervalSince(started))
-        let elapsed = seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m\(String(format: "%02d", seconds % 60))s"
+        let elapsed = DurationText.text(Int(Date().timeIntervalSince(started)))
         update("\(title) — \(lock.withLock { doing }) (\(elapsed))")
     }
 }

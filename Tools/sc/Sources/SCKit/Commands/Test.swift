@@ -428,7 +428,7 @@ enum TestCommandSupport {
     /// every game is an argument of one parameterized test, beside the check
     /// that the slugs asked for are known (three games read "2 passed").
     static func total(_ run: TestRun) -> String {
-        let time = run.summary?.seconds.map { String(format: " in %.0fs", $0) } ?? ""
+        let time = run.summary?.seconds.map { " in \(DurationText.text($0))" } ?? ""
         if !run.games.isEmpty {
             let passed = run.games.filter { $0.status == "passed" }.count
             let skipped = run.games.filter { $0.status == "skipped" }.count

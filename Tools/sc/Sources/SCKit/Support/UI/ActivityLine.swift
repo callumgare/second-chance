@@ -129,6 +129,6 @@ final class ActivityLine: @unchecked Sendable {
     }
 
     static func duration(_ seconds: Int) -> String {
-        seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(String(format: "%02d", seconds % 60))s"
+        DurationText.text(seconds)
     }
 }
