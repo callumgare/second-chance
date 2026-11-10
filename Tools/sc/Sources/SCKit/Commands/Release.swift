@@ -143,8 +143,8 @@ private struct Release {
             try await EngineSources.check(modules: repo.modules)
         }
         guard problems.isEmpty else {
-            throw SCError("Release stopped: an engine's download isn't where its module says.",
-                          hints: problems.map(\.description) + ["Point the module at where it is now (docs/modules.md#engine-packages)."])
+            throw SCError("Release stopped: \(EngineSources.summary(problems))",
+                          hints: problems.map(\.description) + EngineSources.advice(problems))
         }
     }
 

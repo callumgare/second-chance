@@ -50,8 +50,10 @@ public nonisolated enum EngineTool {
     public static func check(root: URL, output: some ToolOutput) async throws {
         let problems = try await EngineSources.check(modules: root)
         for problem in problems { output.line(problem.description) }
+        for advice in EngineSources.advice(problems) { output.line(advice) }
         guard problems.isEmpty else {
-            throw ToolError("\(problems.count) engine download\(problems.count == 1 ? "" : "s") aren't where their modules say.")
+            let summary = EngineSources.summary(problems)
+            throw ToolError(summary.prefix(1).uppercased() + summary.dropFirst())
         }
         output.success("Every engine's downloads are where their modules say.")
     }

@@ -17,8 +17,10 @@ A dry run only reports what they found.
 Then it checks that every engine's downloads are still where their modules
 say (`sc engine check`, [modules.md](modules.md#engine-packages)): Second
 Chance carries no engine, so a release whose engine can't be fetched builds
-nothing for anyone who hasn't prepared it already. One that has gone stops
-the release, naming it.
+nothing for anyone who hasn't prepared it already. A source that fails stops
+the release, naming it and saying what it answered: gone, a different size,
+refused (a sign-in its `headers` should give), the server's trouble or no
+answer, each with what to do about it.
 
 Then, before the long part of the run, it asks whether to publish the release
 as soon as it's built rather than stop for you to check the build first,
