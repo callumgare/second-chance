@@ -600,6 +600,19 @@ blits it up; winemac has nothing like it.) In the game's process the helper:
   covers the slow case only: a quick switch there didn't reproduce the
   timing, even without the fix, so the quick case was checked by hand.
 
+  The game loses focus another way too: its window loses key while its app
+  stays active, to another app's panel that takes key without activating
+  its app. Gatekeeper's "Verifying …" panel does, when a build running
+  beside the game first runs Wine from a new stage tree. Wine's Mac driver
+  treats that as the game losing focus (`macdrv_window_lost_focus` makes the
+  desktop the foreground window), and wined3d acts as for a switch away. So
+  a window of the game's losing key while no other window of its app takes
+  it counts as being in the background as well. White Wolf's picture was
+  squashed into a band at the top of the screen when one came up during an
+  integration run, and a test program showing such a panel over it
+  (2026-11-10, in a test session) did the same until this, and left it
+  whole after.
+
 Once Wine's window covers the display, [native fullscreen](#native-fullscreen)
 puts it into a Space as for any other Direct3D game. The Space is the size the
 window already is, so nothing is resized. Nothing happens in a game that never

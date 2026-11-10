@@ -179,6 +179,11 @@ static BOOL knownModeSize(CGSize *size) {
 // and on the player's return wined3d activates it as normal, and the game's
 // reset finds the mode it asks for already set.
 //
+// A window losing key to another app while the game's app stays active
+// (a panel that takes key without activating its app, as Gatekeeper's
+// "Verifying" one does) loses focus as far as Wine is concerned, so it
+// starts this too.
+//
 // The game hears of losing focus through its message queue, after the app
 // has. A quick Cmd-Tab brings the app back before the game has handled
 // losing focus, so coming back to the front doesn't end this: the game asking
@@ -268,6 +273,20 @@ static BOOL keepPictureInBackground(void) {
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
     [center addObserverForName:NSApplicationDidResignActiveNotification object:nil queue:nil
                     usingBlock:^(NSNotification *note) { (void)note; gInBackground = YES; }];
+    // A window can lose key with its app still active: another app's panel
+    // that takes key without activating its app (Gatekeeper's "Verifying"
+    // panel). Wine's Mac driver treats that as the game losing focus
+    // (WINDOW_LOST_FOCUS: the desktop becomes the foreground window), and
+    // wined3d puts the desktop mode back as for a switch away, so it counts
+    // the same. Key moving to another of the game's own windows doesn't.
+    [center addObserverForName:NSWindowDidResignKeyNotification object:nil queue:nil
+                    usingBlock:^(NSNotification *note) {
+        NSWindow *window = note.object;
+        NSWindow *key = NSApp.keyWindow;
+        if (key && key != window) return;
+        os_log(gLog, "[EmulatedMode] window %ld lost key to another app", (long)window.windowNumber);
+        gInBackground = YES;
+    }];
     return YES;
 }
 
