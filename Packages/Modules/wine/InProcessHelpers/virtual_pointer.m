@@ -283,12 +283,7 @@ static void virtualPointerInit(void) {
     BOOL everywhere = exe && strcmp(exe, "*") == 0;
     if (!directory || !*directory || !(everywhere || processRunsExeNamedBy("PUPPET_CONTROL_EXE"))) return;
 
-    const struct mach_header_64 *winemac = NULL;
-    for (uint32_t i = 0; i < _dyld_image_count(); i++) {
-        if (strcmp(processIdentityBasename(_dyld_get_image_name(i)), "winemac.so") == 0) {
-            winemac = (const struct mach_header_64 *)_dyld_get_image_header(i);
-        }
-    }
+    const struct mach_header_64 *winemac = loadedImageNamed("winemac.so", NULL, NULL);
     if (!winemac) {
         armInScummVM();
         return;

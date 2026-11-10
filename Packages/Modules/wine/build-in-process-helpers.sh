@@ -30,7 +30,7 @@ IFS=$'\n\t'
 # sound for puppet control's `audio`), basilisk_mac.m (Basilisk II's first
 # picture, shutting its Mac down when the wrapp quits, and hiding the Mac's own
 # screens from the player), with key_names.m, the keys puppet control and
-# the quit watch press by name. ScummVM wrapps load the same dylib into scummvm, for
+# the quit watch press by name, and helper_common.m, the code they share. ScummVM wrapps load the same dylib into scummvm, for
 # puppet_control.m alone. ScreenCaptureKit is weak-linked: puppet_control.m
 # needs macOS 14.4 and checks for it.
 # See docs/wine-in-process-helpers.md.
@@ -44,6 +44,7 @@ echo "🖥️  Building in-process helpers (native fullscreen, cursor lock, mode
 mkdir -p "${FRAMEWORKS_DIR}"
 clang -dynamiclib \
     -o "${DYLIB}" \
+    "${HELPERS_DIR}/helper_common.m" \
     "${HELPERS_DIR}/native_fullscreen.m" \
     "${HELPERS_DIR}/ddraw_mode_watch.m" \
     "${HELPERS_DIR}/display_below_notch.m" \

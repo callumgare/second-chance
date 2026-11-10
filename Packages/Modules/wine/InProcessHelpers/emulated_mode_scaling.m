@@ -233,60 +233,41 @@ static int32_t showWindowKeepingWindow(void *hwnd, int32_t cmd) {
     return gShowWindow(hwnd, cmd);
 }
 
-/// Point win32u's syscall table entry for `name` at `replacement`, returning
-/// the original, or NULL if the entry wasn't found.
-static void *replaceWin32uSyscall(const struct mach_header_64 *win32u, const char *name, void *replacement) {
-    void *original = dlsym(RTLD_DEFAULT, name);
-    if (!original) return NULL;
-    unsigned long size = 0;
-    void **entries = (void **)getsectiondata(win32u, "__DATA", "__data", &size);
-    BOOL replaced = NO;
-    for (unsigned long i = 0; entries && i < size / sizeof(void *); i++) {
-        if (entries[i] != original) continue;
-        entries[i] = replacement;
-        replaced = YES;
-    }
-    return replaced ? original : NULL;
-}
-
-static const struct mach_header_64 *win32uImage(void) {
-    const struct mach_header_64 *win32u = NULL;
-    for (uint32_t i = 0; i < _dyld_image_count(); i++) {
-        if (strcmp(processIdentityBasename(_dyld_get_image_name(i)), "win32u.so") == 0) {
-            win32u = (const struct mach_header_64 *)_dyld_get_image_header(i);
-        }
-    }
-    return win32u;
+/// Where win32u's system call table holds `name`, with what it holds there
+/// in `original`, or NULL if it isn't there exactly once.
+static void **win32uSyscallSlot(const char *name, void **original) {
+    intptr_t slide = 0;
+    const struct mach_header_64 *win32u = loadedImageNamed("win32u.so", &slide, NULL);
+    void *function = win32u ? dlsym(RTLD_DEFAULT, name) : NULL;
+    if (!function) return NULL;
+    void **slot = imageSlotHolding(win32u, slide, function);
+    if (slot) *original = function;
+    return slot;
 }
 
 /// Whether both entries were replaced; neither is unless both are found.
 static BOOL keepPictureInBackground(void) {
-    const struct mach_header_64 *win32u = win32uImage();
-    if (!win32u) return NO;
-    gChangeDisplaySettings = replaceWin32uSyscall(win32u, "NtUserChangeDisplaySettings", (void *)changeDisplaySettingsKeepingMode);
-    if (!gChangeDisplaySettings) return NO;
-    gShowWindow = replaceWin32uSyscall(win32u, "NtUserShowWindow", (void *)showWindowKeepingWindow);
-    if (!gShowWindow) {
-        replaceWin32uSyscall(win32u, "NtUserChangeDisplaySettings", (void *)gChangeDisplaySettings);
+    void *change = NULL, *show = NULL;
+    void **changeSlot = win32uSyscallSlot("NtUserChangeDisplaySettings", &change);
+    void **showSlot = win32uSyscallSlot("NtUserShowWindow", &show);
+    if (!changeSlot || !showSlot) return NO;
+    // Set before the table points at the wrappers, which call them.
+    gChangeDisplaySettings = (ChangeDisplaySettingsFn)change;
+    gShowWindow = (ShowWindowFn)show;
+    if (!replaceImageSlot(changeSlot, (void *)changeDisplaySettingsKeepingMode)) return NO;
+    if (!replaceImageSlot(showSlot, (void *)showWindowKeepingWindow)) {
+        *changeSlot = change;
         return NO;
     }
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
     [center addObserverForName:NSApplicationDidResignActiveNotification object:nil queue:nil
                     usingBlock:^(NSNotification *note) { (void)note; gInBackground = YES; }];
-    // A window can lose key with its app still active: another app's panel
-    // that takes key without activating its app (Gatekeeper's "Verifying"
-    // panel). Wine's Mac driver treats that as the game losing focus
-    // (WINDOW_LOST_FOCUS: the desktop becomes the foreground window), and
-    // wined3d puts the desktop mode back as for a switch away, so it counts
-    // the same. Key moving to another of the game's own windows doesn't.
-    [center addObserverForName:NSWindowDidResignKeyNotification object:nil queue:nil
-                    usingBlock:^(NSNotification *note) {
-        NSWindow *window = note.object;
-        NSWindow *key = NSApp.keyWindow;
-        if (key && key != window) return;
+    // Another app's panel taking key counts as a switch away too: wined3d
+    // puts the desktop mode back for it the same (focus_watch.m).
+    watchKeyLostToAnotherApp(^(NSWindow *window) {
         os_log(gLog, "[EmulatedMode] window %ld lost key to another app", (long)window.windowNumber);
         gInBackground = YES;
-    }];
+    }, nil);
     return YES;
 }
 
@@ -314,10 +295,14 @@ static int32_t getMessageAnsweringMode(void *msg, void *hwnd, uint32_t first, ui
 
 /// Whether either entry was replaced.
 static BOOL answerModeFromMessageLoop(void) {
-    const struct mach_header_64 *win32u = win32uImage();
-    if (!win32u) return NO;
-    gPeekMessage = replaceWin32uSyscall(win32u, "NtUserPeekMessage", (void *)peekMessageAnsweringMode);
-    gGetMessage = replaceWin32uSyscall(win32u, "NtUserGetMessage", (void *)getMessageAnsweringMode);
+    void *peek = NULL, *get = NULL;
+    void **peekSlot = win32uSyscallSlot("NtUserPeekMessage", &peek);
+    void **getSlot = win32uSyscallSlot("NtUserGetMessage", &get);
+    // Set before the table points at the wrappers, which call them.
+    gPeekMessage = (PeekMessageFn)peek;
+    gGetMessage = (GetMessageFn)get;
+    if (!peekSlot || !replaceImageSlot(peekSlot, (void *)peekMessageAnsweringMode)) gPeekMessage = NULL;
+    if (!getSlot || !replaceImageSlot(getSlot, (void *)getMessageAnsweringMode)) gGetMessage = NULL;
     return gPeekMessage || gGetMessage;
 }
 

@@ -66,41 +66,10 @@ static NSWindow *gCandidate = nil;
 static NSRect gCandidateFrame;
 static double gStableSince = 0.0;
 
-static double nowSeconds(void) {
-    return (double)clock_gettime_nsec_np(CLOCK_MONOTONIC) / NSEC_PER_SEC;
-}
 
-/// Appends to IN_PROCESS_HELPERS_LOG when that variable is set. Worth having
-/// alongside os_log because this runs inside Wine child processes, whose log
-/// output is otherwise awkward to attribute to a particular game.
-static void debugLog(const char *format, ...) {
-    const char *path = getenv("IN_PROCESS_HELPERS_LOG");
-    if (!path || !*path) return;
-
-    char executable[PATH_MAX] = {0};
-    uint32_t size = sizeof(executable);
-    if (_NSGetExecutablePath(executable, &size) != 0) {
-        strlcpy(executable, "?", sizeof(executable));
-    }
-    const char *name = strrchr(executable, '/');
-    name = name ? name + 1 : executable;
-
-    char message[2048];
-    int length = snprintf(message, sizeof(message), "pid=%d exe=%s | ", getpid(), name);
-
-    va_list args;
-    va_start(args, format);
-    length += vsnprintf(message + length, sizeof(message) - length, format, args);
-    va_end(args);
-
-    if (length < (int)sizeof(message) - 1) message[length++] = '\n';
-
-    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
-    if (fd >= 0) {
-        write(fd, message, length);
-        close(fd);
-    }
-}
+/// Only to IN_PROCESS_HELPERS_LOG: what this helper says in os_log it says
+/// there itself.
+#define debugLog(...) helperDebugLog(NULL, "NativeFullscreen", __VA_ARGS__)
 
 // Wine's own WineWindow and WineApplicationController methods this file calls
 // or replaces (dlls/winemac.drv/cocoa_window.m). Declared here so the compiler
@@ -634,10 +603,10 @@ static BOOL handleFullscreenWindow(void) {
         }
         if (window != gLeaving) {
             gLeaving = window;
-            gLeavingSince = nowSeconds();
+            gLeavingSince = helperNowSeconds();
             return YES;
         }
-        if (nowSeconds() - gLeavingSince < kSettleSeconds) return YES;
+        if (helperNowSeconds() - gLeavingSince < kSettleSeconds) return YES;
         gLeaving = nil;
 
         const char *title = window.title.length ? window.title.UTF8String : "(untitled)";
@@ -717,10 +686,10 @@ static void attemptFullscreen(void) {
         gCandidate = window;
         gCandidateFrame = frame;
         gCandidateRequest = request;
-        gStableSince = nowSeconds();
+        gStableSince = helperNowSeconds();
         return;
     }
-    if (nowSeconds() - gStableSince < kSettleSeconds) return;
+    if (helperNowSeconds() - gStableSince < kSettleSeconds) return;
 
     const char *title = window.title.length ? window.title.UTF8String : "(untitled)";
     if (request == 0) {
@@ -830,7 +799,7 @@ static void *watcherMain(void *unused) {
         return NULL;
     }
 
-    double giveUpAt = nowSeconds() + kGiveUpSeconds;
+    double giveUpAt = helperNowSeconds() + kGiveUpSeconds;
     BOOL reportedGivingUp = NO;
     // One attempt queued at a time: a main thread that is busy (a game
     // loading) would otherwise collect a block every interval and then run
@@ -849,7 +818,7 @@ static void *watcherMain(void *unused) {
         // still worth catching.
         usleep((useconds_t)((gEntered || gDecidedWindowed || gGaveUp ? kWatchInterval : kPollInterval) * USEC_PER_SEC));
 
-        if (!gEntered && !gDecidedWindowed && !reportedGivingUp && nowSeconds() > giveUpAt) {
+        if (!gEntered && !gDecidedWindowed && !reportedGivingUp && helperNowSeconds() > giveUpAt) {
             reportedGivingUp = YES;
             gGaveUp = YES;
             os_log(gLog, "[NativeFS] no eligible window after %.0fs; staying windowed", kGiveUpSeconds);

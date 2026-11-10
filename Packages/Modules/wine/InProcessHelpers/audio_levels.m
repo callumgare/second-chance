@@ -335,11 +335,7 @@ static void audioLevelsInit(void) {
     // A ScummVM wrapp loads this dylib into scummvm, which plays through SDL,
     // not winecoreaudio.so: nothing to wrap there (the docs say what would
     // be). In Wine, winemac.so is what loaded this dylib.
-    BOOL wine = NO;
-    for (uint32_t i = 0; i < _dyld_image_count() && !wine; i++) {
-        wine = strcmp(processIdentityBasename(_dyld_get_image_name(i)), "winemac.so") == 0;
-    }
-    if (!wine) return;
+    if (!loadedImageNamed("winemac.so", NULL, NULL)) return;
     mach_timebase_info_data_t timebase;
     mach_timebase_info(&timebase);
     gTicksPerSecond = 1e9 * (double)timebase.denom / (double)timebase.numer;

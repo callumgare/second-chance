@@ -11,7 +11,7 @@
 //  Until then its GetCursorPos hook hands the game a stale position, so the
 //  first click lands nowhere: on a menu, nothing happens. (cnc-ddraw also
 //  unlocks whenever the app is deactivated, so the same happens after
-//  Cmd-Tabbing back.) None of its ini options lock on start without giving up
+//  Cmd-Tabbing back, or after another app's panel takes key.) None of its ini options lock on start without giving up
 //  windowed mode or the lock altogether.
 //
 //  So this posts a *middle* click to the game window, which cnc-ddraw locks on
@@ -82,39 +82,11 @@ const char *cursorLockStatus(void) {
     return gStatus;
 }
 
-/// Appends to IN_PROCESS_HELPERS_LOG when set, alongside os_log, as
-/// native_fullscreen.m does: the dylib's one file log.
-static void debugLog(const char *format, ...) {
-    char message[1024];
-    va_list args;
-    va_start(args, format);
-    vsnprintf(message, sizeof(message), format, args);
-    va_end(args);
-    os_log(gLog, "[CursorLock] %{public}s", message);
-    const char *path = getenv("IN_PROCESS_HELPERS_LOG");
-    if (!path || !*path) return;
-    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
-    if (fd >= 0) {
-        dprintf(fd, "pid=%d cursor-lock | %s\n", getpid(), message);
-        close(fd);
-    }
-}
+#define debugLog(...) helperDebugLog(gLog, "CursorLock", __VA_ARGS__)
 
-/// Run a block on the main thread and wait for its result. AppKit and Wine's
-/// controller are main-thread only; Wine dedicates that thread to a CFRunLoop
-/// that drains queued blocks (see native_fullscreen.m). NO on timeout.
+/// AppKit and Wine's controller are main-thread only.
 static BOOL onMainThread(BOOL (^block)(void)) {
-    __block BOOL result = NO;
-    dispatch_semaphore_t done = dispatch_semaphore_create(0);
-    CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
-        result = block();
-        dispatch_semaphore_signal(done);
-    });
-    CFRunLoopWakeUp(CFRunLoopGetMain());
-    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC)) != 0) {
-        return NO;
-    }
-    return result;
+    return helperOnMainThread(2, block);
 }
 
 /// Whether cnc-ddraw holds the cursor: clipped *and* hidden, as its lock does.
@@ -185,9 +157,6 @@ static BOOL postMiddleClick(NSWindow *window) {
     return YES;
 }
 
-static double nowSeconds(void) {
-    return (double)clock_gettime_nsec_np(CLOCK_MONOTONIC) / NSEC_PER_SEC;
-}
 
 static void *lockerMain(void *arg) {
     int generation = (int)(intptr_t)arg;
@@ -199,9 +168,9 @@ static void *lockerMain(void *arg) {
     NSRect lastFrame = NSZeroRect;
     double stableSince = 0;
     double firstSeen = 0;
-    double deadline = nowSeconds() + kGiveUpWaitingSeconds;
+    double deadline = helperNowSeconds() + kGiveUpWaitingSeconds;
     while (current()) {
-        if (nowSeconds() > deadline) {
+        if (helperNowSeconds() > deadline) {
             debugLog("no settled game window after %.0fs; not locking", kGiveUpWaitingSeconds);
             helperReport("CursorLock", "warning", "no settled game window after %.0fs; not locking", kGiveUpWaitingSeconds);
             if (current()) gStatus = "not-locked";
@@ -215,15 +184,15 @@ static void *lockerMain(void *arg) {
             inSpace = (window.styleMask & NSWindowStyleMaskFullScreen) != 0 && !windowIsEnteringFullscreen(window);
             return window != nil;
         });
-        if (found && firstSeen == 0) firstSeen = nowSeconds();
+        if (found && firstSeen == 0) firstSeen = helperNowSeconds();
         if (found && nativeFullscreenArmed() && inSpace) {
             debugLog("window is in its fullscreen Space");
             break;
         }
-        BOOL gaveUpOnFullscreen = firstSeen > 0 && nowSeconds() - firstSeen >= kFullscreenWaitSeconds;
+        BOOL gaveUpOnFullscreen = firstSeen > 0 && helperNowSeconds() - firstSeen >= kFullscreenWaitSeconds;
         if (!found || !NSEqualRects(frame, lastFrame)) {
-            stableSince = nowSeconds();
-        } else if ((!nativeFullscreenArmed() || gaveUpOnFullscreen) && nowSeconds() - stableSince >= kSettleSeconds) {
+            stableSince = helperNowSeconds();
+        } else if ((!nativeFullscreenArmed() || gaveUpOnFullscreen) && helperNowSeconds() - stableSince >= kSettleSeconds) {
             if (nativeFullscreenArmed()) {
                 debugLog("window not fullscreen after %.0fs; locking anyway", kFullscreenWaitSeconds);
             }
@@ -238,8 +207,8 @@ static void *lockerMain(void *arg) {
     double lastClick = 0;
     while (current()) {
         if (onMainThread(^BOOL { return cursorLocked(); })) {
-            if (lockedSince == 0) lockedSince = nowSeconds();
-            if (clicks > 0 || nowSeconds() - lockedSince >= kLockedForSeconds) {
+            if (lockedSince == 0) lockedSince = helperNowSeconds();
+            if (clicks > 0 || helperNowSeconds() - lockedSince >= kLockedForSeconds) {
                 if (clicks > 0) {
                     debugLog("cursor locked after %d middle click(s), %.2fs after the last", clicks, lockedSince - lastClick);
                 } else {
@@ -249,7 +218,7 @@ static void *lockerMain(void *arg) {
                 if (current()) gStatus = "locked";
                 return NULL;
             }
-        } else if (clicks > 0 && nowSeconds() - lastClick < kAfterClickSeconds) {
+        } else if (clicks > 0 && helperNowSeconds() - lastClick < kAfterClickSeconds) {
             // Not yet: cnc-ddraw gets kAfterClickSeconds to act on a click
             // before there's another.
             lockedSince = 0;
@@ -269,7 +238,7 @@ static void *lockerMain(void *arg) {
             });
             if (posted) {
                 clicks++;
-                lastClick = nowSeconds();
+                lastClick = helperNowSeconds();
                 debugLog("posted middle click %d", clicks);
             }
         }
@@ -315,6 +284,10 @@ static void cursorLockInit(void) {
     // says so (WrappPuppeteer's first, say) would be swallowed. Entering
     // native fullscreen can deactivate the app for a moment, just after
     // the first lock.
+    //
+    // Another app's panel taking key, with the app still active, lets go of
+    // the cursor just the same, so that's a leaving and a return too
+    // (focus_watch.m).
     CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
         [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidResignActiveNotification
                                                         object:nil
@@ -333,6 +306,14 @@ static void cursorLockInit(void) {
             debugLog("app became active");
             startLocker();
         }];
+        watchKeyLostToAnotherApp(^(NSWindow *window) {
+            debugLog("window %ld lost key to another app", (long)window.windowNumber);
+            __sync_add_and_fetch(&gGeneration, 1);
+            gStatus = "waiting";
+        }, ^(NSWindow *window) {
+            debugLog("window %ld has key again", (long)window.windowNumber);
+            startLocker();
+        });
     });
     CFRunLoopWakeUp(CFRunLoopGetMain());
 }

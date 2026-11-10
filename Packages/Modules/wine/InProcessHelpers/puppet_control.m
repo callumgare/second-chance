@@ -106,39 +106,11 @@ static const useconds_t kBetweenKeysMicroseconds = 40 * 1000;
 
 static os_log_t gLog;
 
-/// Appends to IN_PROCESS_HELPERS_LOG when set, alongside os_log, as the other
-/// helpers do.
-static void debugLog(const char *format, ...) {
-    char message[1024];
-    va_list args;
-    va_start(args, format);
-    vsnprintf(message, sizeof(message), format, args);
-    va_end(args);
-    os_log(gLog, "[PuppetControl] %{public}s", message);
-    const char *path = getenv("IN_PROCESS_HELPERS_LOG");
-    if (!path || !*path) return;
-    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
-    if (fd >= 0) {
-        dprintf(fd, "pid=%d puppet-control | %s\n", getpid(), message);
-        close(fd);
-    }
-}
+#define debugLog(...) helperDebugLog(gLog, "PuppetControl", __VA_ARGS__)
 
-/// Run a block on the main thread and wait for its result: AppKit is
-/// main-thread only, and Wine's main thread (like SDL's) runs a CFRunLoop
-/// that drains performed blocks. NO on timeout.
+/// AppKit and Wine's controller are main-thread only.
 static BOOL onMainThread(BOOL (^block)(void)) {
-    __block BOOL result = NO;
-    dispatch_semaphore_t done = dispatch_semaphore_create(0);
-    CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
-        result = block();
-        dispatch_semaphore_signal(done);
-    });
-    CFRunLoopWakeUp(CFRunLoopGetMain());
-    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, kRequestTimeoutSeconds * NSEC_PER_SEC)) != 0) {
-        return NO;
-    }
-    return result;
+    return helperOnMainThread(kRequestTimeoutSeconds, block);
 }
 
 /// The game window: the biggest visible window this process has. Main thread.

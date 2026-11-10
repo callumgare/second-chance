@@ -1,7 +1,8 @@
 //
 //  helper_common.h
-//  What both in-process helpers share: recognising the game's process, and
-//  reporting how they got on.
+//  What the in-process helpers share: recognising the game's process,
+//  reporting how they got on, and (in helper_common.m) the code more than one
+//  runs.
 //
 //  ## Recognising the game's process
 //
@@ -170,6 +171,48 @@ int windowIsEnteringFullscreen(NSWindow *window);
 /// other is on its way), or it gave up. Before then a ScreenCaptureKit capture
 /// can wedge, even one finished just before the move begins. Main thread only.
 int nativeFullscreenSettled(void);
+
+// ## Shared code (helper_common.m)
+
+#include <mach-o/loader.h>
+#include <objc/objc.h>
+#include <os/log.h>
+
+/// Log one line of a helper's detail: to `log` (os_log, as "[<tag>] ..."),
+/// when it isn't NULL, and to the file IN_PROCESS_HELPERS_LOG names, when
+/// set, as "pid=<pid> exe=<executable> <tag> | ...". Any thread.
+__attribute__((format(printf, 3, 4)))
+void helperDebugLog(os_log_t log, const char *tag, const char *format, ...);
+
+/// Seconds on a clock that only goes forward, for timing waits.
+double helperNowSeconds(void);
+
+/// Run `block` on the main thread and wait up to `timeoutSeconds` for its
+/// result. AppKit and Wine's controller are main-thread only, and Wine gives
+/// that thread to a CFRunLoop that drains queued blocks (native_fullscreen.m).
+/// NO on timeout. Not from the main thread itself.
+BOOL helperOnMainThread(double timeoutSeconds, BOOL (^block)(void));
+
+/// The loaded library whose file is named `name` ("win32u.so",
+/// "winemac.so"), or NULL; `slide` and `path`, when given, get its slide and
+/// path.
+const struct mach_header_64 *loadedImageNamed(const char *name, intptr_t *slide, const char **path);
+
+/// The one pointer to `function` in `image`'s data (its system call table,
+/// say), leaving out what it imports, or NULL when there's none or more than
+/// one: a pointer found twice can't be told from data that happens to match.
+void **imageSlotHolding(const struct mach_header_64 *image, intptr_t slide, void *function);
+
+/// Point `slot` at `replacement`, making its page writable first. NO if it
+/// can't be.
+BOOL replaceImageSlot(void **slot, void *replacement);
+
+/// Call `lost` when one of this process's windows loses key to another app's
+/// window, and `regained` (may be nil) when, with the app still active, one
+/// of its windows has key again. Leaving the app and coming back isn't
+/// reported as regained: the helpers' NSApplication observers see that. Both
+/// are called on the main thread; call this from any thread.
+void watchKeyLostToAnotherApp(void (^lost)(NSWindow *window), void (^regained)(NSWindow *window));
 
 // ## Whether a DirectDraw game asked for fullscreen (ddraw_mode_watch.m)
 

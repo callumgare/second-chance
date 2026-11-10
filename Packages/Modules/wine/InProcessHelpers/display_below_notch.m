@@ -197,11 +197,7 @@ static void displayBelowNotchInit(void) {
     const char *armed = getenv("NATIVE_FULLSCREEN_BELOW_NOTCH");
     if (!armed || strcmp(armed, "1") != 0) return;
 
-    for (uint32_t i = 0; i < _dyld_image_count(); i++) {
-        if (strcmp(processIdentityBasename(_dyld_get_image_name(i)), "winemac.so") == 0) {
-            gWinemac = (const struct mach_header_64 *)_dyld_get_image_header(i);
-        }
-    }
+    gWinemac = loadedImageNamed("winemac.so", NULL, NULL);
     // Only the game's process reports, so the wrapp's log gets one line.
     BOOL inGame = processRunsExeNamedBy("NATIVE_MACOS_FULLSCREEN_EXE");
     if (!gWinemac) {

@@ -81,6 +81,10 @@ watch one launch:
 IN_PROCESS_HELPERS_LOG=/tmp/helpers.log open -n "built-apps/<game>.app"
 ```
 
+Each line there says which process and helper it is from, `pid=<pid>
+exe=<executable> <helper> | <message>`, as every Wine process loads the
+helpers.
+
 That step-by-step detail goes nowhere else. Only `os_log` and that file get
 it. The few lines that say how a helper got on (armed; entering fullscreen
 or staying windowed; the cursor locked or left alone) also go to stderr, as
@@ -101,6 +105,19 @@ A cursor lock that gives up is reported but isn't an error. Only games that
 draw through cnc-ddraw ever take the cursor, and the wrapp doesn't arm it in a
 game it knows draws with Direct3D; in one it couldn't tell about, the helper
 posts its middle clicks, sees no lock and leaves it.
+
+## Shared code
+
+What more than one helper needs is in `helper_common.m`, declared in
+`helper_common.h` beside recognising the game's process and the status
+lines: the debug log (`helperDebugLog`), waiting on the main thread
+(`helperOnMainThread`), finding a loaded library (`loadedImageNamed`),
+changing a pointer in one, as the helpers that wrap win32u's system calls do
+(`imageSlotHolding`, `replaceImageSlot`), and noticing the game's window
+losing key to another app (`watchKeyLostToAnotherApp`). A pointer is only
+changed where the library holds it exactly once: one found twice can't be
+told from data that happens to match. Replacing a library's import is
+`display_below_notch.m`'s `replaceImageImport`, also declared there.
 
 ## Native fullscreen
 
@@ -370,7 +387,8 @@ cnc-ddraw passes through, so the game _does_ see the first click — at the wron
 place. On a menu nothing happens, so the player's first click seems to do
 nothing. On the Her Interactive logo, where any click skips, it "works", which
 hides the problem. cnc-ddraw also unlocks whenever the app is deactivated, so
-the same happens after Cmd-Tabbing back.
+the same happens after Cmd-Tabbing back, or after another app's panel takes
+key.
 
 None of cnc-ddraw's settings avoid this while keeping native fullscreen:
 `fullscreen=true` locks on activation but replaces the window with cnc-ddraw's
@@ -453,7 +471,16 @@ each click, and ask every lock to hold for two more: over five seconds after
 fullscreen, which a DirectDraw game's first click — a player's or the
 integration test's — had to wait for.)
 
-It runs again each time the app becomes active.
+It runs again each time the app becomes active, and each time the game's
+window gets key back from another app's window. A non-activating panel, such
+as Gatekeeper's "Verifying…" (which a build running alongside raises), takes
+key without the app resigning active. Wine's Mac driver still treats that as
+the game losing focus, so cnc-ddraw lets go of the cursor, and without
+watching key the helper went on saying `locked` while the cursor was free.
+Haunted Carousel and Shadow Ranch failed an integration run on 2026-11-10 that
+way: WrappPuppeteer's first click was the one that locked the cursor again.
+[Mode scaling](#mode-scaling) watches for the same loss of key, and both
+learn of it from `watchKeyLostToAnotherApp` ([shared code](#shared-code)).
 
 A game that asks cnc-ddraw for a window of its own (`DDSCL_NORMAL`) rather
 than a display mode, as Icy Tower does with its Fullscreen: No, is never
@@ -490,10 +517,10 @@ A Direct3D game has no cnc-ddraw to swallow anything, and isn't checked
 The helper log should show the lock taking hold, normally on the first click:
 
 ```text
-pid=… cursor-lock | armed
-pid=… cursor-lock | window is in its fullscreen Space
-pid=… cursor-lock | posted middle click 1
-pid=… cursor-lock | cursor locked after 1 middle click(s), 0.25s after the last
+pid=… exe=Game.exe CursorLock | armed
+pid=… exe=Game.exe CursorLock | window is in its fullscreen Space
+pid=… exe=Game.exe CursorLock | posted middle click 1
+pid=… exe=Game.exe CursorLock | cursor locked after 1 middle click(s), 0.25s after the last
 ```
 
 To see cnc-ddraw's side, trace Wine's cursor calls with
@@ -1138,7 +1165,7 @@ ignored Escape at its desk and in its case file, which may only mean it doesn't
 use the key there.
 
 To watch it, set `IN_PROCESS_HELPERS_LOG`: each request and its reply is
-logged as `pid=… puppet-control | <request> -> <reply>`. To drive it by hand,
+logged as `pid=… exe=Game.exe PuppetControl | <request> -> <reply>`. To drive it by hand,
 start the wrapp with the variable and talk to the socket:
 
 ```bash

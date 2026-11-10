@@ -141,61 +141,13 @@ static intptr_t watchSetWindowLongPtr(uintptr_t window, int offset, intptr_t val
     return gSetWindowLongPtr(window, offset, value, ansi);
 }
 
-/// The one pointer-sized slot in `image`'s data segments holding `function`,
-/// or NULL when there are none or several.
-static void **onlySlotHolding(const struct mach_header_64 *image, intptr_t slide, void *function) {
-    void **found = NULL;
-    int matches = 0;
-    const struct load_command *command = (const struct load_command *)(image + 1);
-    for (uint32_t i = 0; i < image->ncmds; i++) {
-        if (command->cmd == LC_SEGMENT_64) {
-            const struct segment_command_64 *segment = (const struct segment_command_64 *)command;
-            if (strncmp(segment->segname, "__DATA", 6) == 0) {
-                const struct section_64 *section = (const struct section_64 *)(segment + 1);
-                for (uint32_t s = 0; s < segment->nsects; s++, section++) {
-                    // The GOT holds what win32u imports, not its own functions.
-                    if (strcmp(section->sectname, "__got") == 0) continue;
-                    uint8_t type = section->flags & SECTION_TYPE;
-                    if (type == S_ZEROFILL || type == S_GB_ZEROFILL || type == S_THREAD_LOCAL_ZEROFILL) continue;
-                    void **slots = (void **)(section->addr + slide);
-                    for (uint64_t n = 0; n < section->size / sizeof(void *); n++) {
-                        if (slots[n] == function) {
-                            found = &slots[n];
-                            matches++;
-                        }
-                    }
-                }
-            }
-        }
-        command = (const struct load_command *)((const uint8_t *)command + command->cmdsize);
-    }
-    return matches == 1 ? found : NULL;
-}
-
-static BOOL replaceSlot(void **slot, void *replacement) {
-    long pageSize = getpagesize();
-    void *page = (void *)((uintptr_t)slot & ~(uintptr_t)(pageSize - 1));
-    // An aligned pointer never straddles two pages. The page stays writable:
-    // it may be __DATA, which was, and is the system call table's alone.
-    if (mprotect(page, pageSize, PROT_READ | PROT_WRITE) != 0) return NO;
-    *slot = replacement;
-    return YES;
-}
-
 int installDdrawModeWatch(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         gLog = os_log_create("com.secondchance.gamewrapper", "NativeFullscreen");
-        const struct mach_header_64 *win32u = NULL;
         intptr_t slide = 0;
         const char *path = NULL;
-        for (uint32_t i = 0; i < _dyld_image_count(); i++) {
-            if (strcmp(processIdentityBasename(_dyld_get_image_name(i)), "win32u.so") == 0) {
-                win32u = (const struct mach_header_64 *)_dyld_get_image_header(i);
-                slide = _dyld_get_image_vmaddr_slide(i);
-                path = _dyld_get_image_name(i);
-            }
-        }
+        const struct mach_header_64 *win32u = loadedImageNamed("win32u.so", &slide, &path);
         if (!win32u) {
             helperReport("NativeFullscreen", "warning", "win32u.so not found; every game window goes fullscreen");
             return;
@@ -204,9 +156,9 @@ int installDdrawModeWatch(void) {
         void *messageCall = handle ? dlsym(handle, "NtUserMessageCall") : NULL;
         void *setWindowLong = handle ? dlsym(handle, "NtUserSetWindowLong") : NULL;
         void *setWindowLongPtr = handle ? dlsym(handle, "NtUserSetWindowLongPtr") : NULL;
-        void **messageSlot = messageCall ? onlySlotHolding(win32u, slide, messageCall) : NULL;
-        void **longSlot = setWindowLong ? onlySlotHolding(win32u, slide, setWindowLong) : NULL;
-        void **longPtrSlot = setWindowLongPtr ? onlySlotHolding(win32u, slide, setWindowLongPtr) : NULL;
+        void **messageSlot = messageCall ? imageSlotHolding(win32u, slide, messageCall) : NULL;
+        void **longSlot = setWindowLong ? imageSlotHolding(win32u, slide, setWindowLong) : NULL;
+        void **longPtrSlot = setWindowLongPtr ? imageSlotHolding(win32u, slide, setWindowLongPtr) : NULL;
         if (!messageSlot || !longSlot || !longPtrSlot) {
             helperReport("NativeFullscreen", "warning",
                          "win32u's system call table not found (message %d, window long %d, %d); every game window goes fullscreen",
@@ -218,8 +170,8 @@ int installDdrawModeWatch(void) {
         gSetWindowLongPtr = (SetWindowLongPtrFunction)setWindowLongPtr;
         // All three or none: a request seen but never let go of would keep a
         // game fullscreen after it asked for a window.
-        if (!replaceSlot(longSlot, (void *)watchSetWindowLong) || !replaceSlot(longPtrSlot, (void *)watchSetWindowLongPtr) ||
-            !replaceSlot(messageSlot, (void *)watchMessageCall)) {
+        if (!replaceImageSlot(longSlot, (void *)watchSetWindowLong) || !replaceImageSlot(longPtrSlot, (void *)watchSetWindowLongPtr) ||
+            !replaceImageSlot(messageSlot, (void *)watchMessageCall)) {
             *longSlot = setWindowLong;
             *longPtrSlot = setWindowLongPtr;
             helperReport("NativeFullscreen", "warning", "couldn't change win32u's system call table; every game window goes fullscreen");
