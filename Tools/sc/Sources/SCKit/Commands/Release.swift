@@ -111,6 +111,9 @@ private struct Release {
         // it wrote: anything else changed in those files, before or during
         // the run, stays. The zip and appcast are only removed: packaging
         // deletes the previous ones before writing.
+        // What an earlier release left in build/release goes first, so
+        // nothing there can be taken for this one's; a dry run writes nothing.
+        if !dryRun { try clearReleaseDir() }
         let rollback = FileRollback([repo.pbxproj, repo.changelog, notesFile] + readmeScreenshots)
         let created = [zip, appcast].filter { !FileManager.default.fileExists(atPath: $0.path) }
         let committed: (version: String, branch: String, publishWhenBuilt: Bool)?
@@ -159,6 +162,24 @@ private struct Release {
             throw SCError("Release stopped: lint failed (\(failed.joined(separator: ", "))).",
                           hints: ["./sc lint shows the problems; swiftlint --fix fixes many Swift ones."])
         }
+    }
+
+    /// Empty build/release of whatever an earlier release left there,
+    /// keeping the folder itself (a Finder window may have it open).
+    private func clearReleaseDir() throws {
+        let manager = FileManager.default
+        guard manager.fileExists(atPath: repo.releaseDir.path) else { return }
+        let contents = try manager.contentsOfDirectory(at: repo.releaseDir, includingPropertiesForKeys: nil)
+        guard !contents.isEmpty else { return }
+        for item in contents {
+            do {
+                try manager.removeItem(at: item)
+            } catch {
+                throw SCError("Couldn't clear \(repo.display(item)) out of \(repo.display(repo.releaseDir)): \(error.localizedDescription)",
+                              hints: ["Remove it by hand, then run the release again."])
+            }
+        }
+        ui.line(ui.format("\(.success("✔︎ Cleared \(repo.display(repo.releaseDir)) (\(contents.count) left from before)"))"))
     }
 
     /// Take the release's writes back out of the files, and remove the

@@ -30,6 +30,10 @@ still stop for review before any of that starts.
 
 ## What it writes
 
+It starts by emptying `build/release/` of whatever an earlier release left
+there, so everything in it afterwards is this release's (`--dry-run` leaves it
+alone, as it writes nothing).
+
 - **The version.** `MARKETING_VERSION` goes into the `SecondChance` and
   `WrappTemplate` targets only; `WrappPuppeteer` and `SecondChanceTests` are
   never shipped and stay at 1.0. `CURRENT_PROJECT_VERSION` is set to the commit
