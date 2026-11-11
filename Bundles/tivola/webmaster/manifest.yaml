@@ -22,6 +22,15 @@ editions:
         - { file-exists: "Webmaster.exe" }   # the Windows projector, at the disc's root
         - { volume-name: "WEBMASTER" }
 
+# Not known yet: its installed folder hasn't been looked at, and the disc's
+# root has Webmaster.exe too, so that alone would turn the disc down. Once a
+# file only the installed folder has is found, name it here (with
+# Webmaster.exe, as an all-of), as the build can't install from one.
+installed: []
+
 tests:
   scenario: "wine/starts-and-quits"
   window: "fullscreen"   # its 800x600 window, scaled up from the display mode its launch sets, in a Space
+  layouts: # the top level of real discs and installed copies, which its installed signs are checked against
+    - disc: "cd/disc-1" # no installer by name: Webmaster.exe installs itself
+      files: ["Acrobat Installer.exe", "Data/", "QuickTime Installer/", "Webmaster Help.pdf", "Webmaster.exe", "Xtras/", "ZDAT/", "msvcrt.dll problem/"]
