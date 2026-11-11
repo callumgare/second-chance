@@ -19,7 +19,7 @@ struct SessionInputTests {
     func keys() throws {
         #expect(try SessionInput.parse(["key", "return"], button: nil, count: 1) == .keys([[0xFF0D]]))
         #expect(try SessionInput.parse(["key", "cmd+q", "down*2"], button: nil, count: 1)
-                == .keys([[0xFFE7, 0x71], [0xFF54], [0xFF54]]))
+                == .keys([[0xFFEB, 0x71], [0xFF54], [0xFF54]]))
         #expect(try SessionInput.parse(["key", "F5"], button: nil, count: 1) == .keys([[0xFFC2]]))
         #expect(throws: ValidationError.self) { try SessionInput.parse(["key", "hyper"], button: nil, count: 1) }
     }

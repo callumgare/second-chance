@@ -214,7 +214,7 @@ enum SessionInput: Codable, Equatable {
     static func keysym(_ name: String) -> UInt32? {
         let named: [String: UInt32] = [
             "shift": 0xFFE1, "ctrl": 0xFFE3, "control": 0xFFE3, "alt": 0xFFE9, "option": 0xFFE9, "opt": 0xFFE9,
-            "cmd": 0xFFE7, "command": 0xFFE7,
+            "cmd": 0xFFEB, "command": 0xFFEB,
             "return": 0xFF0D, "enter": 0xFF0D, "escape": 0xFF1B, "esc": 0xFF1B, "tab": 0xFF09, "space": 0x20,
             "backspace": 0xFF08, "delete": 0xFF08, "forwarddelete": 0xFFFF,
             "left": 0xFF51, "up": 0xFF52, "right": 0xFF53, "down": 0xFF54,
