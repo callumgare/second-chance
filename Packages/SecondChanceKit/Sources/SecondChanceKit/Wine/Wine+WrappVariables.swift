@@ -119,11 +119,11 @@ nonisolated extension Wine {
         if environment["SECOND_CHANCE_MODE_SCALING"] != "0", graphicsAPI.mayUseDirect3D || launch?.displayMode != nil {
             env["EMULATED_MODE_SCALING_EXE"] = gameExe
         }
-        // A launch that says --wine.colors shows Wine a screen of that many
-        // colours (docs/wine-in-process-helpers.md#screen-depth). The game's
-        // own process needs it to see the depth; the wrapp also sets it for
-        // the whole session (`screenDepthVariables`), so explorer.exe
-        // registers the display's modes at that depth too.
+        // A launch that says --wine.colors tells the game the screen has
+        // that many colours (docs/wine-in-process-helpers.md#screen-depth).
+        // The game's own process is the one that needs it; the wrapp sets
+        // it for the whole session (`screenDepthVariables`) as a build
+        // step does, which costs the other processes nothing.
         if let depth = launch?.screenDepth {
             env.merge(Self.screenDepthVariables(depth)) { _, new in new }
             env["SCREEN_DEPTH_EXE"] = gameExe

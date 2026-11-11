@@ -496,11 +496,13 @@ app keeps no Wine.
 - **`--wine.colors=256` or `65536`** shows the program a screen of that
   many colours, for one that won't run on more: Webmaster's installer
   checks for 256 and quits on anything else. The wine module's screen
-  depth helper shows every Wine program of the session a display of that
-  depth (8 or 16 bits a pixel), which is what the program then finds
-  whichever way it asks, and the display modes Wine offers are of it and
-  below; what Wine draws is unchanged
+  depth helper answers the program's `GetDeviceCaps` with that depth (8 or
+  16 bits a pixel), and at 8 bits gives it the system palette a 256-colour
+  screen would have; Wine itself keeps drawing in full colour, so the
+  program's pictures keep their colours
   ([wine-in-process-helpers.md](wine-in-process-helpers.md#screen-depth)).
+  Pair it with `--wine.display-mode=<w>x<h>x8` so the display mode says the
+  same.
   Any other count is refused when planning. A `RUN` takes it too
   ([below](#a-build-steps-screen)).
 - **`--wine.quit-key=<keys>`** makes the app's Quit press those keys in the
@@ -622,9 +624,9 @@ installer that checks the screen as its program does sees the same one:
 RUN --wine.colors=256 --wine.display-mode=800x600x8 D:/Webmaster.exe
 ```
 
-- **`--wine.colors`** shows every program of the step's Wine session a
-  screen of that many colours (the screen depth helper, armed through the
-  session's variables, explorer.exe's among them).
+- **`--wine.colors`** tells every program of the step's Wine session the
+  screen has that many colours (the screen depth helper, armed through the
+  session's variables).
 - **`--wine.display-mode`** sets the mode once Wine's desktop is up and
   before the program starts, as a launch's is.
 

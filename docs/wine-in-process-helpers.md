@@ -725,7 +725,7 @@ colour alone matches none (`ChangeDisplaySettings … returned -2`). A `RUN`
 takes the option too, set in its session the same way once Wine's desktop
 is up ([wrappfile.md](wrappfile.md#a-build-steps-screen)). Wine 10's Mac
 driver still tells a program the screen is 32-bit after an 8-bit mode is
-set; [screen depth](#screen-depth) is what changes that.
+set; [screen depth](#screen-depth) is what tells it otherwise.
 
 ### Which games get it
 
@@ -785,23 +785,55 @@ runs on Wine 10.
 
 ### What it does
 
-`screen_depth.m` shows Wine's Mac driver a display of fewer colours. The
-driver reads the depth of the display's mode, for `GetDeviceCaps` and for
-each mode it lists (`display_mode_bits_per_pixel` in `display.c`), through
-`CGDisplayModeCopyPixelEncoding`, so the helper points `winemac.so`'s
-imported address of it (its `__got` entry, as the
-[notch helper](#on-a-display-with-a-notch) does for its imports) at one
-that answers with the pixel encoding of the depth asked for
-(`IO8BitIndexedPixels` for 8, `IO16BitDirectPixels` for 16). Wine then sees
-a Mac display of that depth, everywhere it looks: `GetDeviceCaps` says it,
-and the modes `EmulateModeset` offers are of that depth and those below it
-(win32u's virtual modes are 8-bit, 16-bit and the display's own). What
-Wine draws is unchanged: its window surfaces are 32-bit whatever the display
-says, and the program's 8-bit picture is converted to them as any DIB is.
+`screen_depth.m` tells the program the screen has fewer colours, and keeps
+Wine itself drawing in full colour. The answer can't change for Wine as a
+whole: win32u asks `BITSPIXEL` of the screen for itself too, and
+`CreateCompatibleBitmap` of an 8-bit screen makes an 8-bit bitmap whose
+colour table is Wine's fixed one (a coarse colour cube,
+`get_default_color_table` in `dlls/win32u/dib.c`), never the program's
+palette. An earlier version of this helper did show Wine's Mac driver an
+8-bit display, and every picture drawn through such a bitmap came out in
+the cube's colours, speckled.
 
-It acts in every Wine process of the session, since explorer.exe registers
-the displays and their modes and the program takes them from there. It is
-armed by `SCREEN_DEPTH` (8 or 16), which `--wine.colors=256` or `65536`
+So only the program is told. Its `GetDeviceCaps` reaches `win32u.so` as a
+system call, dispatched through win32u's table of them (`syscalls` in
+`dlls/win32u/syscall.c`, which ntdll keeps a pointer to and reads on every
+call), while win32u's own questions call the function directly. The helper
+finds `NtGdiGetDeviceCaps` (an export of `win32u.so`) in that table, which
+must hold it exactly once, and points the entry at a wrapper that answers
+`BITSPIXEL` for a screen (a `DT_RASDISPLAY` device) with the depth asked
+for whenever the real one is more. Everything else gets Wine's answer, so
+the bitmaps Wine makes for the screen stay 32-bit and the program's 8-bit
+pictures keep their own colours on the way to Wine's 32-bit surfaces. The
+dispatcher calls the table's entries with the Mac's calling convention, not
+Windows': a wrapper declared `ms_abi` reads its arguments from the wrong
+registers and every answer comes back 0.
+
+At 8 bits a program also reads the screen's palette. On a 256-colour
+screen it selects its palette, realizes it, which puts its colours in the
+system palette, and reads that back (`GetSystemPaletteEntries`) to know
+what each of its pixels will show as: Director does, asking for all 256
+entries and then for 8, 9, 246 and 247 (the four standard colours Windows
+lets a program change). Wine's Mac driver has no system palette, answers
+with nothing and realizes 0 colours, and Director dithers its pictures to
+that. So at 8 bits the helper also replaces two more entries:
+`NtUserSelectPalette`, to note the palette the program last selected for
+the foreground (one of more than the default palette's 20 entries), and
+`NtGdiDoPalette`, to answer `GetSystemPaletteEntries` for a screen as
+Windows would once that palette was realized: the 20 colours Windows keeps
+at either end, and the palette's own entries, at their own indices, between
+them. The palette is read again at each question, so a palette the program
+changes or animates is followed. `RealizePalette` itself isn't replaced:
+its call number (`NtUserCallOneParam_RealizePalette`) is Wine's own and
+changes between versions, where the three replaced are fixed system calls.
+
+The display modes aren't changed: `EmulateModeset` already offers 8 and
+16-bit modes at every size (win32u's virtual modes are 8-bit, 16-bit and the
+display's own), so a launch that also sets one (`--wine.display-mode=800x600x8`)
+has `EnumDisplaySettings` agree with `GetDeviceCaps`.
+
+It is armed in every Wine process of the session, which costs the others
+nothing, by `SCREEN_DEPTH` (8 or 16), which `--wine.colors=256` or `65536`
 ([wrappfile.md](wrappfile.md#the-launch-volumes-and-app)) sets:
 
 - **for a launch**, as the session's variables (`GameConfig.wineSessionVariables`,
@@ -818,8 +850,13 @@ The process that reports logs
 `second-chance-helper[ScreenDepth] notice: armed: the screen has 8-bit colour`,
 which the wrapp logs as `[Helpers] Screen depth armed`; in a build step,
 with no game to name, every process of the session reports. It reports an
-error when `winemac.so` doesn't import the function, and does nothing in a
-process without `winemac.so` (ScummVM loads the same dylib).
+error, and changes nothing, when it can't find each system call it replaces
+in `win32u.so`'s table exactly once (a Wine it wasn't written for), and does
+nothing in a process without `winemac.so` (ScummVM loads the same dylib) or
+on the dylib's arm64 slice, as Wine's unix side is x86_64. A probe that
+asks `GetDeviceCaps(BITSPIXEL)`, draws a colour into
+`CreateCompatibleBitmap(screen)` and reads it back should see the depth asked
+for, a 32-bit bitmap and the same colour.
 
 ## Quit watch
 

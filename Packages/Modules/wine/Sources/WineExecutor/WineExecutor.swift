@@ -182,8 +182,8 @@ public nonisolated struct WineExecutor: ModuleExecutor {
         let arguments = program.arguments.map(Self.windowsStyle)
         let options = program.step.options.compactMapValues(\.first)
         var wine = Wine(wrapp: context.tree)
-        // --wine.colors: every program of the session, explorer.exe among
-        // them, sees a screen of that depth (docs/wine-in-process-helpers.md#screen-depth).
+        // --wine.colors: every program of the session is told the screen
+        // has that depth (docs/wine-in-process-helpers.md#screen-depth).
         if let depth = RecordedLaunch.screenDepth(options) {
             wine.sessionVariables = Wine.screenDepthVariables(depth)
         }
