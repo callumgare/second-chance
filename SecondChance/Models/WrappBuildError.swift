@@ -116,6 +116,10 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// A Her Interactive Mac download Second Chance can't take the game
     /// from: not a Cider installer, or one that isn't laid out as expected.
     case unsupportedMacDownload(reason: String)
+    /// The Mac installer from a game's discs rather than a download: its
+    /// game is in the discs' cabinets, which the installer unpacks from the
+    /// disc it runs from (`CiderPackage.GameOnDiscs`).
+    case macInstallerFromDiscs
     /// This Mac can't run Wine because Rosetta isn't installed, in a build
     /// with nobody to offer it to (`WrappBuildInput.ensureRosetta`).
     case rosettaMissing
@@ -194,6 +198,11 @@ enum WrappBuildError: LocalizedError, Equatable {
             return String(localized: """
                 Second Chance can't use this Mac download. It may not have finished downloading: download it again, \
                 or download the Windows version from Her Interactive instead.
+                """)
+        case .macInstallerFromDiscs:
+            return String(localized: """
+                This is the Mac installer from the game's discs, and the game itself is on the discs. \
+                Choose the discs instead.
                 """)
         case .saveFailed(let destination, _):
             let folder = URL(fileURLWithPath: destination).deletingLastPathComponent().lastPathComponent
@@ -371,6 +380,8 @@ enum WrappBuildError: LocalizedError, Equatable {
             return String(localized: "The game's installer stopped responding, so installing was stopped. Try again.")
         case .unsupportedMacDownload(let reason):
             return "Second Chance can't use this Mac download: \(reason). Download the Windows version from Her Interactive instead."
+        case .macInstallerFromDiscs:
+            return "This is the Mac installer from the game's discs, whose game is in the discs' cabinets: build from the discs instead."
         case .rosettaMissing:
             return String(localized: "This Mac doesn't have Rosetta, which the games need. Install it with: softwareupdate --install-rosetta --agree-to-license")
         case .rosettaInstallFailed:

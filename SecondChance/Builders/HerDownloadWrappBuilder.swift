@@ -245,6 +245,9 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
             do {
                 package = try CiderPackage(volume: volume)
+            } catch let onDiscs as CiderPackage.GameOnDiscs {
+                logger.critical("\(image.lastPathComponent) is a disc's Mac installer: \(onDiscs)")
+                throw WrappBuildError.macInstallerFromDiscs
             } catch let notCider as CiderPackage.NotCider {
                 logger.critical("\(image.lastPathComponent) isn't a Cider installer: \(notCider)")
                 throw WrappBuildError.unsupportedMacDownload(

@@ -124,6 +124,18 @@ struct HerDownloadTests {
         }
     }
 
+    @Test("A disc's Mac installer, whose game is in the discs' cabinets, is refused")
+    func refusesDiscInstaller() throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let volume = try fakeCiderVolume()
+        let plist = volume.appendingPathComponent("Nancy Drew - Trail of the Twister Installer.app/Contents/Resources/tgInstall.plist")
+        try (["InstallGame": "Nancy Drew - Trail of the Twister",
+              "CABMapping": "$INSTALLVOLUME/installer/NancyDrew.plist"] as NSDictionary).write(to: plist)
+        #expect(throws: CiderPackage.GameOnDiscs.self) {
+            try CiderPackage(volume: volume)
+        }
+    }
+
     @Test("Takes only the game out of a Cider app, into Program Files (x86)")
     func extractsGame() async throws {
         defer { try? FileManager.default.removeItem(at: base) }

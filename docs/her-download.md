@@ -100,6 +100,15 @@ download, and the build reads it from there without mounting anything.
 `HER_INSTALLER_PATH` takes either too. An installer app copied out of its
 volume has no `installer/` beside it, and fails as not being Cider.
 
+A dual-platform disc's Mac installer (Shadow at the Water's Edge has one) is
+the same TransGaming installer, but it isn't a download: its `INSTALLDATA.tgz`
+is only Cider's shell, and the game is in the disc's spanned cabinets
+(`SAW1.cab`…), which its `tgInstall.plist` names under `DISK_0`, `DISK_1` and
+`CABMapping`. Taken as a download it would give a wrapp with the game's
+program and none of its files, so an installer with a `CABMapping` is refused
+(`CiderPackage.GameOnDiscs`), and the person is told to use the discs, which
+build through the Windows installer beside it.
+
 Cider's 32-bit runtime no longer starts on macOS, but the game inside is the
 Windows release. So `CiderPackage` extracts only the app's `Info.plist`, its
 `c_drive/Program Files` tree and the DLLs in its `system32` (below), in one pass of `/usr/bin/tar` into a staging

@@ -48,6 +48,19 @@ nonisolated struct CiderPackage {
         let description: String
     }
 
+    /// Thrown by `init(volume:)` for the Mac installer from a game's discs.
+    /// A dual-platform disc's Mac installer (Shadow at the Water's Edge's)
+    /// is the same TransGaming installer as a download's, but its
+    /// `INSTALLDATA.tgz` is only Cider's shell, about 19 MB: the game is in
+    /// the disc's spanned cabinets (`SAW1.cab`…, `DISK_0` and `DISK_1` in
+    /// `tgInstall.plist`), unpacked into the app as `CABMapping`'s plist
+    /// says. Taken as a download, the wrapp would have the game's program
+    /// and none of its files (`binkw32.dll`, its videos), and the game would
+    /// quit at once.
+    struct GameOnDiscs: Error, CustomStringConvertible {
+        var description: String { "its game is in the discs' cabinets, not in its INSTALLDATA.tgz" }
+    }
+
     /// Recognise a mounted image as a Cider installer.
     init(volume: URL) throws {
         let fileManager = FileManager.default
@@ -73,6 +86,7 @@ nonisolated struct CiderPackage {
         let settings = NSDictionary(contentsOf: installPlist) as? [String: Any] ?? [:]
         gameName = settings["InstallGame"] as? String
         bundleIdentifier = settings["ForbiddenGameID"] as? String
+        if settings["CABMapping"] != nil { throw GameOnDiscs() }
     }
 
     /// The Cider app's paths for the files a wrapp takes from it.
