@@ -318,7 +318,7 @@ A bundle's `tests.layouts` are the top levels of real discs and installed
 copies of its program, listed by hand from the real thing (a name ending in
 `/` is a folder; a path with a `/` inside is in a folder). A `disc` layout
 names the disc input it is, `<edition>/<input>`, and the installer Second
-Chance finds on it by name; an `installed` one names the edition whose build
+Chance finds on it by name, when it has one by name; an `installed` one names the edition whose build
 installed it. Loading the bundles checks them against the signs, by names
 alone (a sign that reads a file is taken to match when its file is there).
 Castle Malloy's:
@@ -342,7 +342,7 @@ The checks:
   turn down any disc with a program on it).
 
 `InstalledGameDetectionTests` builds each layout as a folder of empty files
-and checks the disc isn't turned down and its installer is found, and that
+and checks the disc isn't turned down and its installer, if it names one, is found, and that
 each installed copy is. When a disc is turned down that shouldn't be, its
 layout belongs in its bundle, with whatever sign it tripped narrowed.
 

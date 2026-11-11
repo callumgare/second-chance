@@ -34,6 +34,8 @@ struct InstalledGameDetectionTests {
     }
 
     nonisolated static let discs = layouts { $0.disc != nil }
+    /// The discs with an installer Second Chance finds by name.
+    nonisolated static let discsWithInstallers = layouts { $0.disc != nil && $0.installer != nil }
     nonisolated static let installedCopies = layouts { $0.installed != nil }
 
     @Test("The bundles load, with discs and installed copies laid out")
@@ -51,10 +53,10 @@ struct InstalledGameDetectionTests {
         #expect(await Self.detector.installedCopy(at: folder).isEmpty)
     }
 
-    @Test("Every disc's installer is found by name", arguments: discs.keys.sorted())
+    @Test("Every disc's installer is found by name", arguments: discsWithInstallers.keys.sorted())
     func discInstallerIsRecognised(name: String) throws {
-        let (_, layout) = try #require(Self.discs[name])
-        let installer = try #require(layout.installer, "\(name) says no installer")
+        let (_, layout) = try #require(Self.discsWithInstallers[name])
+        let installer = try #require(layout.installer)
         let folder = try Self.makeFolder(layout.files)
         defer { try? FileManager.default.removeItem(at: folder) }
         #expect(try GameDetector.installerLookup(in: folder) == .recognised(installer))
