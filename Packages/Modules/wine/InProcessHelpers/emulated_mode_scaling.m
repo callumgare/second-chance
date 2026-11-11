@@ -489,6 +489,7 @@ static void blackOutsideGLView(NSView *self, SEL _cmd, CGImageRef image) {
 static IMP gWineUpdateLayer;
 static BOOL gArmed = NO;
 static char kReportedCentringKey;   // the client frame and painted size last reported for the window
+static char kReportedSkipKey;       // why the window's picture was last not placed
 
 /// The rect Wine's window surface covers in its content view: WineContentView's
 /// surfaceRect, which -updateLayer places the surface's layer at.
@@ -506,23 +507,36 @@ static BOOL wineSurfaceRect(NSView *content, CGRect *rect) {
 /// Wine as covering the screen or in a fullscreen Space, with no OpenGL or
 /// Metal view drawing into it
 /// (whose own placement is right, emulatedModeScaling's OpenGL part above).
-static BOOL scaledPictureFrame(NSWindow *window, NSRect *frame) {
-    if (!gArmed || !window || (window.styleMask & NSWindowStyleMaskTitled)) return NO;
+static BOOL scaledPictureFrameWhy(NSWindow *window, NSRect *frame, const char **why) {
+    const char *unused;
+    if (!why) why = &unused;
+    if (!gArmed || !window) { *why = "unarmed"; return NO; }
+    if (window.styleMask & NSWindowStyleMaskTitled) { *why = "titled"; return NO; }
     // Wine stops counting the window as covering the screen once native
     // fullscreen has put it in a Space, where it still does.
     BOOL inSpace = (window.styleMask & NSWindowStyleMaskFullScreen) != 0;
     BOOL coversScreen = [window respondsToSelector:@selector(isFullscreen)] && [(id)window isFullscreen];
-    if (!inSpace && !coversScreen) return NO;
+    if (!inSpace && !coversScreen) { *why = "not covering the screen"; return NO; }
     NSView *content = window.contentView;
-    if (!content || content.subviews.count != 1) return NO;
-    if ([content respondsToSelector:@selector(hasGLDescendant)] && [content hasGLDescendant]) return NO;
+    if (!content || content.subviews.count != 1) { *why = "not one subview"; return NO; }
+    if ([content respondsToSelector:@selector(hasGLDescendant)] && [content hasGLDescendant]) { *why = "an OpenGL view"; return NO; }
     NSView *client = content.subviews.firstObject;
-    if (![NSStringFromClass(client.class) isEqualToString:NSStringFromClass(content.class)]) return NO;
+    if (![NSStringFromClass(client.class) isEqualToString:NSStringFromClass(content.class)]) { *why = "subview not a content view"; return NO; }
     NSRect clientFrame = client.frame;
-    if (NSEqualPoints(clientFrame.origin, NSZeroPoint) || !NSContainsRect(content.bounds, clientFrame)) return NO;
-    if (clientFrame.size.width < 1.0 || clientFrame.size.height < 1.0) return NO;
+    if (NSEqualPoints(clientFrame.origin, NSZeroPoint)) { *why = "client view at the top left"; return NO; }
+    // A window bigger than the emulated screen overflows the Mac window: a
+    // Director projector's 800x600 window, kept when the program then sets
+    // 640x480 (Webmaster's start screen's "Full screen (640 x 480)"). Its
+    // part on the screen is still placed (centredUpdateLayer crops it).
+    if (NSIsEmptyRect(NSIntersectionRect(content.bounds, clientFrame))) { *why = "client view outside the window"; return NO; }
+    if (clientFrame.size.width < 1.0 || clientFrame.size.height < 1.0) { *why = "client view empty"; return NO; }
     *frame = clientFrame;
+    *why = NULL;
     return YES;
+}
+
+static BOOL scaledPictureFrame(NSWindow *window, NSRect *frame) {
+    return scaledPictureFrameWhy(window, frame, NULL);
 }
 
 int windowShowsScaledPicture(NSWindow *window) {
@@ -564,39 +578,81 @@ static void centredUpdateLayer(NSView *self, SEL _cmd) {
     ((void (*)(id, SEL))gWineUpdateLayer)(self, _cmd);
     NSWindow *window = self.window;
     NSRect picture;
-    if (!window || window.contentView != self || !scaledPictureFrame(window, &picture)) return;
+    if (!window || window.contentView != self) return;
+    const char *why = NULL;
+    if (!scaledPictureFrameWhy(window, &picture, &why)) {
+        // Diagnostic: why a borderless window's picture isn't placed, once a
+        // reason and frame.
+        if (gArmed && !(window.styleMask & NSWindowStyleMaskTitled)) {
+            NSString *now = [NSString stringWithFormat:@"%s %@ %@", why ?: "?", NSStringFromRect(window.frame),
+                             self.subviews.count ? NSStringFromRect(self.subviews.firstObject.frame) : @"-"];
+            if (![objc_getAssociatedObject(window, &kReportedSkipKey) isEqual:now]) {
+                objc_setAssociatedObject(window, &kReportedSkipKey, now, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                helperReport("EmulatedMode", "notice", "not placing a borderless window's picture: %s (window %s, %lu subviews, first %s)",
+                             why ?: "?", NSStringFromRect(window.frame).UTF8String, (unsigned long)self.subviews.count,
+                             self.subviews.count ? NSStringFromRect(self.subviews.firstObject.frame).UTF8String : "-");
+            }
+        }
+        return;
+    }
     CALayer *layer = self.layer;
     CGImageRef image = (__bridge CGImageRef)layer.contents;
     CGRect surface;
     if (!image || CFGetTypeID(image) != CGImageGetTypeID() || !wineSurfaceRect(self, &surface)) return;
 
-    // The picture starts at the image's top left; the image is in pixels.
-    // Past what win32u painted, the window's black background shows.
+    // The picture starts at the image's top left; the image is in pixels,
+    // and the content view counts y from the top. What shows is the part of
+    // it win32u painted that's on the emulated screen, the mode's size scaled
+    // up and centred: a window bigger than the screen overflows it, as on
+    // Windows. Past it, the window's black background shows.
     CGSize painted = paintedPictureSize(picture.size);
+    NSRect shown = NSMakeRect(picture.origin.x, picture.origin.y, painted.width, painted.height);
+    NSRect screen = self.bounds;
+    CGSize mode;
+    if (knownModeSize(&mode) && mode.width >= 1 && mode.height >= 1) {
+        CGFloat ratio = fmin(screen.size.width / mode.width, screen.size.height / mode.height);
+        CGSize scaled = CGSizeMake(round(mode.width * ratio), round(mode.height * ratio));
+        screen = NSMakeRect(round((screen.size.width - scaled.width) / 2), round((screen.size.height - scaled.height) / 2),
+                            scaled.width, scaled.height);
+    }
+    shown = NSIntersectionRect(shown, screen);
+    if (NSIsEmptyRect(shown)) return;
     CGFloat scale = layer.contentsScale > 0 ? layer.contentsScale : 1.0;
-    CGRect crop = CGRectMake(0, 0, painted.width * scale, painted.height * scale);
-    if (CGImageGetWidth(image) > crop.size.width + 0.5 || CGImageGetHeight(image) > crop.size.height + 0.5) {
+    CGRect crop = CGRectMake((shown.origin.x - picture.origin.x) * scale, (shown.origin.y - picture.origin.y) * scale,
+                             shown.size.width * scale, shown.size.height * scale);
+    crop = CGRectIntersection(crop, CGRectMake(0, 0, CGImageGetWidth(image), CGImageGetHeight(image)));
+    if (CGRectIsEmpty(crop)) return;
+    if (crop.origin.x > 0.5 || crop.origin.y > 0.5 || CGImageGetWidth(image) > crop.size.width + 0.5
+        || CGImageGetHeight(image) > crop.size.height + 0.5) {
         CGImageRef cropped = CGImageCreateWithImageInRect(image, crop);
         if (cropped) {
             layer.contents = (__bridge id)cropped;
             CGImageRelease(cropped);
         }
     }
-    layer.position = CGPointMake(surface.origin.x + picture.origin.x, surface.origin.y + picture.origin.y);
+    layer.position = CGPointMake(surface.origin.x + shown.origin.x, surface.origin.y + shown.origin.y);
     if (window.isOpaque && ![window.backgroundColor isEqual:NSColor.blackColor]) window.backgroundColor = NSColor.blackColor;
 
-    NSString *now = [NSString stringWithFormat:@"%@ %@", NSStringFromRect(picture), NSStringFromSize(painted)];
+    NSString *now = [NSString stringWithFormat:@"%@ %@ %@", NSStringFromRect(picture), NSStringFromSize(painted), NSStringFromRect(shown)];
     if ([objc_getAssociatedObject(window, &kReportedCentringKey) isEqual:now]) return;
     objc_setAssociatedObject(window, &kReportedCentringKey, now, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 #if defined(__x86_64__)
     gModeWanted = YES;   // the picture is new or has changed: check the mode
 #endif
-    os_log(gLog, "[EmulatedMode] placing the scaled picture at %.0f,%.0f, %.0fx%.0f (%.0fx%.0f painted), in a %.0fx%.0f window",
+    os_log(gLog, "[EmulatedMode] placing the scaled picture at %.0f,%.0f, %.0fx%.0f (%.0fx%.0f painted, %.0fx%.0f shown), in a %.0fx%.0f window",
            picture.origin.x, picture.origin.y, picture.size.width, picture.size.height, painted.width, painted.height,
-           self.bounds.size.width, self.bounds.size.height);
-    helperReport("EmulatedMode", "notice", "placing the program's scaled picture at %.0f,%.0f, %.0fx%.0f (%.0fx%.0f painted), in its %.0fx%.0f window",
-                 picture.origin.x, picture.origin.y, picture.size.width, picture.size.height, painted.width, painted.height,
-                 self.bounds.size.width, self.bounds.size.height);
+           shown.size.width, shown.size.height, self.bounds.size.width, self.bounds.size.height);
+    if (NSEqualSizes(shown.size, NSMakeSize(painted.width, painted.height))) {
+        helperReport("EmulatedMode", "notice", "placing the program's scaled picture at %.0f,%.0f, %.0fx%.0f (%.0fx%.0f painted), in its %.0fx%.0f window",
+                     picture.origin.x, picture.origin.y, picture.size.width, picture.size.height, painted.width, painted.height,
+                     self.bounds.size.width, self.bounds.size.height);
+    } else {
+        helperReport("EmulatedMode", "notice", "placing the program's scaled picture at %.0f,%.0f, %.0fx%.0f (%.0fx%.0f painted), "
+                     "showing its %.0fx%.0f at %.0f,%.0f on the emulated screen, in its %.0fx%.0f window",
+                     picture.origin.x, picture.origin.y, picture.size.width, picture.size.height, painted.width, painted.height,
+                     shown.size.width, shown.size.height, shown.origin.x, shown.origin.y,
+                     self.bounds.size.width, self.bounds.size.height);
+    }
 }
 
 __attribute__((constructor))

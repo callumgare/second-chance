@@ -33,8 +33,8 @@ WINE.KEEP-DISCS ${input.disc-1} --into=C:/webmaster-cd
 # 800x600 stage drawn small in the middle. Started in an 800x600 mode, which
 # Wine emulates, its window is the stage, and Wine scales it up to fill the
 # display, which native fullscreen puts in a Space. (Its start screen still
-# asks for a screen size: either plays, but 640x480 leaves the picture to one
-# side, so "Your current resolution" is the one to pick.) It insists on a
+# asks for a screen size: either plays. 640x480 sets that mode but keeps the
+# 800x600 window, which the mode scaling helper crops to the screen.) It insists on a
 # 256-colour screen, which Wine 10's Mac driver never reports unless told
 # (--wine.colors). Started by its C: path, the same folder D: is: a wrapp
 # starts a Wine program only from C:. It leaves wmLaunch.tmp in Temp, naming

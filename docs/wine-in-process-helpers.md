@@ -706,6 +706,19 @@ crop is to the client view as before. The wrapp's log says
 `[Helpers] Mode scaling: placing the program's scaled picture at 240,0, 1440x1080 (1440x1080 painted), in its 1920x1080 window`,
 once with the client view's size and again with the painted size once the
 mode is known.
+
+A program can also set a mode smaller than the window it keeps. Webmaster
+opens an 800x600 window in an 800x600 mode, and choosing "Full screen (640 x
+480)" on its start screen then sets 640x480 without shrinking the window, so
+win32u paints all 800x600 of it at the new scale, a picture bigger than the
+display, and the client view runs past the window's edge. The helper only
+needs the client view to overlap the window, not lie inside it, and crops
+what's shown to the emulated screen, the mode scaled to fit the display and
+centred, so what lay off the 640x480 screen is left off as it would have been
+on a 640x480 monitor (2026-11-12). The log then says
+`[Helpers] Mode scaling: placing the program's scaled picture at 240,0, 1800x1350 (1800x1350 painted), showing its 1440x1080 at 240,0 on the emulated screen, in its 1920x1080 window`.
+A borderless window whose picture the helper can't place logs why, once for
+each reason (`not placing a borderless window's picture: …`).
 Native fullscreen takes such a window into a Space (`windowShowsScaledPicture`).
 
 What the scaling costs was measured on Bioscopia (2026-11-07, a test session
