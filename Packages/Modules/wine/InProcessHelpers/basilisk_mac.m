@@ -64,7 +64,9 @@
 //    418`, `key cmd+down`), `type <text>`, `wait <seconds>`, and `wait-for
 //    <seconds> <text>`, which waits for the text to be on the Mac's screen
 //    (read from a picture of the window by Vision), `wait-gone <seconds>
-//    <text>`, for it to go, and `wait-restart <seconds>`, for the Mac to
+//    <text>`, for it to go, `click-until-gone <seconds> <x> <y> <text>`,
+//    which clicks again while the text stays (a busy Mac can lose a click),
+//    and `wait-restart <seconds>`, for the Mac to
 //    restart (its startup disk marked unmounted cleanly, then mounted again).
 //    A request the window
 //    can't take yet, as while the Mac restarts, is tried again for a while.
@@ -1382,6 +1384,27 @@ static NSString *request(NSString *line) {
     }
 }
 
+/// `click-until-gone <seconds> <x> <y> <text>`: clicks, then clicks again
+/// while the text is still on the screen. A click can be lost: a busy Mac
+/// (seen under load, 2026-11-11) left the pointer on the QuickTime licence's
+/// Agree with the licence still up. The text is the click's sign of having
+/// landed, so the button is only clicked again while what it closes is
+/// still there. nil when gone.
+static NSString *clickUntilGone(double seconds, NSString *click, NSString *text) {
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
+    for (;;) {
+        NSString *failed = request(click);
+        if (failed) return failed;
+        double left = [deadline timeIntervalSinceNow];
+        // Long enough for the Mac to take the click and redraw; a picture
+        // takes most of a second of that anyway.
+        NSString *still = waitForText(text, MAX(1, MIN(10, left)), YES);
+        if (!still) return nil;
+        if ([deadline timeIntervalSinceNow] <= 0) return still;
+        helperReport(kHelper, "notice", "\"%s\" is still on the screen after a click: clicking again", text.UTF8String);
+    }
+}
+
 /// One line of the script: nil when done, else what went wrong.
 static NSString *runLine(NSString *line) {
     NSRange space = [line rangeOfString:@" "];
@@ -1399,6 +1422,13 @@ static NSString *runLine(NSString *line) {
         double seconds = rest.doubleValue;
         if (gap.location == NSNotFound || seconds <= 0) return [command stringByAppendingString:@" needs a number of seconds, then the text"];
         return waitForText([rest substringFromIndex:gap.location + 1], seconds, [command isEqualToString:@"wait-gone"]);
+    }
+    if ([command isEqualToString:@"click-until-gone"]) {
+        NSArray<NSString *> *parts = [rest componentsSeparatedByString:@" "];
+        double seconds = parts.count >= 4 ? parts[0].doubleValue : 0;
+        if (seconds <= 0) return @"click-until-gone needs a number of seconds, x, y, then the text";
+        return clickUntilGone(seconds, [NSString stringWithFormat:@"click %@ %@", parts[1], parts[2]],
+                              [[parts subarrayWithRange:NSMakeRange(3, parts.count - 3)] componentsJoinedByString:@" "]);
     }
     if ([command isEqualToString:@"wait-restart"]) {
         double seconds = rest.doubleValue;

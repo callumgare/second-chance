@@ -31,7 +31,8 @@ wait 2
 key return
 wait-for 60 Disagree
 wait 2
-click 440 418
+# A busy Mac can lose the click, so Agree is clicked until the licence goes.
+click-until-gone 60 440 418 Disagree
 wait-for 60 Easy Install
 wait 2
 key return

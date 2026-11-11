@@ -516,7 +516,10 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
   text to be on the Mac's screen (Vision reading a picture of the window, scaled
   to twice its size; case and spaces don't count, and in text of eight letters or
   more one letter in eight may be misread), or
-  `wait-gone <seconds> <text>`, for it to go, or `wait-restart <seconds>`, for the
+  `wait-gone <seconds> <text>`, for it to go, `click-until-gone <seconds> <x> <y>
+  <text>`, which clicks and clicks again while the text stays on the screen (a
+  busy Mac can lose a click; the text is what the click closes, such as a
+  licence's Disagree), or `wait-restart <seconds>`, for the
   Mac to restart. Basilisk II keeps its window at a restart, and the screens
   between are gone too soon to be caught reliably, so a restart is told by the
   startup disk (the first `disk` of Basilisk II's prefs): Mac OS marks it
