@@ -52,6 +52,13 @@ final class WineRuntime: GameStarting {
             // A wrapp built when prefixes had a Z: showing the whole Mac
             // (WineDrives): the game never needed it.
             config.wine.drives.block("z")
+            // A wrapp built before device links were blocked may hold one
+            // Wine wrote for a disc the Mac had mounted during its build
+            // (`y::` → `/dev/rdisk10`). Wine's mount manager would give that
+            // letter to whichever disc is at that device when the game
+            // starts, showing it the Mac's disc (WineDrives, "How Wine adds
+            // the Mac's disks").
+            config.wine.drives.blockDevices()
         } catch {
             logger.critical("ERROR: Failed to mount directory into Wine: \(error)")
             throw ModuleFailure(

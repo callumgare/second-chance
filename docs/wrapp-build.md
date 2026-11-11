@@ -1001,7 +1001,26 @@ out to. A disc build mounts each copied disc from D: on, as a CD-ROM drive.
 An installer outside the prefix — Steam's, from the downloads cache, or a
 Her Interactive download wherever it was saved — is run by its Mac path
 while its folder is lent to Wine as Y: (`WineDrives.lend`), which Wine then
-names the path through; Y: is blocked again once it has run. A: is the player's saves: each
+names the path through; Y: is blocked again once it has run.
+
+Each letter has two entries: `y:`, the folder the drive shows, and `y::`,
+the device it's on, which Wine's mount manager writes for a disc the Mac has
+mounted. It gives a disc a letter only if neither entry is there, or if
+`y::` already links to that disc's device, and it then replaces whatever
+`y:` held, so a blocked letter has a plain file at both, and a drive in use
+a file at its `y::`. Every change to an entry renames the new one over the
+old, never leaving a moment with nothing there, as the mount manager of a
+Wine session that's still ending can take a letter in that moment.
+`WINE.DRIVES --only=C:` (`WineDrives.showOnly`) sets all 52 entries that
+way, and a wrapp's launch blocks every `y::` that a prefix made before then
+might hold. Without that, a prefix layer made while other builds had disc
+images mounted kept `y::` → `/dev/rdisk10`; once Y: was lent, the mount
+manager matched the next disc at that device to it and pointed `y:` at the
+disc, so the installer started as a `\\?\unix\` path, which Steam's installer
+can't read itself from and InstallShield's unpacker hung on. `WineDrives`'
+comment has how Wine's source does each part.
+
+A: is the player's saves: each
 launch points it at the wrapp's folder in Application Support, and the
 Windows user's Documents links to the same place, so a game saving to either
 reaches it. A build points both at a folder in `/tmp` that may not exist, so

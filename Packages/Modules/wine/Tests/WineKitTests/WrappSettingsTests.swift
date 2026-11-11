@@ -67,7 +67,7 @@ struct WrappSettingsTests {
         #expect(layout.onDriveC("Program Files/Game.exe") == layout.onDriveC("/Program Files/Game.exe"))
     }
 
-    @Test("Drives are links, kept as given, and blocked letters are files")
+    @Test("Drives are links, kept as given, and blocked letters are files, device links too")
     func drives() throws {
         defer { try? FileManager.default.removeItem(at: wrapp) }
         let drives = Wine(wrapp: wrapp).drives
@@ -77,13 +77,18 @@ struct WrappSettingsTests {
         #expect(try drives.target(of: "c") == "../drive_c")
         #expect(try drives.target(of: "a") == "/tmp/saves")
         let names = try FileManager.default.contentsOfDirectory(atPath: drives.folder.path).sorted()
-        #expect(names == ["a:", "c:", "d:", "e:"])
+        #expect(names == ["a:", "a::", "c:", "c::", "d:", "d::", "e:", "e::"])
+        for letter in "acde" {
+            #expect(try kind(drives.deviceLink(letter)) == .typeRegular)
+        }
 
         try drives.mount("/tmp/other", as: "a")
         #expect(try drives.target(of: "a") == "/tmp/other")
+    }
 
-        drives.removeAll()
-        #expect(try FileManager.default.contentsOfDirectory(atPath: drives.folder.path).isEmpty)
+    /// What is at `url` itself, a link not followed.
+    func kind(_ url: URL) throws -> FileAttributeType? {
+        try FileManager.default.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType
     }
 
     @Test("Blocking a mounted letter removes the link, not what it shows")
@@ -110,5 +115,78 @@ struct WrappSettingsTests {
         drives.takeBack()
         #expect(throws: (any Error).self) { try drives.target(of: "y") }
         #expect(FileManager.default.fileExists(atPath: drives.link("y").path))
+    }
+
+    @Test("Mounting or blocking a letter blocks the Mac disk Wine noted there", arguments: [true, false])
+    func staleDeviceLink(mounting: Bool) throws {
+        defer { try? FileManager.default.removeItem(at: wrapp) }
+        let drives = Wine(wrapp: wrapp).drives
+        try drives.mount("../drive_c", as: "c")
+        drives.block("y")
+        // What Wine's mount manager leaves for a disc the Mac had mounted.
+        try FileManager.default.removeItem(at: drives.deviceLink("y"))
+        try FileManager.default.createSymbolicLink(
+            atPath: drives.deviceLink("y").path, withDestinationPath: "/dev/rdisk10")
+        if mounting {
+            try drives.lend(URL(fileURLWithPath: "/tmp/Downloads"))
+            #expect(try drives.target(of: "y") == "/tmp/Downloads")
+        } else {
+            drives.block("y")
+        }
+        #expect(try kind(drives.deviceLink("y")) == .typeRegular)
+        let names = try FileManager.default.contentsOfDirectory(atPath: drives.folder.path)
+        #expect(names.sorted() == ["c:", "c::", "y:", "y::"])
+    }
+
+    @Test("Showing only C: blocks every other letter and every device link, and leaves nothing else")
+    func showOnly() throws {
+        defer { try? FileManager.default.removeItem(at: wrapp) }
+        let drives = Wine(wrapp: wrapp).drives
+        // As wineboot leaves a prefix: Z: the whole Mac, the Mac's discs given
+        // letters with their device links, and the drive_c link.
+        try FileManager.default.createDirectory(at: drives.folder, withIntermediateDirectories: true)
+        for (name, target) in [("c:", "../drive_c"), ("z:", "/"), ("d:", "/Volumes/DISC"), ("d::", "/dev/rdisk10")] {
+            try FileManager.default.createSymbolicLink(
+                atPath: drives.folder.appendingPathComponent(name).path, withDestinationPath: target)
+        }
+        FileManager.default.createFile(atPath: drives.folder.appendingPathComponent("leftover").path, contents: nil)
+
+        try drives.showOnly("../drive_c", as: "c")
+
+        let names = try FileManager.default.contentsOfDirectory(atPath: drives.folder.path).sorted()
+        #expect(names == "abcdefghijklmnopqrstuvwxyz".flatMap { ["\($0):", "\($0)::"] }.sorted())
+        #expect(try drives.target(of: "c") == "../drive_c")
+        for letter in "abcdefghijklmnopqrstuvwxyz" {
+            if letter != "c" { #expect(try kind(drives.link(letter)) == .typeRegular) }
+            #expect(try kind(drives.deviceLink(letter)) == .typeRegular)
+        }
+    }
+
+    @Test("Blocking device links leaves the drives be")
+    func blockingDeviceLinks() throws {
+        defer { try? FileManager.default.removeItem(at: wrapp) }
+        let drives = Wine(wrapp: wrapp).drives
+        try drives.mount("../drive_c", as: "c")
+        try FileManager.default.removeItem(at: drives.deviceLink("c"))
+        try FileManager.default.createSymbolicLink(
+            atPath: drives.deviceLink("y").path, withDestinationPath: "/dev/rdisk10")
+
+        drives.blockDevices()
+
+        #expect(try drives.target(of: "c") == "../drive_c")
+        #expect(!FileManager.default.fileExists(atPath: drives.link("y").path))
+        for letter in "abcdefghijklmnopqrstuvwxyz" {
+            #expect(try kind(drives.deviceLink(letter)) == .typeRegular)
+        }
+    }
+
+    @Test("A drive replaced over a folder at its name still ends up a link")
+    func replacingAFolder() throws {
+        defer { try? FileManager.default.removeItem(at: wrapp) }
+        let drives = Wine(wrapp: wrapp).drives
+        try FileManager.default.createDirectory(at: drives.link("d"), withIntermediateDirectories: true)
+        try drives.mount("/tmp/disc", as: "d")
+        #expect(try drives.target(of: "d") == "/tmp/disc")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: drives.folder.path).sorted() == ["d:", "d::"])
     }
 }

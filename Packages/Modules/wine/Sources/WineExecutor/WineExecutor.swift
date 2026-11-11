@@ -23,6 +23,12 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 public nonisolated struct WineExecutor: ModuleExecutor {
     public static let handles = ["DRIVES", "REGISTRY", "WINETRICKS", "MOUNT", "KEEP-DISCS", "HELPERS", "PREFIX", "PATCH"]
 
+    /// 2: drives are replaced in place and every letter's device link
+    /// (`x::`) is blocked too (`WineDrives.showOnly`), so a prefix layer the
+    /// first revision made, which may hold a device link Wine wrote for a
+    /// disc the Mac had mounted, is made again rather than restored.
+    public static var revision: Int { 2 }
+
     /// The winetricks it runs; nil for the module's own.
     let winetricks: URL?
     /// The in-process helpers `HELPERS` lays in, when the caller has them.
@@ -96,9 +102,13 @@ public nonisolated struct WineExecutor: ModuleExecutor {
             guard step.option("only") == "C:" else {
                 throw StepFailure.recipe("\(step.origin): this build keeps only C: (WINE.DRIVES --only=C:)")
             }
-            wine.drives.removeAll()
-            try wine.drives.mount("../drive_c", as: "c")
-            wine.drives.block("abdefghijklmnopqrstuvwxyz")
+            // Wine's server, its mount manager with it, may still be running
+            // from wineboot, giving the Mac's discs any letter that has
+            // nothing at either of its names: showOnly replaces each entry in
+            // place, leaving none empty for a moment, and blocks every
+            // letter's device link too (WineDrives, "How Wine adds the Mac's
+            // disks").
+            try wine.drives.showOnly("../drive_c", as: "c")
         case "REGISTRY":
             guard let target = step.arguments.first, let colon = target.lastIndex(of: ":") else {
                 throw StepFailure.recipe("\(step.origin): WINE.REGISTRY names <key>:<name>")
