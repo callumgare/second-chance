@@ -198,7 +198,9 @@ public nonisolated struct WineExecutor: ModuleExecutor {
         }
         let code: Int32
         do {
-            try await wine.run(.program(Self.windowsStyle(path), arguments), environment: program.environment, timeout: timeout)
+            try await wine.run(.program(Self.windowsStyle(path), arguments),
+                               environment: program.environment.merging(Self.modeScalingVariables(program: path, options: options)) { ours, _ in ours },
+                               timeout: timeout)
             code = 0
         } catch WineError.executionFailed(let exit) {
             code = exit
@@ -209,6 +211,22 @@ public nonisolated struct WineExecutor: ModuleExecutor {
         try await Self.endLeftovers(of: wine, after: path,
                                     limit: program.timeout.map { TimeInterval($0.components.seconds) } ?? Self.leftoverLimit())
         return code
+    }
+
+    /// What arms mode scaling in a step's program when the step sets a
+    /// display mode, as a launch's does: Wine scales a GDI program's
+    /// picture up but shows it at the left, the mouse mapped where it
+    /// belongs, so an installer's clicks miss what they're aimed at
+    /// (docs/wine-in-process-helpers.md#a-display-mode-the-launch-sets).
+    /// Nothing without `--wine.display-mode`, or with
+    /// `SECOND_CHANCE_MODE_SCALING=0`.
+    static func modeScalingVariables(
+        program: String, options: [String: String],
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String: String] {
+        guard RecordedLaunch.displayMode(options) != nil, environment["SECOND_CHANCE_MODE_SCALING"] != "0",
+              let exe = program.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last else { return [:] }
+        return ["EMULATED_MODE_SCALING_EXE": String(exe)]
     }
 
     // MARK: - Discs

@@ -731,7 +731,11 @@ set; [screen depth](#screen-depth) is what tells it otherwise.
 
 `EmulateModeset` is on for the whole prefix, but the helper arms only in a
 game that may draw with Direct3D (`GameGraphicsAPI.mayUseDirect3D`), or whose
-launch sets a display mode. A game that draws through cnc-ddraw never
+launch sets a display mode. A build step's `RUN` that sets one
+(`--wine.display-mode`) arms it in that step's program too, by its `.exe`'s
+name (`WineExecutor.modeScalingVariables`): Webmaster's installer is its
+game's own projector, and without it its 800x600 screen showed at the left,
+white beside it, and its clicks missed. A game that draws through cnc-ddraw never
 switches the real display, since cnc-ddraw runs windowed. `SECOND_CHANCE_MODE_SCALING=0` (`--debug no-mode-scaling`)
 leaves the helper unarmed but `EmulateModeset` on, so the frame lands in the
 corner again, for comparison.
