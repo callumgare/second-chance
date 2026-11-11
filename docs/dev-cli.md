@@ -828,6 +828,16 @@ viewer would:
 - **It asks for an 8x8 corner every 2 seconds** and draws nothing. It costs
   about 23 MB and no measurable CPU; Screen Sharing's server takes about 2% while
   it's connected.
+- **It is the session's mouse and keyboard.** Its connection is the one thing that
+  moves a test session's pointer, so it takes clicks, keys and text for the session
+  on a Unix socket, `/Users/Shared/second-chance/session-input/<user>.sock`
+  (`SessionInputServer`), and sends them down it: a JSON request a line
+  (`SessionInputRequest`, a `SessionInput` and the width of the picture its points
+  were read from, or none for the screen's own pixels), each answered by a JSON line
+  once done (`SessionInputReply`, with an `error` if it couldn't be), and an empty line
+  to finish. `sc session do` uses it, and anything in the session may: only the
+  keep-alive's user and that test user can connect. Input is turned away at once while
+  the keep-alive has no connection to that session.
 - **It reconnects** when the connection drops, waiting longer each time (up to
   10 minutes, so a wrong password can't lock the account).
 
@@ -1054,12 +1064,14 @@ viewer moves the real one, so `session do` reaches anything on that screen: an
 installer a build step runs, a dialog, the Finder. Points are in a
 `session screenshot` picture (`--width`, 1600 unless the picture was taken with
 another `--max`). Keys are names (`return`, `escape`, `tab`, `f5`, `left`, a
-character), chords (`cmd+q`) and repeats (`down*3`), pressed 0.3 s apart. It logs in
-from that Mac's own localhost, through an SSH tunnel (for this Mac, straight there),
-because Screen Sharing turns the test users' login down from the network. The password is
-read from that Mac's keychain, as for `session view`, and never saved. A session
-someone else has leased is left alone. Each run leaves a "Viewer has disconnected"
-notification on that screen.
+character), chords (`cmd+q`) and repeats (`down*3`), pressed 0.3 s apart. It goes
+through the keep-alive's connection (its input socket, in the keep-alive's list above),
+over SSH for another Mac. Where the keep-alive doesn't take input (one installed before
+it could), it logs in itself, from that Mac's own localhost through an SSH tunnel (for
+this Mac, straight there), because Screen Sharing turns the test users' login down from
+the network; the password is read from that Mac's keychain, as for `session view`, and
+never saved, and the run leaves a "Viewer has disconnected" notification on that screen.
+A session someone else has leased is left alone.
 
 ## Puppet sessions
 

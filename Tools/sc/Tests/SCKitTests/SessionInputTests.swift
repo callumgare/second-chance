@@ -1,4 +1,5 @@
 import ArgumentParser
+import Foundation
 import Testing
 @testable import SCKit
 
@@ -33,5 +34,71 @@ struct SessionInputTests {
     @Test("A --then action splits at spaces outside quotes")
     func words() {
         #expect(SessionInput.words(#"type "a b"  key return"#) == ["type", "a b", "key", "return"])
+    }
+}
+
+/// The keep-alive's socket, talked to as `sc session do` does, through nc.
+@Suite(.serialized)
+struct SessionInputServerTests {
+    /// `requests` sent as JSON lines and an empty line, the replies read back.
+    static func send(_ requests: [SessionInputRequest], to path: String) async throws -> [SessionInputReply] {
+        let encoder = JSONEncoder()
+        var input = Data()
+        for request in requests { input += try encoder.encode(request) + Data("\n".utf8) }
+        input += Data("\n".utf8)
+        let output = try await Task.detached { () throws -> Data in
+            let nc = Process()
+            nc.executableURL = URL(fileURLWithPath: "/usr/bin/nc")
+            nc.arguments = ["-U", path]
+            let stdin = Pipe(), stdout = Pipe()
+            nc.standardInput = stdin
+            nc.standardOutput = stdout
+            try nc.run()
+            stdin.fileHandleForWriting.write(input)
+            try stdin.fileHandleForWriting.close()
+            let data = stdout.fileHandleForReading.readDataToEndOfFile()
+            nc.waitUntilExit()
+            return data
+        }.value
+        return try output.split(separator: UInt8(ascii: "\n")).map { try JSONDecoder().decode(SessionInputReply.self, from: Data($0)) }
+    }
+
+    static func folder() throws -> URL {
+        // A socket's path must be short, so not the long temporary directory.
+        let folder = URL(fileURLWithPath: "/tmp/sc-input-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }
+
+    @Test("Without a connection, a request is turned away at once")
+    func unconnected() async throws {
+        let folder = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let server = try SessionInputServer(user: NSUserName(), folder: folder)
+        defer { server.close() }
+        let replies = try await Self.send([SessionInputRequest(input: .move(x: 1, y: 2), width: nil)],
+                                          to: SessionInputServer.socketPath(for: NSUserName(), in: folder))
+        #expect(replies.count == 1)
+        #expect(replies.first?.error?.contains("isn't connected") == true)
+    }
+
+    @Test("Each request reaches the keep-alive in turn and is answered once it's done")
+    func answered() async throws {
+        let folder = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let server = try SessionInputServer(user: NSUserName(), folder: folder)
+        defer { server.close() }
+        server.setConnected(true)
+        let sent = [SessionInputRequest(input: .click(x: 920, y: 594, buttons: 1, count: 1), width: 1600),
+                    SessionInputRequest(input: .type("hi"), width: nil)]
+        let client = Task { try await Self.send(sent, to: SessionInputServer.socketPath(for: NSUserName(), in: folder)) }
+        let first = try #require(await server.next(within: 10))
+        #expect(first.request == sent[0])
+        first.finish()
+        let second = try #require(await server.next(within: 10))
+        #expect(second.request == sent[1])
+        second.finish(error: "no keyboard")
+        let replies = try await client.value
+        #expect(replies == [SessionInputReply(error: nil), SessionInputReply(error: "no keyboard")])
     }
 }

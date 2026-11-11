@@ -47,11 +47,50 @@ struct SessionDoCommand: AsyncParsableCommand {
                           + (lease.expires.map { " until \(ScreenLease.clock($0))" } ?? "") + ": leaving it alone.",
                           hints: ["Claim a free one: sc" + (mac.map { " --on \($0)" } ?? "") + " session claim --purpose \"…\""])
         }
+        // Through the keep-alive's connection into the session when it takes
+        // input; otherwise a connection of this run's own.
+        if try await throughKeepAlive(steps, on: mac, host: host, ui: session.ui) { return }
+        session.ui.detail("The keep-alive on \(host) doesn't take input (an older one?): logging in to Screen Sharing directly.")
+        try await directly(steps, on: mac, host: host, ui: session.ui)
+    }
+
+    /// Sends `steps` to the keep-alive's socket for the user (`SessionInputServer`),
+    /// over SSH for another Mac. False when there's no socket to reach.
+    private func throughKeepAlive(_ steps: [SessionInput], on mac: String?, host: String, ui: UI) async throws -> Bool {
+        let encoder = JSONEncoder()
+        var input = ""
+        for step in steps {
+            input += String(decoding: try encoder.encode(SessionInputRequest(input: step, width: width)), as: UTF8.self) + "\n"
+        }
+        input += "\n"
+        let path = SessionInputServer.socketPath(for: user)
+        let result = try await TestSessionAccess.asConsoleUser(mac, "[ -S \(Remote.quote(path)) ] || exit 3; exec /usr/bin/nc -U \(Remote.quote(path))",
+                                                              input: input)
+        if result.status == 3 { return false }
+        let replies = result.output.split(whereSeparator: \.isNewline).map {
+            (try? JSONDecoder().decode(SessionInputReply.self, from: Data($0.utf8))) ?? SessionInputReply(error: String($0))
+        }
+        // Nothing answered: nobody listening (a keep-alive that's stopped).
+        if replies.isEmpty { return false }
+        for (step, reply) in zip(steps, replies) {
+            if let error = reply.error { throw SCError("\(user)@\(host): couldn't do \"\(step.description)\": \(error).") }
+            ui.line("\(user)@\(host): \(step.description)")
+        }
+        guard replies.count == steps.count else {
+            throw SCError("\(user)@\(host): the keep-alive answered \(replies.count) of \(steps.count) actions."
+                          + (result.error.isEmpty ? "" : " \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))"))
+        }
+        return true
+    }
+
+    /// Logs in to the session's Screen Sharing for this run alone. Logged in
+    /// from the Mac's own localhost, as the keep-alive is: from the network,
+    /// Screen Sharing turns the test user's login down. On another Mac that's
+    /// through an SSH tunnel; here, straight there (the Screen Sharing app
+    /// won't connect a Mac to itself, but this isn't it). Leaves a "Viewer has
+    /// disconnected" notification on the session's screen.
+    private func directly(_ steps: [SessionInput], on mac: String?, host: String, ui: UI) async throws {
         let password = try await TestSessionAccess.password(of: user, on: mac)
-        // Logged in from the Mac's own localhost, as the keep-alive is: from
-        // the network, Screen Sharing turns the test user's login down. On
-        // another Mac that's through an SSH tunnel; here, straight there (the
-        // Screen Sharing app won't connect a Mac to itself, but this isn't it).
         var port: UInt16 = 5900
         var tunnel: Process?
         defer { tunnel?.terminate() }
@@ -70,7 +109,7 @@ struct SessionDoCommand: AsyncParsableCommand {
         let scale = Double(connection.width) / Double(max(1, width))
         for step in steps {
             try await SessionInput.perform(step, on: connection, scale: scale)
-            session.ui.line("\(user)@\(host): \(step.description)")
+            ui.line("\(user)@\(host): \(step.description)")
         }
         // Let the server deliver the last events before the connection goes.
         try await Task.sleep(for: .milliseconds(300))
@@ -78,7 +117,7 @@ struct SessionDoCommand: AsyncParsableCommand {
 }
 
 /// What `session do` sends, and how it's read from the command line.
-enum SessionInput: Equatable {
+enum SessionInput: Codable, Equatable {
     case click(x: Double, y: Double, buttons: UInt8, count: Int)
     case move(x: Double, y: Double)
     case drag(x: Double, y: Double, toX: Double, toY: Double)

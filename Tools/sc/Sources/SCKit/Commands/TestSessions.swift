@@ -296,15 +296,41 @@ enum SessionKeepAlive {
 
     static func keep(_ user: String) async {
         var wait = 5.0
+        // Input for the session (`sc session do`), sent down the connection.
+        var inbox: SessionInputServer?
+        do {
+            inbox = try SessionInputServer(user: user)
+        } catch {
+            say("\(user): \(error.localizedDescription); no input into this session")
+        }
+        defer { inbox?.close() }
         while !Task.isCancelled {
             do {
                 let password = try await SessionPool.password(for: user)
                 let connection = try ScreenSharingConnection(user: user, password: password)
                 say("\(user): connected (\(connection.width)x\(connection.height))")
+                inbox?.setConnected(true)
                 wait = 5
                 var checked = Date.distantPast
+                var refreshed = Date.distantPast
                 let connected = Date()
                 while !Task.isCancelled {
+                    // Input as it comes; a refresh every 2 s between.
+                    if let job = await inbox?.next(within: max(0.05, 2 - Date().timeIntervalSince(refreshed))) {
+                        do {
+                            let scale = job.request.width.map { Double(connection.width) / Double(max(1, $0)) } ?? 1
+                            try await SessionInput.perform(job.request.input, on: connection, scale: scale)
+                            job.finish()
+                        } catch {
+                            job.finish(error: error.localizedDescription)
+                            throw error
+                        }
+                        continue
+                    } else if inbox == nil {
+                        try await Task.sleep(for: .seconds(2))
+                    }
+                    guard Date().timeIntervalSince(refreshed) >= 2 else { continue }
+                    refreshed = Date()
                     try connection.refresh()
                     if Date().timeIntervalSince(checked) >= 10 {
                         checked = Date()
@@ -321,11 +347,11 @@ enum SessionKeepAlive {
                             try connection.unlock(password: password)
                         }
                     }
-                    try await Task.sleep(for: .seconds(2))
                 }
             } catch is CancellationError {
                 return
             } catch {
+                inbox?.setConnected(false)
                 say("\(user): \(error.localizedDescription); again in \(Int(wait)) s")
                 try? await Task.sleep(for: .seconds(wait))
                 // A refused password retried too often could lock the account.
