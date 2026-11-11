@@ -222,6 +222,29 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
         options["wine.display-mode"].flatMap(DisplayMode.init(parsing:))
     }
 
+    /// `--wine.clear=<path>[;<path>…]`: files or folders on Wine's C: the
+    /// wrapp removes before every launch, as paths from C:'s root
+    /// (`/users/crossover/AppData/Local/Temp/wmLaunch.tmp`), for a program
+    /// that leaves a mark of itself that stops its next start (Webmaster's
+    /// `wmLaunch.tmp`). Empty without one; nil for one that names a path
+    /// not on C:, C: itself or one with `..` in it (planning refuses that).
+    public var clearedAtLaunch: [String]? { Self.clearedPaths(options["wine.clear"]) }
+
+    /// `--wine.clear`'s value as paths from C:'s root, or nil if one isn't
+    /// a file or folder on C:.
+    public static func clearedPaths(_ value: String?) -> [String]? {
+        guard let value else { return [] }
+        var paths: [String] = []
+        for part in value.split(separator: ";") {
+            let path = part.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "\\", with: "/")
+            guard path.uppercased().hasPrefix("C:/") else { return nil }
+            let components = path.dropFirst(3).split(separator: "/")
+            guard !components.isEmpty, !components.contains(where: { $0 == ".." || $0 == "." }) else { return nil }
+            paths.append("/" + components.joined(separator: "/"))
+        }
+        return paths.isEmpty ? nil : paths
+    }
+
     /// `--wine.colors=<count>`: how many colours Wine shows the program's
     /// screen as having, for a program that won't run on more (Webmaster's
     /// installer insists on 256): the colour depth, 8 for 256 and 16 for

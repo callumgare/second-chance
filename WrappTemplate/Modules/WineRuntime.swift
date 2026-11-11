@@ -110,6 +110,7 @@ final class WineRuntime: GameStarting {
     }
 
     private func prepareSession(_ launch: LaunchContext) async -> PrepareOutcome {
+        clearLeftovers()
         if let path = config.wineSessionVariables[HelperReportFile.variable] {
             let file = HelperReportFile(url: URL(fileURLWithPath: path))
             let watchers = launch.watchers
@@ -132,6 +133,22 @@ final class WineRuntime: GameStarting {
             await WineDisplayMode.set(mode, in: config.wine, logger: logger)
         }
         return .ready
+    }
+
+    /// `--wine.clear`: what the program left last time that would stop it
+    /// starting now, removed (Webmaster's `wmLaunch.tmp`, which says it's
+    /// already running).
+    private func clearLeftovers() {
+        for path in config.launch.clearedAtLaunch ?? [] {
+            let url = WrappLayout.onDriveC(path, in: config.wine.driveC)
+            guard (try? url.checkResourceIsReachable()) == true || FileManager.default.fileExists(atPath: url.path) else { continue }
+            do {
+                try FileManager.default.removeItem(at: url)
+                logger.notice("[Launch] Removed C:\(path), which the launch clears before the program starts")
+            } catch {
+                logger.warning("[Launch] Couldn't remove C:\(path), which the launch clears: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Starting the game

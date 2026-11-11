@@ -4,17 +4,17 @@ id: "tivola/webmaster"
 version: 1
 title: "Webmaster"
 display-name: "Webmaster"
-allow-paths: ["quicktime/", "scummvm/", "assets/"]  # QuickTime 4's setup script; the unfinished ScummVM stage's Lingo.ini; its icon
+allow-paths: ["quicktime/"]  # QuickTime 4's setup script
 
 volumes:
   saves:
-    display-name: "saved games"   # Webmaster.rup, beside the game: its settings and save slots
+    display-name: "saved games"   # Documents, where its save dialog starts
 
 editions:
   - id: "cd"
     source: "disc"
     build:
-      target: "disc"   # the Windows side under Wine; the Wrappfile's scummvm stage is unfinished, and no edition builds it
+      target: "disc"   # the Windows projector under Wine
       inputs:
         disc-1: { type: "disc" }
     detect:
@@ -32,5 +32,5 @@ tests:
   scenario: "wine/starts-and-quits"
   window: "fullscreen"   # its 800x600 window, scaled up from the display mode its launch sets, in a Space
   layouts: # the top level of real discs and installed copies, which its installed signs are checked against
-    - disc: "cd/disc-1" # no installer by name: Webmaster.exe installs itself
+    - disc: "cd/disc-1" # no installer: the game is played from the disc
       files: ["Acrobat Installer.exe", "Data/", "QuickTime Installer/", "Webmaster Help.pdf", "Webmaster.exe", "Xtras/", "ZDAT/", "msvcrt.dll problem/"]

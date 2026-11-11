@@ -82,7 +82,7 @@ nonisolated extension GameInfoProvider {
             id: "webmaster",
             title: "Webmaster",
             diskCount: 1,
-            internalGameExePath: "/Program Files/Tivola/Webmaster/Webmaster.exe",
+            internalGameExePath: "/webmaster-cd/disk-1/Webmaster.exe",
             program: "tivola/webmaster",
             displayName: "Webmaster"
         ),

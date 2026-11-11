@@ -137,8 +137,10 @@ build:
     # that screen that never sets it itself: Wine emulates it and scales the
     # program's windows up (800x600x8 names its colour depth too), and
     # colors (256 or 65536), how many colours the screen shows the program
-    # as having, for one that won't run on more.
-    LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, mouse: value, window: value, quit-key: value, quit-confirm-key: value, fullscreen-setting: value, display-mode: value, colors: value }
+    # as having, for one that won't run on more, and clear, files or folders
+    # on C: (split by ;) removed before every launch, for a program whose
+    # leftovers stop its next start.
+    LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, mouse: value, window: value, quit-key: value, quit-confirm-key: value, fullscreen-setting: value, display-mode: value, colors: value, clear: value }
     # A build step's program's session, as a launch's: display-mode and
     # colors, for an installer that checks the screen as its program does.
     RUN: { display-mode: value, colors: value }

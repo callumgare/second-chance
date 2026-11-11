@@ -505,6 +505,17 @@ app keeps no Wine.
   same.
   Any other count is refused when planning. A `RUN` takes it too
   ([below](#a-build-steps-screen)).
+- **`--wine.clear=<path>[;<path>…]`** has the app remove those files or
+  folders on Wine's C: before every launch, for a program that leaves a
+  mark of itself that stops its next start: Webmaster writes
+  `wmLaunch.tmp` in its Temp folder, naming its window, and quits at once
+  when it finds one naming a window that's open, which a new Wine session's
+  first window always is, so every start after the first failed. Paths are
+  split by `;`; one not on C:, C: itself, or one with `.` or `..` in it is
+  refused when planning.
+- **A Wine launch starts a program on C:**, and planning refuses one on
+  another drive: name a program on a drive `WINE.MOUNT` or
+  `WINE.KEEP-DISCS` made through the folder on C: that drive is.
 - **`--wine.quit-key=<keys>`** makes the app's Quit press those keys in the
   program, written in the [key notation](#key-sequences), for one that
   ignores Wine's quit but quits on a key of its own: Iji's is

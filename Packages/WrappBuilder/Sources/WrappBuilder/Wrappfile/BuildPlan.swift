@@ -1272,6 +1272,15 @@ public nonisolated struct BuildPlanner {
             switch launch.launcher() {
             case .wine?:
                 try checkGraphics("a Wine launch")
+                // The app starts a Wine program from its folder on C: (a
+                // folder another drive letter is can be named through C:).
+                guard launch.program.uppercased().hasPrefix("WINE:C:") else {
+                    throw PlanError(description: "\(origin): a Wine launch starts a program on C:, not \(launch.program.dropFirst(5))")
+                }
+                if launch.clearedAtLaunch == nil {
+                    throw PlanError(description: "\(origin): --wine.clear names files or folders on C:, split by ;, "
+                                    + "with no . or .. in them: C:/users/crossover/AppData/Local/Temp/wmLaunch.tmp")
+                }
             case .steam?, .bigFish?:
                 // Steam, or Big Fish's DRM, starts a Windows game in the app's
                 // Wine, so the launch says what it draws with too, and the
