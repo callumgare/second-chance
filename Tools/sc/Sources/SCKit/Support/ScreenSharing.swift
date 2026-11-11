@@ -153,6 +153,22 @@ final class ScreenSharingConnection {
         }
     }
 
+    // MARK: Input
+
+    /// Moves the pointer to `x`, `y` in the screen's pixels with `buttons`
+    /// held (bit 0 the left, 1 the middle, 2 the right). Over Screen Sharing
+    /// this moves the session's real pointer, which nothing run in a test
+    /// session can (docs/wine-in-process-helpers.md#virtual-pointer).
+    func pointer(x: Int, y: Int, buttons: UInt8 = 0) throws {
+        let x = UInt16(clamping: max(0, min(x, width - 1))), y = UInt16(clamping: max(0, min(y, height - 1)))
+        try write([5, buttons, UInt8(x >> 8), UInt8(x & 0xFF), UInt8(y >> 8), UInt8(y & 0xFF)])
+    }
+
+    /// Presses (`down`) or lets go of the key with X11 keysym `keysym`.
+    func key(_ keysym: UInt32, down: Bool) throws {
+        try write([4, down ? 1 : 0, 0, 0, UInt8(keysym >> 24), UInt8((keysym >> 16) & 0xFF), UInt8((keysym >> 8) & 0xFF), UInt8(keysym & 0xFF)])
+    }
+
     // MARK: The socket
 
     private static func connect(host: String, port: UInt16) throws -> Int32 {

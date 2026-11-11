@@ -16,7 +16,7 @@ struct SessionCommand: AsyncParsableCommand {
         """,
         subcommands: [SessionListCommand.self, SessionClaimCommand.self, SessionReleaseCommand.self,
                       SessionKeepAliveCommand.self, SessionAddCommand.self, SessionLogoutCommand.self,
-                      SessionRemoveCommand.self, SessionSetupCommand.self, SessionViewCommand.self, SessionScreenshotCommand.self,
+                      SessionRemoveCommand.self, SessionSetupCommand.self, SessionViewCommand.self, SessionScreenshotCommand.self, SessionDoCommand.self,
                       SessionExportSigningCommand.self],
         defaultSubcommand: SessionListCommand.self
     )

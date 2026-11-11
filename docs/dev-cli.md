@@ -1041,6 +1041,26 @@ installers and the Finder, which no game window shows, can be seen. Like
 ("could not create image from display"): the process macOS checks for Screen Recording
 is the one in the GUI session, Peekaboo's bridge.
 
+**Clicking and typing in a test session:** `sc session do <user> [--on <host>] click <x> <y>`
+(also `move`, `drag <x> <y> <x2> <y2>`, `key <keys>` and `type "<text>"`, with
+`--button right`, `--count 2` and `--then "<action>"` as `puppet do` takes them) sends
+the input over Screen Sharing, which is the only way anything gets into a test session.
+There the pointer can't be moved by a program
+([virtual pointer](wine-in-process-helpers.md#virtual-pointer)): Peekaboo's
+clicks, `CGWarpMouseCursorPosition` and posted events leave it where it was, so a Wine
+program reads the old position and the click lands somewhere else. Only a game
+`sc puppet` started has the virtual pointer. A pointer event from a Screen Sharing
+viewer moves the real one, so `session do` reaches anything on that screen: an
+installer a build step runs, a dialog, the Finder. Points are in a
+`session screenshot` picture (`--width`, 1600 unless the picture was taken with
+another `--max`). Keys are names (`return`, `escape`, `tab`, `f5`, `left`, a
+character), chords (`cmd+q`) and repeats (`down*3`), pressed 0.3 s apart. It logs in
+from that Mac's own localhost, through an SSH tunnel (for this Mac, straight there),
+because Screen Sharing turns the test users' login down from the network. The password is
+read from that Mac's keychain, as for `session view`, and never saved. A session
+someone else has leased is left alone. Each run leaves a "Viewer has disconnected"
+notification on that screen.
+
 ## Puppet sessions
 
 **`sc puppet` drives a program by hand,** for porting and debugging, where a
