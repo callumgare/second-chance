@@ -30,16 +30,17 @@ WINE.KEEP-DISCS ${input.disc-1} --into=C:/webmaster-cd
 
 # It draws with GDI (Dirapi.dll imports neither ddraw nor d3d). The projector
 # never sets a display mode: its window covers whatever screen it finds, its
-# 800x600 stage drawn small in the middle. Started in an 800x600 mode, which
+# 800x600 stage drawn small in the middle. Started in an 640x480 mode, which
 # Wine emulates, its window is the stage, and Wine scales it up to fill the
-# display, which native fullscreen puts in a Space. (Its start screen still
-# asks for a screen size: either plays. 640x480 sets that mode but keeps the
-# 800x600 window, which the mode scaling helper crops to the screen.) It insists on a
-# 256-colour screen, which Wine 10's Mac driver never reports unless told
+# display, which native fullscreen puts in a Space. If a different resolution
+# is used the game will ask if you want to change it to 640x480 or play in the
+# current resolution which doesn't enlarge the game graphics but instead fills
+# in the extra space with black. It insists on a  256-colour screen, which
+# Wine 10's Mac driver never reports unless told
 # (--wine.colors). Started by its C: path, the same folder D: is: a wrapp
 # starts a Wine program only from C:. It leaves wmLaunch.tmp in Temp, naming
 # its window, and quits at once if it finds one naming an open window, which
 # every later Wine session's first is: --wine.clear removes it at each start.
 LAUNCH --mount=type=store,source=saves,target=C:/users/crossover/Documents \
     --wine.clear=C:/users/crossover/AppData/Local/Temp/wmLaunch.tmp \
-    --wine.graphics=unknown --wine.colors=256 --wine.display-mode=800x600x8 ${const.disc-dir}/Webmaster.exe
+    --wine.graphics=unknown --wine.colors=256 --wine.display-mode=640x480x8 ${const.disc-dir}/Webmaster.exe
