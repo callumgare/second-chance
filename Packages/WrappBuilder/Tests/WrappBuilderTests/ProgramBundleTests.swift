@@ -70,6 +70,66 @@ struct ProgramBundleTests {
         #expect(problems.description.contains("its folder says nancy-drew/old-clock"))
     }
 
+    /// A manifest with a disc edition, its installed signs and layouts as
+    /// written (YAML), unchecked by the schema.
+    private func manifest(id: String = "test/program", installed: String, layouts: String = "") throws -> Manifest {
+        try Manifest.decode(try YAML12.load("""
+        format: 1
+        id: "\(id)"
+        version: 1
+        title: "Test"
+        installed: \(installed)
+        editions:
+          - { id: "cd", source: "disc", build: { inputs: { disc-1: { type: "disc" } } } }
+        tests:
+          layouts: \(layouts.isEmpty ? "[]" : layouts)
+        """))
+    }
+
+    @Test func anInstalledSignMustNameItsFile() throws {
+        for glob in ["*.exe", "*", "Game/*.EXE", "?.exe"] {
+            let problems = ProgramBundleLoader.installedProblems(try manifest(installed: "[{ file-exists: \"\(glob)\" }]"))
+            #expect(problems.contains { $0.contains("would turn down any disc") }, "\(glob)")
+        }
+        for glob in ["Game.exe", "Game*.exe", "Ciftree"] {
+            #expect(ProgramBundleLoader.installedProblems(try manifest(installed: "[{ file-exists: \"\(glob)\" }]")) == [], "\(glob)")
+        }
+    }
+
+    @Test func aBundlesSignsAreCheckedAgainstItsOwnLayouts() throws {
+        let good = try manifest(installed: "[{ file-exists: \"Game.exe\" }]", layouts: """
+        [{ disc: "cd/disc-1", installer: "Setup.exe", files: ["Game/", "Setup.exe"] }, { installed: "cd", files: ["Game.exe", "Nancy.cid"] }]
+        """)
+        #expect(ProgramBundleLoader.installedProblems(good) == [])
+        let refusesItsDisc = try manifest(installed: "[{ file-exists: \"Setup.exe\" }]", layouts: """
+        [{ disc: "cd/disc-1", files: ["Setup.exe"] }]
+        """)
+        #expect(ProgramBundleLoader.installedProblems(refusesItsDisc) == ["its installed sign file-exists Setup.exe would turn down its own disc cd/disc-1"])
+        let missesItsCopy = try manifest(installed: "[{ file-exists: \"Game.exe\" }]", layouts: """
+        [{ installed: "cd", files: ["Other.exe"] }]
+        """)
+        #expect(ProgramBundleLoader.installedProblems(missesItsCopy) == ["none of its installed signs matches its layout installed by cd"])
+        let namesNothing = try manifest(installed: "[]", layouts: """
+        [{ disc: "steam/disc-1", files: [] }, { disc: "cd/disc-2", files: [] }, { installed: "big-fish", installer: "x.exe", files: [] }]
+        """)
+        #expect(ProgramBundleLoader.installedProblems(namesNothing) == [
+            "its layout of steam/disc-1 names no disc input of a disc edition",
+            "its layout of cd/disc-2 names no disc input of a disc edition",
+            "its layout installed by big-fish names no edition it has",
+            "its layout installed by big-fish has an installer, which only a disc's can",
+        ])
+    }
+
+    @Test func aSignMustNotTurnDownAnotherBundlesDisc() throws {
+        let game = try manifest(id: "test/game", installed: "[{ file-exists: \"Game.exe\" }]")
+        let other = try manifest(id: "test/other", installed: "[]", layouts: """
+        [{ disc: "cd/disc-1", files: ["Game.exe", "setup.exe"] }]
+        """)
+        #expect(ProgramBundleLoader.installedSignProblems([game, other]).map(\.description)
+            == ["test/game: its installed sign file-exists Game.exe would turn down test/other's disc cd/disc-1"])
+        #expect(ProgramBundleLoader.installedSignProblems([other]) == [])
+    }
+
     /// A copy of the schema and one bundle in a folder of its own, with
     /// `id` as the manifest's id.
     private func temporaryBundle(id: String, in path: String, editions: String? = nil) throws -> URL {
@@ -83,6 +143,7 @@ struct ProgramBundleTests {
         id: "\(id)"
         version: 1
         title: "Test"
+        installed: []
         editions:
         \(editions ?? "  - { id: \"cd\", source: \"disc\", build: { inputs: { disc-1: { type: \"disc\" } } } }")
 

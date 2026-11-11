@@ -45,11 +45,18 @@ editions:
       inputs:
         game: { type: "big-fish-game", product: 6180 }
 
+installed: # what a folder holding it already installed has: its disc's build can't install from one
+  - { file-exists: "Secrets.exe" }
+
 tests:
   scenario: "nancy-drew/quit-from-menu"
   window: "fullscreen"
   parameters:
     blank-start-takes-click: true # black for 5 s, then logo and title for 15 s; a click 1.5 s in brings the menu up
+  layouts: # the top level of real discs and installed copies, which its installed signs are checked against
+    - disc: "cd/disc-1"
+      installer: "setup.exe"
+      files: ["autorun.inf", "icon.ico", "setup.exe"]
 
 notes:
   quirks:

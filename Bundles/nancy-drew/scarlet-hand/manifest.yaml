@@ -45,6 +45,8 @@ editions:
       inputs:
         game: { type: "big-fish-game", product: 5087 }
 
+installed: [] # ScummVM runs an installed copy's files as it runs the disc's, so one isn't turned down
+
 tests:
   scenario: "nancy-drew/quit-from-menu"
   window: "fullscreen"

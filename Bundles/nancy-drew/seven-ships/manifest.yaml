@@ -33,9 +33,16 @@ editions:
         game: { type: "steam-game", app-id: 31980, common-folder: "Nancy Drew Ransom of the Seven Ships" }
     # drm left out: not known, so the game is started through Steam
 
+installed: # what a folder holding it already installed has: its disc's build can't install from one
+  - { file-exists: "Ransom.exe" }
+
 tests:
   scenario: "nancy-drew/quit-from-menu"
   window: "fullscreen"
+  layouts: # the top level of real discs and installed copies, which its installed signs are checked against
+    - disc: "cd/disc-1"
+      installer: "Setup.msi"
+      files: ["Ndc.cab", "PreReq.cab", "RAN1.cab", "Setup.exe", "Setup.msi", "autorun.exe", "autorun.inf"]
 
 notes:
   quirks:

@@ -127,6 +127,7 @@ public nonisolated final class ProgramBundleLoader {
                 all.append(.init(bundle: bundle.manifest.id, message: "is the id of two bundles (\(other) too)"))
             }
         }
+        all += Self.installedSignProblems(bundles.map(\.manifest)).map { .init(bundle: $0.bundle, message: $0.message) }
         return all.isEmpty ? .success(bundles) : .failure(Problems(all: all))
     }
 
@@ -194,6 +195,68 @@ public nonisolated final class ProgramBundleLoader {
                 messages.append("edition \(edition.id) is a \(edition.source.rawValue) edition, so its input \(input.id) can't be a \(input.type.rawValue)")
             }
         }
+        messages += installedProblems(manifest)
         return messages.sorted()
+    }
+
+    /// What's wrong with a manifest's `installed` signs and its layouts: a
+    /// sign that would turn down any disc with a program on it, a layout
+    /// naming no disc or edition it has, an installed copy none of its signs
+    /// matches, or a disc of its own one of them does.
+    static func installedProblems(_ manifest: Manifest) -> [String] {
+        var messages: [String] = []
+        for case .matcher(.fileExists(let glob)) in manifest.installedSigns where !isDistinctive(glob) {
+            messages.append("its installed sign file-exists \(glob) would turn down any disc with such a file; name the file")
+        }
+        let editions = Dictionary(manifest.editions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for layout in manifest.tests?.layouts ?? [] {
+            if let disc = layout.disc {
+                let parts = disc.split(separator: "/").map(String.init)
+                guard let edition = editions[parts[0]], edition.source == .disc,
+                      edition.build?.inputs?.contains(where: { $0.id == parts[1] && $0.type == .disc }) == true else {
+                    messages.append("its layout of \(disc) names no disc input of a disc edition")
+                    continue
+                }
+                if let sign = manifest.installedSigns.first(where: { $0.couldMatch(paths: layout.files) }) {
+                    messages.append("its installed sign \(sign.description) would turn down its own \(layout.name)")
+                }
+            } else if let edition = layout.installed {
+                if editions[edition] == nil {
+                    messages.append("its layout installed by \(edition) names no edition it has")
+                }
+                if layout.installer != nil {
+                    messages.append("its layout installed by \(edition) has an installer, which only a disc's can")
+                }
+                if !manifest.installedSigns.isEmpty, !manifest.installedSigns.contains(where: { $0.couldMatch(paths: layout.files) }) {
+                    messages.append("none of its installed signs matches its layout \(layout.name)")
+                }
+            }
+        }
+        return messages
+    }
+
+    /// Every bundle's `installed` sign that would turn down another
+    /// bundle's disc, by the discs' layouts.
+    static func installedSignProblems(_ manifests: [Manifest]) -> [ProgramBundle.Problem] {
+        let discs = manifests.flatMap { manifest in
+            (manifest.tests?.layouts ?? []).filter { $0.disc != nil }.map { (owner: manifest.id, layout: $0) }
+        }
+        return manifests.flatMap { manifest in
+            manifest.installedSigns.flatMap { sign in
+                discs.filter { $0.owner != manifest.id && sign.couldMatch(paths: $0.layout.files) }.map { disc in
+                    ProgramBundle.Problem(bundle: manifest.id,
+                                          message: "its installed sign \(sign.description) would turn down \(disc.owner)'s \(disc.layout.name)")
+                }
+            }
+        }
+    }
+
+    /// Whether a file's glob names something more than an extension: its
+    /// last part with the wildcards and its extension taken away still has
+    /// a letter or digit (`Game.exe`, `Game*.exe`, but not `*.exe` or `*`).
+    static func isDistinctive(_ glob: String) -> Bool {
+        let name = String(glob.split(separator: "/").last ?? "")
+        let stem = name.lastIndex(of: ".").map { String(name[..<$0]) } ?? name
+        return stem.contains { $0.isLetter || $0.isNumber }
     }
 }

@@ -45,6 +45,9 @@ editions:
       inputs:
         game: { type: "big-fish-game", product: 18045 }
 
+installed: # what a folder holding it already installed has: its disc's build can't install from one
+  - { file-exists: "SeaOfDarkness.exe" }
+
 tests:
   scenario: "nancy-drew/quit-from-menu"
   window: "fullscreen"

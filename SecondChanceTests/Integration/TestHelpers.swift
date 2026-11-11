@@ -302,10 +302,11 @@ enum WrappInfo {
 
 /// Points a disk build at the game a wrapp has installed, as someone might
 /// choose an installed game's folder instead of its disc, and expects it
-/// turned down with `installedGameNotInstaller` before anything is copied.
-/// Run on a built wrapp before it is deleted, for every source: its
-/// installed game is what such a folder holds. A ScummVM wrapp holds only
-/// the copied disc, which is an installer, so it has nothing to check.
+/// turned down with `installedGameNotInstaller` before anything is copied,
+/// by its bundle's `installed` signs. Run on a built wrapp before it is
+/// deleted, for every source: its installed game is what such a folder
+/// holds. A ScummVM wrapp holds only the copied disc, and its bundle turns
+/// no installed copy down, so it has nothing to check.
 enum InstalledGameCheck {
     static func run(wrapp: URL, game: GameInfo, outcome: GameOutcome) async {
         guard WrappInfo.gameEngine(at: wrapp) != .scummvm,
@@ -350,7 +351,13 @@ enum InstalledGameCheck {
 
         outcome.expect(!completed && recorder.completedWrapp == nil,
                        "A build from \(game.id)'s installed game (\(installedGame.path)) made a wrapp")
-        outcome.expect(recorder.failedError == .installedGameNotInstaller,
+        // Named, or not when another program's signs tie with its own.
+        let turnedDown = if case .installedGameNotInstaller(let title) = recorder.failedError {
+            title == nil || title == game.title
+        } else {
+            false
+        }
+        outcome.expect(turnedDown,
                        "A build from \(game.id)'s installed game failed with \(String(describing: recorder.failedError)), not installedGameNotInstaller")
     }
 }

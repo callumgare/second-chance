@@ -27,6 +27,9 @@ editions:
     licence: "free-release" # its makers gave it away in 2004
     licence-from: "its makers' freeware release, as the OpenTyrian project hosts it"
 
+installed: # what a folder holding it already installed has: no disc builds it, so one chosen as a disc is turned down
+  - { file-exists: "TYRIAN2K.EXE" }
+
 tests:
   scenario: "dosbox/starts-and-quits"
   window: "fullscreen"

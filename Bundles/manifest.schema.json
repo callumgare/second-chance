@@ -5,7 +5,7 @@
   "description": "A program bundle's manifest.yaml: what the program is, the editions it was sold as and the sources each comes from, the variants it can run as, and what it keeps outside its app. docs/program-bundles.md describes every field.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["format", "id", "version", "title", "editions"],
+  "required": ["format", "id", "version", "title", "editions", "installed"],
   "properties": {
     "format": {
       "description": "The manifest format this is written in. A newer format than the app reads is refused.",
@@ -62,6 +62,12 @@
       "type": "array",
       "items": { "$ref": "#/$defs/edition" },
       "minItems": 1
+    },
+    "installed": {
+      "description": "What a folder holding the program already installed has at its top, any one sign enough: such a folder chosen as a disc is turned down. [] when an installed copy needn't be (one its build can take as it takes a disc). Every bundle says (docs/program-bundles.md#installed-copies).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/installed-sign" },
+      "uniqueItems": true
     },
     "updates": {
       "type": "array",
@@ -141,6 +147,66 @@
           "type": "array",
           "items": { "$ref": "#/$defs/matcher" },
           "minItems": 1
+        }
+      }
+    },
+    "installed-sign": {
+      "oneOf": [
+        { "$ref": "#/$defs/installed-matcher" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["all-of"],
+          "properties": {
+            "all-of": {
+              "description": "Matchers that must all match.",
+              "type": "array",
+              "items": { "$ref": "#/$defs/installed-matcher" },
+              "minItems": 2,
+              "uniqueItems": true
+            }
+          }
+        }
+      ]
+    },
+    "installed-matcher": {
+      "description": "A matcher that looks at the folder's files: an installed folder has no volume name or MSI of its own.",
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "file-exists": { "$ref": "#/$defs/matcher/properties/file-exists" },
+        "file-contains": { "$ref": "#/$defs/matcher/properties/file-contains" },
+        "file-hash": { "$ref": "#/$defs/matcher/properties/file-hash" },
+        "exe-version": { "$ref": "#/$defs/matcher/properties/exe-version" }
+      }
+    },
+    "layout": {
+      "description": "A real disc's, or the installed program's folder's, top level, which the bundle's installed signs are checked against: a name ending in / is a folder.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files"],
+      "oneOf": [{ "required": ["disc"] }, { "required": ["installed"] }],
+      "properties": {
+        "disc": {
+          "description": "<edition>/<input>: the disc input of a disc edition.",
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "installed": {
+          "description": "The edition whose build installed this.",
+          "$ref": "#/$defs/name"
+        },
+        "installer": {
+          "description": "The installer Second Chance finds on the disc by name (an .msi, setup.exe or install.exe).",
+          "type": "string",
+          "minLength": 1
+        },
+        "files": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/relative-path" },
+          "uniqueItems": true
         }
       }
     },
@@ -381,7 +447,13 @@
       "properties": {
         "scenario": { "type": "string", "minLength": 1 },
         "parameters": { "type": "object" },
-        "window": { "description": "The window its program is expected to end up in, which WrappPuppeteer holds it to.", "enum": ["fullscreen", "windowed"] }
+        "window": { "description": "The window its program is expected to end up in, which WrappPuppeteer holds it to.", "enum": ["fullscreen", "windowed"] },
+        "layouts": {
+          "description": "The top level of real discs and installed copies of the program, which installed signs are checked against.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/layout" },
+          "minItems": 1
+        }
       }
     }
   }

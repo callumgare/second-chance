@@ -28,6 +28,9 @@ editions:
     licence: "free-release" # "HelpWare": free to use, given away by its author
     licence-from: "the author's website"
 
+installed: # what a folder holding it already installed has: no disc builds it, so one chosen as a disc is turned down
+  - { file-exists: "lasertank.exe" }
+
 tests:
   scenario: "wine/starts-and-quits"
   window: "windowed"

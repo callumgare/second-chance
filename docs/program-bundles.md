@@ -74,9 +74,13 @@ editions:                       # what it was sold as, and where each comes from
       inputs:
         game: { type: "big-fish-game", product: 1297 }   # its number in Big Fish's SKUs
 
+installed:                      # what a folder holding it already installed has; [] for nothing
+  - { file-exists: "Game.exe" }
+
 tests:                          # what WrappPuppeteer does with it
   scenario: "nancy-drew/quit-from-menu"
   window: "fullscreen"          # the window its program must end up in: fullscreen or windowed
+  layouts: [...]                # real discs' and installed copies' top levels, for checking installed
 
 notes:                          # for people only; nothing reads these
   installer: "installshield"
@@ -127,6 +131,7 @@ into `GameInfo`, by field:
 | whether the `steam` edition has a `launch-mode` input | `offersSteamLaunchChoice` |
 | the `big-fish` edition's `big-fish-game` input: `product` | `bigFishProduct` |
 | editions' `detect.aliases` and `detect.codes` | `detectionAliases`, `detectionCodes` |
+| `installed` | nothing: detection reads it at run time ([installed copies](#installed-copies)) |
 | `series`, then `series-order` | the order of `allGames()` |
 
 Editions are what the game was ever sold as, not what is sold now: someone who
@@ -270,6 +275,76 @@ game nothing recognised is. A source nothing recognises is reported as a near
 miss when a hash matcher's file is there with another size or md5, or else
 more than half of a title's words are (common words aside), or else only the
 series' name.
+
+## Installed copies
+
+A disc build installs the program, so a folder holding it already installed
+can't be built from: an InstallShield game's installed folder even keeps a
+stub `Setup.exe` that fails when run. Someone choosing such a folder for the
+disc is turned down, before detection, with a message naming the program.
+What tells such a folder is the bundle's: every manifest says, in
+`installed`, what one has at its top, any one sign enough:
+
+```yaml
+installed:
+  - { file-exists: "CastleMalloy.exe" }      # its program, which no disc has at its top
+  - all-of:                                  # several that must all be there
+      - { file-exists: "Game.exe" }
+      - { file-exists: "Nancy.cid" }
+```
+
+A sign is one of the file matchers [detection](#detection) has
+(`file-exists`, `file-contains`, `file-hash`, `exe-version`), its glob from
+the folder's top, or `all-of` two or more of them. Every bundle's signs are
+tried, as no one knows yet which program the folder is: the most specific
+match wins, scored as detection's matchers are, an `all-of` by its parts
+added up. Where bundles tie (ten Nancy Drew games' program is `Game.exe`),
+the folder is still turned down, without naming one.
+
+`installed: []` says an installed copy isn't turned down: one whose build
+takes an installed copy's files as it takes a disc's (the ScummVM games,
+whose discs are copied into the app as they are), or one with no installed
+folder to choose (a classic Mac program installs inside the emulated Mac).
+A program whose build would fail on one has signs, a download-only one too:
+no disc builds it, and "already installed" says more than "not recognised".
+
+The signs are read at run time from the bundles, as detection's matchers
+are (`DetectionIndex.installedCopy`, in `Packages/WrappBuilder`), not into
+`GameInfo`, and an extra bundle's count as a shipped one's do.
+
+### Layouts
+
+A bundle's `tests.layouts` are the top levels of real discs and installed
+copies of its program, listed by hand from the real thing (a name ending in
+`/` is a folder; a path with a `/` inside is in a folder). A `disc` layout
+names the disc input it is, `<edition>/<input>`, and the installer Second
+Chance finds on it by name; an `installed` one names the edition whose build
+installed it. Loading the bundles checks them against the signs, by names
+alone (a sign that reads a file is taken to match when its file is there).
+Castle Malloy's:
+
+```yaml
+tests:
+  layouts:
+    - disc: "cd/disc-1"
+      installer: "Haunting of Castle Malloy.msi"
+      files: ["Hau1.cab", "Haunting of Castle Malloy.exe", "Haunting of Castle Malloy.msi", "Ndc.cab", "PreReq.cab", "autorun.exe", "autorun.inf"]
+    - installed: "her-windows"
+      files: ["CastleMalloy.INI", "CastleMalloy.exe", "CastleMalloy.gdf", "Ciftree/", "Ndtl.cif", "Ndui.dll", "Sound/", "Video/", "binkw32.dll", "lua5.1.dll"]
+```
+
+The checks:
+
+- each of the bundle's installed copies matches one of its signs, unless it
+  has none;
+- none of its signs matches one of its discs, or any other bundle's disc;
+- a sign `file-exists` names a file, not just an extension (`*.exe` would
+  turn down any disc with a program on it).
+
+`InstalledGameDetectionTests` builds each layout as a folder of empty files
+and checks the disc isn't turned down and its installer is found, and that
+each installed copy is. When a disc is turned down that shouldn't be, its
+layout belongs in its bundle, with whatever sign it tripped narrowed.
 
 ## The table of games
 

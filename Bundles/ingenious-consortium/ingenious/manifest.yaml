@@ -22,6 +22,8 @@ editions:
       matchers:
         - { file-exists: "INGW95.EXE" }   # the Windows projector ScummVM detects it by
 
+installed: [] # it installs inside the emulated Mac, so there is no installed folder to choose
+
 tests:
   scenario: "basilisk/starts-and-quits"
   window: "windowed"   # Basilisk II's window, windowed at start (no green button until the fullscreen helper)

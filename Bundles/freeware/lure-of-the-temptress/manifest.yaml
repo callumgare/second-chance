@@ -31,6 +31,8 @@ editions:
     licence-from: "Revolution Software's licence, in the download"
     licence-file: "lure/LICENSE.txt" # its own words, saved into the app
 
+installed: [] # ScummVM runs its files as they are, so an installed copy is no different
+
 tests:
   scenario: "scummvm/starts-and-quits"
   window: "fullscreen"

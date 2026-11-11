@@ -29,6 +29,9 @@ editions:
     licence-from: "Remar Games' licence, in the download"
     licence-file: "source code/LEGAL.txt" # its own words, saved into the app
 
+installed: # what a folder holding it already installed has: no disc builds it, so one chosen as a disc is turned down
+  - { file-exists: "iji.exe" }
+
 tests:
   scenario: "wine/quits-with-keys"
   parameters:

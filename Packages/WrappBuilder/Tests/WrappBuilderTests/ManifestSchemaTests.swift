@@ -10,6 +10,7 @@ struct ManifestSchemaTests {
     id: "nancy-drew/old-clock"
     version: 1
     title: "Secret of the Old Clock"
+    installed: [{ file-exists: "Game.exe" }]
     editions:
       - id: "cd"
         source: "disc"
@@ -69,6 +70,13 @@ struct ManifestSchemaTests {
         ("    notes:", "    choices: {}\n    notes:", "/editions/1: choices isn't something this can have"),
         // the id needs a namespace
         ("id: \"nancy-drew/old-clock\"", "id: \"old-clock\"", "/id: isn't written as it should be"),
+        // every bundle says what its installed copy has, if only []
+        ("installed: [{ file-exists: \"Game.exe\" }]\n", "", "/: needs installed"),
+        ("installed: [{ file-exists: \"Game.exe\" }]", "installed: []", nil),
+        ("installed: [{ file-exists: \"Game.exe\" }]", "installed: [{ all-of: [{ file-exists: \"Game.exe\" }, { file-exists: \"Nancy.cid\" }] }]", nil),
+        // an installed folder has no volume name, and all-of is of two or more
+        ("installed: [{ file-exists: \"Game.exe\" }]", "installed: [{ volume-name: \"OC\" }]", "/installed/0"),
+        ("installed: [{ file-exists: \"Game.exe\" }]", "installed: [{ all-of: [{ file-exists: \"Game.exe\" }] }]", "/installed/0"),
     ] as [(String, String, String?)])
     func aHandEdit(from original: String, to edit: String, expecting problem: String?) throws {
         #expect(Self.valid.contains(original))

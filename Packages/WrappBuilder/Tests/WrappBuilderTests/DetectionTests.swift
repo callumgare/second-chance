@@ -208,6 +208,9 @@ struct DetectionTests {
     id: "nancy-drew/old-clock"
     version: 1
     title: "The Secret of the Old Clock"
+    installed:
+      - file-exists: "Game.exe"
+      - all-of: [{ file-exists: "Clock.exe" }, { exe-version: { file: "Clock.exe", key: "ProductName", text: "Old Clock" } }]
     editions:
       - id: "cd"
         source: "disc"
@@ -233,10 +236,76 @@ struct DetectionTests {
         return try validator.problems(with: try YAML12.load(yaml), against: ProgramBundle.manifestSchemaID).map(\.description)
     }
 
+    // MARK: Installed copies
+
+    private func installedIndex(_ signs: [(String, InstalledSign)]) -> DetectionIndex {
+        DetectionIndex(rules: [], programs: [], installed: signs.map { .init(bundleID: $0.0, sign: $0.1) })
+    }
+
+    @Test func anInstalledSignMatchesAFolderAtItsTopOnly() throws {
+        let index = installedIndex([(Self.id, .matcher(.fileExists(file: "Game.exe")))])
+        let installed = try disc(["GAME.EXE": Data(), "Nancy.cid": Data()])
+        let disc = try disc(["Game/Game.exe": Data(), "setup.exe": Data()])
+        defer { try? FileManager.default.removeItem(at: installed); try? FileManager.default.removeItem(at: disc) }
+        #expect(index.installedCopy(source(folder: installed)).map(\.bundleID) == [Self.id])
+        #expect(index.installedCopy(source(folder: disc)).isEmpty)
+    }
+
+    @Test func allOfNeedsEveryPart() throws {
+        let index = installedIndex([(Self.id, .allOf([.fileExists(file: "Game.exe"), .fileExists(file: "Nancy.cid")]))])
+        let both = try disc(["Game.exe": Data(), "Nancy.cid": Data()])
+        let one = try disc(["Game.exe": Data()])
+        defer { try? FileManager.default.removeItem(at: both); try? FileManager.default.removeItem(at: one) }
+        #expect(index.installedCopy(source(folder: both)).map(\.bundleID) == [Self.id])
+        #expect(index.installedCopy(source(folder: one)).isEmpty)
+    }
+
+    @Test func theMostSpecificSignWinsAndATieIsEveryBundle() throws {
+        let game: InstalledSign = .matcher(.fileExists(file: "Game.exe"))
+        let index = installedIndex([
+            (Self.other, game), ("test/third", game),
+            (Self.id, .allOf([.fileExists(file: "Game.exe"), .fileExists(file: "Nancy.cid")])),
+        ])
+        let both = try disc(["Game.exe": Data(), "Nancy.cid": Data()])
+        let one = try disc(["Game.exe": Data()])
+        defer { try? FileManager.default.removeItem(at: both); try? FileManager.default.removeItem(at: one) }
+        #expect(index.installedCopy(source(folder: both)).map(\.bundleID) == [Self.id])
+        #expect(index.installedCopy(source(folder: one)).map(\.bundleID) == [Self.other, "test/third"])
+    }
+
+    @Test func aSignReadsTheFileItNames() throws {
+        let readers = WindowsReaders(versionStrings: { _ in ["ProductName": "Old Clock"] }, msiSubject: { _ in nil })
+        let index = installedIndex([(Self.id, .matcher(.exeVersion(file: "Clock.exe", key: "ProductName", text: "old clock")))])
+        let folder = try disc(["Clock.exe": Data()])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        #expect(index.installedCopy(source(folder: folder), readers: readers).map(\.bundleID) == [Self.id])
+        #expect(index.installedCopy(source(folder: folder), readers: .init(versionStrings: { _ in [:] }, msiSubject: { _ in nil })).isEmpty)
+    }
+
+    @Test func aSignNeverRecognisesAProgram() throws {
+        let manifest = try Manifest.decode(try YAML12.load(Self.manifest))
+        let index = DetectionIndex(manifests: [manifest])
+        let folder = try disc(["Game.exe": Data()])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        #expect(index.installedCopy(source(folder: folder)).map(\.bundleID) == [manifest.id])
+        #expect(recognised(index.detect(source(folder: folder))) == nil)
+    }
+
+    @Test func aLayoutIsMatchedByItsNamesAlone() {
+        let sign: InstalledSign = .allOf([.fileExists(file: "Game.exe"), .exeVersion(file: "Game.exe", key: "ProductName", text: "x")])
+        #expect(sign.couldMatch(paths: ["Ciftree/", "game.exe"]))
+        #expect(!sign.couldMatch(paths: ["Game/", "Game/Game.exe"]))
+        #expect(InstalledSign.matcher(.fileExists(file: "Ciftree")).couldMatch(paths: ["Ciftree/"]))
+    }
+
     @Test func everyKindIsWrittenInTheManifest() throws {
         #expect(try problems(Self.manifest) == [])
         let manifest = try Manifest.decode(try YAML12.load(Self.manifest))
         let rules = DetectionIndex.rules(manifest)
+        #expect(manifest.installedSigns == [
+            .matcher(.fileExists(file: "Game.exe")),
+            .allOf([.fileExists(file: "Clock.exe"), .exeVersion(file: "Clock.exe", key: "ProductName", text: "Old Clock")]),
+        ])
         #expect(rules.filter { $0.edition == nil }.map(\.matcher) == [.text("secret of the old clock"), .text("nancy drew oc"), .word("OCK")])
         #expect(rules.filter { $0.edition == "cd" }.map(\.matcher) == [
             .fileExists(file: "Game/Nancy.cid"),

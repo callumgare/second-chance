@@ -28,6 +28,9 @@ editions:
     licence: "freeware-licensed" # its readme: "you are encouraged to distribute this game (in its original form)"
     licence-from: "Free Lunch Design's readme, in the game"
 
+installed: # what a folder holding it already installed has: no disc builds it, so one chosen as a disc is turned down
+  - { file-exists: "icytower13.exe" }
+
 tests:
   scenario: "wine/starts-and-quits"
   window: "windowed" # its own default, and a test starts with no saved settings

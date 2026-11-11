@@ -26,6 +26,15 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
     /// A Wrappfile function the default stages run first.
     public let setup: String?
     public let editions: [Edition]
+    /// What a folder holding the program already installed has, any one
+    /// sign enough: such a folder is turned down where an installer is
+    /// wanted (`DetectionIndex.installedCopy`). Empty when an installed copy
+    /// is never turned down. The schema has every bundle say; a manifest
+    /// made for a module's stage (`BuildPlan`) has none.
+    public let installed: [InstalledSign]?
+
+    /// Its `installed` signs, none when it has none.
+    public var installedSigns: [InstalledSign] { installed ?? [] }
     /// What is kept outside the app, by name.
     public let volumes: [String: Volume]?
     /// How an old wrapp is brought up to this bundle, in order (`UpdatePlanner`).
@@ -40,6 +49,26 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         /// `windowed`: what WrappPuppeteer holds it to.
         public let window: String?
         public let parameters: [String: TestValue]?
+        /// The top level of real discs and installed copies, which its
+        /// `installed` signs are checked against.
+        public let layouts: [Layout]?
+    }
+
+    /// What a real disc, or a folder holding the program installed, has at
+    /// its top level: a name ending in `/` is a folder.
+    public struct Layout: Decodable, Hashable, Sendable {
+        /// `<edition>/<input>`: the disc this is.
+        public let disc: String?
+        /// The edition whose build installed this.
+        public let installed: String?
+        /// The installer Second Chance finds on the disc, by name.
+        public let installer: String?
+        public let files: [String]
+
+        /// What it is, for a message: `disc cd/disc-1`, `installed by cd`.
+        public var name: String {
+            if let disc { "disc \(disc)" } else { "installed by \(installed ?? "?")" }
+        }
     }
 
     /// A number, flag or text, kept as text for `${…}`.

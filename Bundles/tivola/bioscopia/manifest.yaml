@@ -23,6 +23,9 @@ editions:
       matchers:
         - { file-exists: "Transfer/Bioscopia.exe" }   # the Windows projector the installer copies
 
+installed: # what a folder holding it already installed has: its disc's build can't install from one
+  - { file-exists: "Bioscopia.exe" }
+
 tests:
   scenario: "wine/starts-and-quits"
   window: "fullscreen"   # its 800x600 window, scaled up from the display mode its launch sets, in a Space

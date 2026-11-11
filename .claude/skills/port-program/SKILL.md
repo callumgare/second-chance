@@ -660,9 +660,11 @@ is a few lines on an existing one. The steps:
 1. Create `Bundles/<namespace>/<name>/` with the Wrappfile, and a
    `manifest.yaml` following `docs/program-bundles.md`: `id`, `title`,
    editions (each with its `source`, `build.target` and inputs), the
-   volumes the program writes to, `tests`, and `notes` (`about`, and
-   `checked`: what you checked and when). Copy the field shapes from the
-   closest shipped bundle.
+   volumes the program writes to, `installed` (what its installed folder
+   has at its top, or `[]` when its build could take one as it takes a
+   disc: `docs/program-bundles.md#installed-copies`), `tests`, and `notes`
+   (`about`, and `checked`: what you checked and when). Copy the field
+   shapes from the closest shipped bundle.
 2. **Volumes**: find out where the program writes saves and settings (watch
    what changes in the prefix or its folder after playing and saving), and
    make each a volume (`docs/wrappfile.md#the-launch-volumes-and-icon`).
@@ -678,7 +680,9 @@ is a few lines on an existing one. The steps:
    by no edition, with a comment saying why it doesn't work ([step
    6](#6-when-it-doesnt-work), "Keep a stuck route's stage").
 5. **A disc edition**: `detect` so the build recognises the disc (its
-   volume name, a file only it has) and doesn't mistake another for it.
+   volume name, a file only it has) and doesn't mistake another for it,
+   and its top level as a `tests.layouts` entry, which `installed` signs
+   are checked against.
 6. **Its test**: the engine module's `starts-and-quits` scenario and a
    `running` needle (`tests/needles/*.yaml`) on text or a picture its
    title screen shows (`docs/testing.md#needles`).

@@ -39,9 +39,18 @@ editions:
       inputs:
         game: { type: "big-fish-game", product: 2387 }
 
+installed: # what a folder holding it already installed has: its disc's build can't install from one
+  - { file-exists: "Game.exe" }
+
 tests:
   scenario: "nancy-drew/quit-from-menu"
   window: "fullscreen"
+  layouts: # the top level of real discs and installed copies, which its installed signs are checked against
+    - disc: "cd/disc-1"
+      installer: "Setup.exe"
+      files: ["autorun.inf", "CARAuto.exe", "data1.cab", "Nancy.cid", "Setup.exe", "Setup.ini"]
+    - installed: "cd"
+      files: ["CDSound/", "CDVideo/", "Game.exe", "Nancy.cid", "Setup.exe", "Setup.ini", "ciftree.dat", "readme.txt"]
 
 notes:
   installer: "installshield"

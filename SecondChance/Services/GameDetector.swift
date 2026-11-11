@@ -315,25 +315,23 @@ class GameDetector {
         return programs.isEmpty ? .none : .unrecognised(programs)
     }
 
-    /// Whether `folder` is a game that's already installed rather than its
-    /// installer: one of the games' own programs (`internalGameExePath`,
-    /// `steamExePath`) is at its top level. No disc has one there, though
-    /// many carry the game's files in folders — Phantom of Venice's even
-    /// holds a whole installed copy. An installer beside it doesn't make it
-    /// a disc: the InstallShield games (Haunted Carousel to Blue Moon) leave
-    /// a `Setup.exe` and `Setup.ini` in the installed folder, a stub that
-    /// fails with "The InstallShield Engine (iKernel.exe) could not be
-    /// launched" when run.
-    nonisolated static func isInstalledGame(at folder: URL, games: [GameInfo]) throws -> Bool {
-        let programs = try topLevelFileNames(in: folder).filter { $0.lowercased().hasSuffix(".exe") }
-        let gamePrograms = Set(games.flatMap { game in
-            [game.internalGameExePath, game.steamExePath].compactMap { path in
-                path?.split(separator: "/").last.map { $0.lowercased() }
-            }
-        })
-        guard let match = programs.first(where: { gamePrograms.contains($0.lowercased()) }) else { return false }
-        logger.notice("\(folder.lastPathComponent) is an installed game (\(match)), not an installer")
-        return true
+    /// The signs by which `folder` holds a program already installed,
+    /// rather than its installer: the bundles' `installed` signs
+    /// (`DetectionIndex.installedCopy`, docs/program-bundles.md#installed-copies),
+    /// the most specific, or several bundles' tied; empty when none match.
+    /// Every bundle's, before anyone knows which program it is: a disc that
+    /// has the game's files in folders, as Phantom of Venice's holds a whole
+    /// installed copy, has none of them at its top. An installer beside it
+    /// doesn't make it a disc: the InstallShield games leave a stub
+    /// `Setup.exe` in the installed folder.
+    nonisolated func installedCopy(at folder: URL) async -> [DetectionIndex.InstalledRule] {
+        let index = index
+        let matches = await Blocking.run { index.installedCopy(DetectionSource(signals: [], location: .folder(folder))) }
+        if !matches.isEmpty {
+            let which = matches.map { "\($0.bundleID) (\($0.sign.description))" }.joined(separator: " or ")
+            logger.notice("\(folder.lastPathComponent) is \(which) already installed, not an installer")
+        }
+        return matches
     }
 
     nonisolated private static func topLevelFileNames(in folder: URL) throws -> [String] {

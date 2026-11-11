@@ -24,6 +24,9 @@ editions:
     licence: "free-release" # its author gives it away; Microsoft holds the copyright
     licence-from: "the author's website"
 
+installed: # what a folder holding it already installed has: no disc builds it, so one chosen as a disc is turned down
+  - { file-exists: "ski32.exe" }
+
 tests:
   scenario: "wine/starts-and-quits"
   window: "windowed" # a program in a window of its own, which native fullscreen leaves as it is

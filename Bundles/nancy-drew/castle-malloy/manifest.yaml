@@ -39,9 +39,18 @@ editions:
       inputs:
         game: { type: "big-fish-game", product: 2699 }
 
+installed: # what a folder holding it already installed has: its disc's build can't install from one
+  - { file-exists: "CastleMalloy.exe" }
+
 tests:
   scenario: "nancy-drew/quit-from-menu"
   window: "fullscreen"
+  layouts: # the top level of real discs and installed copies, which its installed signs are checked against
+    - disc: "cd/disc-1"
+      installer: "Haunting of Castle Malloy.msi"
+      files: ["Hau1.cab", "Haunting of Castle Malloy.exe", "Haunting of Castle Malloy.msi", "Ndc.cab", "PreReq.cab", "autorun.exe", "autorun.inf"]
+    - installed: "her-windows"
+      files: ["CastleMalloy.INI", "CastleMalloy.exe", "CastleMalloy.gdf", "Ciftree/", "Ndtl.cif", "Ndui.dll", "Sound/", "Video/", "binkw32.dll", "lua5.1.dll"]
 
 notes:
   quirks:

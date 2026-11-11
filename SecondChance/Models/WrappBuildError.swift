@@ -69,9 +69,10 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// Fish's DRM unlocking it for this computer).
     case bigFishActivationFailed
     case installerNotFound
-    /// The folder chosen holds a game that's already installed, with no
-    /// installer beside it (`GameDetector.isInstalledGame`).
-    case installedGameNotInstaller
+    /// The folder chosen holds a program that's already installed, rather
+    /// than what installs it (`GameDetector.installedCopy`): the program's
+    /// title, nil if its bundle has no game in the catalogue.
+    case installedGameNotInstaller(title: String?)
     /// A game's app was chosen to be updated, and it can only be built
     /// afresh from its `source`, for `reason` (for the log).
     case updateNeedsSource(reason: String, source: WrappSource = .disk)
@@ -280,10 +281,15 @@ enum WrappBuildError: LocalizedError, Equatable {
                 """)
         case .installerNotFound:
             return String(localized: "Couldn't find the game's installer. Check that it's the first disc of a Nancy Drew game, or the file you downloaded from Her Interactive.")
-        case .installedGameNotInstaller:
+        case .installedGameNotInstaller(let title?):
             return String(localized: """
-                This is a game that's already installed, not its installer. Second Chance needs to install the game itself: \
-                choose the game's disc, or the installer you downloaded from Her Interactive.
+                This is \(title) already installed, not what installs it. Second Chance needs to install it itself: \
+                choose its disc, or the installer you downloaded, instead.
+                """)
+        case .installedGameNotInstaller(nil):
+            return String(localized: """
+                This is a program that's already installed, not what installs it. Second Chance needs to install it itself: \
+                choose its disc, or the installer you downloaded, instead.
                 """)
         case .updateNeedsSource(_, .disk):
             return String(localized: """

@@ -206,8 +206,12 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
                 // Before detection, so an installed game whose folder name
                 // doesn't say which it is isn't asked about as unrecognised.
-                if try GameDetector.isInstalledGame(at: disk1Root, games: gameInfoProvider.allGames()) {
-                    throw WrappBuildError.installedGameNotInstaller
+                let installed = Set(await gameDetector.installedCopy(at: disk1Root).map(\.bundleID))
+                if !installed.isEmpty {
+                    // Named only when one program's signs say so.
+                    let title = installed.count == 1
+                        ? gameInfoProvider.allGames().first { installed.contains($0.programID) }?.title : nil
+                    throw WrappBuildError.installedGameNotInstaller(title: title)
                 }
                 let gameSlug = try await gameDetector.detectGame(fromDisk: disk1Root)
                 let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)

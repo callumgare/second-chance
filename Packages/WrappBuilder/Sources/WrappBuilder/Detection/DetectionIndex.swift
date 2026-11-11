@@ -51,6 +51,17 @@ public nonisolated struct DetectionIndex: Sendable {
         public var specificity: Specificity { rule.matcher.specificity }
     }
 
+    /// A bundle's `installed` sign.
+    public struct InstalledRule: Hashable, Sendable {
+        public let bundleID: String
+        public let sign: InstalledSign
+
+        public init(bundleID: String, sign: InstalledSign) {
+            self.bundleID = bundleID
+            self.sign = sign
+        }
+    }
+
     public enum Result: Hashable, Sendable {
         /// One bundle's match is the most specific.
         case recognised(Match)
@@ -68,8 +79,11 @@ public nonisolated struct DetectionIndex: Sendable {
     /// How deep the file matchers' globs go: how deep a source is listed.
     private let fileDepth: Int
     let programs: [Program]
+    /// Every bundle's `installed` signs, kept apart from `rules`: a sign
+    /// turns a folder down, and never says which program a source is.
+    let installed: [InstalledRule]
 
-    public init(rules: [Rule], programs: [Program]) {
+    public init(rules: [Rule], programs: [Program], installed: [InstalledRule] = []) {
         texts = rules.compactMap { rule in
             if case .text(let text) = rule.matcher { (text.lowercased(), rule) } else { nil }
         }.sorted { $0.text.count > $1.text.count }
@@ -82,8 +96,10 @@ public nonisolated struct DetectionIndex: Sendable {
             default: true
             }
         }
-        fileDepth = others.compactMap(\.matcher.file).map { $0.split(separator: "/").count }.max() ?? 0
+        fileDepth = (others.compactMap(\.matcher.file) + installed.flatMap(\.sign.matchers).compactMap(\.file))
+            .map { $0.split(separator: "/").count }.max() ?? 0
         self.programs = programs
+        self.installed = installed
     }
 
     /// The index of `bundles`' matchers.
@@ -102,6 +118,8 @@ public nonisolated struct DetectionIndex: Sendable {
     public init(manifests: [Manifest]) {
         self.init(rules: manifests.flatMap(Self.rules), programs: manifests.map {
             Program(bundleID: $0.id, title: $0.title, series: $0.series)
+        }, installed: manifests.flatMap { manifest in
+            manifest.installedSigns.map { InstalledRule(bundleID: manifest.id, sign: $0) }
         })
     }
 
@@ -145,6 +163,19 @@ public nonisolated struct DetectionIndex: Sendable {
         }
         let tied = ranked.filter { $0.specificity == top.specificity }
         return tied.count > 1 ? .ambiguous(tied.sorted { $0.bundleID < $1.bundleID }) : .recognised(top)
+    }
+
+    /// The signs by which `source` holds a program already installed: the
+    /// most specific of the bundles' `installed` signs that match, more than
+    /// one only when they tie (ten Nancy Drew games' program is `Game.exe`),
+    /// sorted by bundle; empty when none does. Reads the files the signs
+    /// name, so off the main thread.
+    public func installedCopy(_ source: DetectionSource, readers: WindowsReaders = .standard) -> [InstalledRule] {
+        guard !installed.isEmpty else { return [] }
+        let files = SourceFiles(source.location, depth: fileDepth, readers: readers)
+        let matching = installed.filter { rule in rule.sign.matchers.allSatisfy { Self.matches($0, source: source, files: files) } }
+        guard let best = matching.map(\.sign.specificity).max() else { return [] }
+        return matching.filter { $0.sign.specificity == best }.sorted { $0.bundleID < $1.bundleID }
     }
 
     /// Every rule that matches `source`.
