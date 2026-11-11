@@ -10,7 +10,7 @@ wrapp does not have:
 | Native fullscreen | `Packages/Modules/wine/InProcessHelpers/native_fullscreen.m`, with `ddraw_mode_watch.m` | Puts the game window into a real macOS fullscreen Space when the game asks for fullscreen, and takes it out when it asks for a window | `NATIVE_MACOS_FULLSCREEN_EXE`, unless the launch says `--wine.window=windowed` ([below](#when-the-launch-says)) | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Display below the notch | `Packages/Modules/wine/InProcessHelpers/display_below_notch.m` | On a display with a notch, shows Wine only the part below it, so a game in a fullscreen Space gets mouse positions that match its picture | `NATIVE_FULLSCREEN_BELOW_NOTCH=1`, in every Wine process of a wrapp | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Cursor lock | `Packages/Modules/wine/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, when the launch asks for it (`--wine.mouse=grab-early`, [below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
-| Mode scaling | `Packages/Modules/wine/InProcessHelpers/emulated_mode_scaling.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to, and puts a GDI program's picture, which Wine scales itself, where the mouse is | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw and its launch sets no display mode ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
+| Mode scaling | `Packages/Modules/wine/InProcessHelpers/emulated_mode_scaling.m`, with `scaled_picture_window.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to, and puts a GDI program's picture, which Wine scales itself, where the mouse is | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw and its launch sets no display mode ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
 | Quit watch | `Packages/Modules/wine/InProcessHelpers/quit_watch.m` | Tells the wrapp when the game first put a frame on screen and whether anything asked it to quit, so a game that quits before it has started reads as a failure | `QUIT_WATCH_EXE`, for every Wine game ([below](#quit-watch)) | — (it only reports) |
 | Cocoa start wait | `Packages/Modules/wine/InProcessHelpers/cocoa_start_wait.m` | Lets each Wine program's Mac driver wait for its main thread to start Cocoa beyond Wine's 5 s, which a fully loaded Mac runs out, leaving the program with no display driver for good | Nothing: every Wine process ([below](#cocoa-start-wait)) | `SECOND_CHANCE_COCOA_START_WAIT=0` |
 | Hidden windows | `Packages/Modules/wine/InProcessHelpers/hidden_windows.m` | Keeps Big Fish's Game Manager's windows and Dock icon off the screen, but while the person signs in | `HIDDEN_WINDOWS_EXE`, set on the Game Manager; `*` for everything it runs during a build ([below](#hidden-windows)) | — |
@@ -720,6 +720,51 @@ on a 640x480 monitor (2026-11-12). The log then says
 A borderless window whose picture the helper can't place logs why, once for
 each reason (`not placing a borderless window's picture: …`).
 Native fullscreen takes such a window into a Space (`windowShowsScaledPicture`).
+
+#### Out of fullscreen, a window of its own
+
+Such a program has no window of its own: its window is the emulated
+screen, so taken out of its Space by the player (the green button, ⌃⌘F) it
+came back as Wine shows it, a borderless window covering the display, above
+everything, not the window with a title bar leaving fullscreen gives in any
+other Mac app. Giving it a title bar and a smaller frame for real would tell
+the program its window had shrunk, and its picture would be cut short.
+
+So `scaled_picture_window.m` shows it smaller while Wine and the program go
+on seeing it cover the screen:
+
+- **The window** gets a title bar with a close button, and a frame of the
+  picture's shape at three quarters of the screen, centred. Wine's record
+  of the frame (`-wine_fractionalFrame`) keeps the one it had, and the frame
+  changes AppKit reports (`-postWindowFrameChanged:…`) are kept from it, so
+  the window can be moved without the program hearing of it. A frame Wine
+  sets that isn't the one it has ends this first; a style it sets keeps the
+  title bar. It can't be minimised: Wine would read the smaller frame back
+  as the program's when it came back.
+- **The picture** is cut from Wine's whole window surface, as in the Space
+  (Wine's `-updateLayer` cuts the surface to the smaller window), and the
+  layer fits it in the window (`kCAGravityResizeAspect`).
+- **The mouse.** Wine works out where a click or move is from the pointer's
+  position on the screen, after checking it's in the window, so the position
+  can't be changed before then. The events it posts for the window
+  (`-[WineEventQueue postEvent:]`) have it moved from the smaller window to
+  where the picture is on the screen Wine sees; which kind an event is comes
+  from the handler posting it (`-handleMouseMove:` and the others), since
+  the number of its type differs between Wine versions. The pointer Wine
+  reads for `GetCursorPos` (`+[NSEvent mouseLocation]` from `winemac.so`) is
+  moved the same way, through [virtual pointer](#virtual-pointer)'s wrapper
+  when that's armed, and a warp of the program's (`-setCursorPosition:`) the
+  other way.
+
+Going back into a Space puts the window back as Wine has it first. Checked
+on Webmaster (2026-11-12, a test session): out of its Space it showed in a
+929x729 window on a 1920x1080 screen, its help mode's tips followed the
+pointer over the toolbar's buttons, a click on "easy" started the game, the
+window could be dragged with clicks still landing, and back into its Space
+the picture was placed as before. The wrapp's log says
+`[Helpers] Mode scaling: showing the program's 1440x1080 picture in its 929x697 window`,
+and the helper's own lines `out of fullscreen: showing the program's …` and
+`the program's window covers the screen again: going into fullscreen`.
 
 What the scaling costs was measured on Bioscopia (2026-11-07, a test session
 on an M1 Max): the time from moving the pointer to the game drawing its

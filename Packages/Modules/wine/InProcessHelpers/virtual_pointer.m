@@ -188,17 +188,26 @@ void virtualPointerNotePuppetMove(CGPoint point) {
 // AppKit's coordinates, from the bottom of the main display, which Wine turns
 // over with the display's height as it sees it. objc_msgSend tail-calls this,
 // so the return address is in its caller.
+// What it gives is then moved to where the pointer is on the screen Wine
+// sees, if a program's picture is shown in a smaller window
+// (scaled_picture_window.m), which can't wrap this itself: called from here,
+// its own check of its caller would never find winemac.so.
 static NSPoint virtualMouseLocation(id self, SEL _cmd) {
     NSPoint location = ((NSPoint (*)(id, SEL))gMouseLocation)(self, _cmd);
     if (!calledFromTarget(__builtin_return_address(0))) return location;
     decideOnce();
-    if (!gStuck) return location;
-    os_unfair_lock_lock(&gLock);
-    BOOL has = gHasPointer;
-    CGPoint pointer = gPointer;
-    os_unfair_lock_unlock(&gLock);
-    if (!has) return location;
-    return NSMakePoint(pointer.x, wineMainDisplaySize().height - pointer.y);
+    if (gStuck) {
+        os_unfair_lock_lock(&gLock);
+        BOOL has = gHasPointer;
+        CGPoint pointer = gPointer;
+        os_unfair_lock_unlock(&gLock);
+        if (has) location = NSMakePoint(pointer.x, wineMainDisplaySize().height - pointer.y);
+    }
+    return scaledPictureWindowMouseLocation(location);
+}
+
+int virtualPointerWrapsMouseLocation(void) {
+    return gArmed && gMouseLocation != NULL;
 }
 
 /// Point every import of `symbol` ("_CGWarpMouseCursorPosition") the main

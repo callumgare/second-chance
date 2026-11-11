@@ -437,6 +437,8 @@ static void reportChange(ToggleCause cause, BOOL fullscreen, const char *how) {
 
 /// This file's own move of `window` into or out of its Space.
 static void helperToggle(NSWindow *window, ToggleCause cause) {
+    // A window shown smaller goes back to how Wine has it before its Space.
+    if (!(window.styleMask & NSWindowStyleMaskFullScreen)) scaledPictureWindowEnd(window);
     ToggleCause was = gToggling;
     gToggling = cause;
     [window toggleFullScreen:nil];
@@ -485,6 +487,9 @@ static void playerAwareToggleFullScreen(NSWindow *self, SEL _cmd, id sender) {
     BOOL entering = !(self.styleMask & NSWindowStyleMaskFullScreen);
     debugLog("the player asks to %s fullscreen: window %ld", entering ? "enter" : "leave", (long)self.windowNumber);
     if (entering) {
+        // Shown smaller, it goes back to how Wine has it first, the frame its
+        // Space starts from and the one it's brought back out at.
+        scaledPictureWindowEnd(self);
         objc_setAssociatedObject(self, &kFrameBeforeKey, [NSValue valueWithRect:self.frame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     gToggling = kTogglePlayer;
@@ -771,6 +776,17 @@ static void noteTransitionEnded(NSWindow *window, BOOL entered) {
         objc_setAssociatedObject(window, &kPlayerSpaceKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     if (!entered) noteWindowLeftSpace(window, cause);
+    // The player took a program's scaled picture out of its Space: Wine
+    // brings the window back covering the screen (once its own handling of
+    // the move is done, so after this), and it's shown in a window instead.
+    if (!entered && cause == kTogglePlayer && windowFlag(window, &kCoversScreenKey)) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!(window.styleMask & NSWindowStyleMaskFullScreen) && !windowIsMovingSpaces(window) &&
+                windowShowsScaledPicture(window)) {
+                scaledPictureWindowBegin(window);
+            }
+        });
+    }
     if (cause == kTogglePlayer || cause == kToggleGame) {
         reportChange(cause, entered, "");
     } else {

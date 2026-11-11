@@ -53,6 +53,7 @@
 
 #import <Cocoa/Cocoa.h>
 #import <OpenGL/OpenGL.h>
+#import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 #import <os/log.h>
 #include <dlfcn.h>
@@ -493,6 +494,15 @@ static char kReportedSkipKey;       // why the window's picture was last not pla
 
 /// The rect Wine's window surface covers in its content view: WineContentView's
 /// surfaceRect, which -updateLayer places the surface's layer at.
+/// Wine's whole window surface for the content view (its colorImage), which
+/// -updateLayer cuts to the view's size; NULL if it isn't as expected.
+static CGImageRef wineColorImage(NSView *content) {
+    Ivar ivar = class_getInstanceVariable(content.class, "colorImage");
+    const char *type = ivar ? ivar_getTypeEncoding(ivar) : NULL;
+    if (!type || type[0] != '^') return NULL;
+    return *(CGImageRef *)((uint8_t *)(__bridge void *)content + ivar_getOffset(ivar));
+}
+
 static BOOL wineSurfaceRect(NSView *content, CGRect *rect) {
     Ivar ivar = class_getInstanceVariable(content.class, "surfaceRect");
     const char *type = ivar ? ivar_getTypeEncoding(ivar) : NULL;
@@ -511,12 +521,15 @@ static BOOL scaledPictureFrameWhy(NSWindow *window, NSRect *frame, const char **
     const char *unused;
     if (!why) why = &unused;
     if (!gArmed || !window) { *why = "unarmed"; return NO; }
-    if (window.styleMask & NSWindowStyleMaskTitled) { *why = "titled"; return NO; }
+    // Shown smaller with a title bar (scaled_picture_window.m), it still
+    // covers the screen as Wine and the program see it.
+    BOOL smaller = windowIsScaledPictureWindow(window);
+    if ((window.styleMask & NSWindowStyleMaskTitled) && !smaller) { *why = "titled"; return NO; }
     // Wine stops counting the window as covering the screen once native
     // fullscreen has put it in a Space, where it still does.
     BOOL inSpace = (window.styleMask & NSWindowStyleMaskFullScreen) != 0;
     BOOL coversScreen = [window respondsToSelector:@selector(isFullscreen)] && [(id)window isFullscreen];
-    if (!inSpace && !coversScreen) { *why = "not covering the screen"; return NO; }
+    if (!inSpace && !coversScreen && !smaller) { *why = "not covering the screen"; return NO; }
     NSView *content = window.contentView;
     if (!content || content.subviews.count != 1) { *why = "not one subview"; return NO; }
     if ([content respondsToSelector:@selector(hasGLDescendant)] && [content hasGLDescendant]) { *why = "an OpenGL view"; return NO; }
@@ -528,7 +541,7 @@ static BOOL scaledPictureFrameWhy(NSWindow *window, NSRect *frame, const char **
     // Director projector's 800x600 window, kept when the program then sets
     // 640x480 (Webmaster's start screen's "Full screen (640 x 480)"). Its
     // part on the screen is still placed (centredUpdateLayer crops it).
-    if (NSIsEmptyRect(NSIntersectionRect(content.bounds, clientFrame))) { *why = "client view outside the window"; return NO; }
+    if (NSIsEmptyRect(NSIntersectionRect(scaledPictureWindowTrueBounds(window), clientFrame))) { *why = "client view outside the window"; return NO; }
     if (clientFrame.size.width < 1.0 || clientFrame.size.height < 1.0) { *why = "client view empty"; return NO; }
     *frame = clientFrame;
     *why = NULL;
@@ -597,6 +610,10 @@ static void centredUpdateLayer(NSView *self, SEL _cmd) {
     }
     CALayer *layer = self.layer;
     CGImageRef image = (__bridge CGImageRef)layer.contents;
+    // Shown smaller, Wine's -updateLayer cut its surface to the smaller
+    // window: the picture is taken from the whole surface instead.
+    BOOL smaller = windowIsScaledPictureWindow(window);
+    if (smaller) image = wineColorImage(self);
     CGRect surface;
     if (!image || CFGetTypeID(image) != CGImageGetTypeID() || !wineSurfaceRect(self, &surface)) return;
 
@@ -607,7 +624,7 @@ static void centredUpdateLayer(NSView *self, SEL _cmd) {
     // Windows. Past it, the window's black background shows.
     CGSize painted = paintedPictureSize(picture.size);
     NSRect shown = NSMakeRect(picture.origin.x, picture.origin.y, painted.width, painted.height);
-    NSRect screen = self.bounds;
+    NSRect screen = scaledPictureWindowTrueBounds(window);
     CGSize mode;
     if (knownModeSize(&mode) && mode.width >= 1 && mode.height >= 1) {
         CGFloat ratio = fmin(screen.size.width / mode.width, screen.size.height / mode.height);
@@ -630,10 +647,17 @@ static void centredUpdateLayer(NSView *self, SEL _cmd) {
             CGImageRelease(cropped);
         }
     }
-    layer.position = CGPointMake(surface.origin.x + shown.origin.x, surface.origin.y + shown.origin.y);
+    if (smaller) {
+        // The layer, the smaller window's content, fits the picture in it.
+        layer.contentsGravity = kCAGravityResizeAspect;
+        layer.position = surface.origin;
+    } else {
+        layer.position = CGPointMake(surface.origin.x + shown.origin.x, surface.origin.y + shown.origin.y);
+    }
+    scaledPictureWindowNoteShown(window, shown);
     if (window.isOpaque && ![window.backgroundColor isEqual:NSColor.blackColor]) window.backgroundColor = NSColor.blackColor;
 
-    NSString *now = [NSString stringWithFormat:@"%@ %@ %@", NSStringFromRect(picture), NSStringFromSize(painted), NSStringFromRect(shown)];
+    NSString *now = [NSString stringWithFormat:@"%@ %@ %@ %d", NSStringFromRect(picture), NSStringFromSize(painted), NSStringFromRect(shown), smaller];
     if ([objc_getAssociatedObject(window, &kReportedCentringKey) isEqual:now]) return;
     objc_setAssociatedObject(window, &kReportedCentringKey, now, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 #if defined(__x86_64__)
@@ -642,7 +666,10 @@ static void centredUpdateLayer(NSView *self, SEL _cmd) {
     os_log(gLog, "[EmulatedMode] placing the scaled picture at %.0f,%.0f, %.0fx%.0f (%.0fx%.0f painted, %.0fx%.0f shown), in a %.0fx%.0f window",
            picture.origin.x, picture.origin.y, picture.size.width, picture.size.height, painted.width, painted.height,
            shown.size.width, shown.size.height, self.bounds.size.width, self.bounds.size.height);
-    if (NSEqualSizes(shown.size, NSMakeSize(painted.width, painted.height))) {
+    if (smaller) {
+        helperReport("EmulatedMode", "notice", "showing the program's %.0fx%.0f picture in its %.0fx%.0f window",
+                     shown.size.width, shown.size.height, self.bounds.size.width, self.bounds.size.height);
+    } else if (NSEqualSizes(shown.size, NSMakeSize(painted.width, painted.height))) {
         helperReport("EmulatedMode", "notice", "placing the program's scaled picture at %.0f,%.0f, %.0fx%.0f (%.0fx%.0f painted), in its %.0fx%.0f window",
                      picture.origin.x, picture.origin.y, picture.size.width, picture.size.height, painted.width, painted.height,
                      self.bounds.size.width, self.bounds.size.height);
