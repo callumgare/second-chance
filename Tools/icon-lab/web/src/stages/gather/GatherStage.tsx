@@ -29,7 +29,7 @@ type Filters = { kinds: Set<string>; source: string; minSize: number; subject: b
 const DEFAULT_FILTERS: Filters = { kinds: new Set(), source: "all", minSize: 0, subject: false, text: false, simple: false, hideDupes: true, picked: false, sort: "suitability" };
 
 type Group = "main" | "unrelated";
-type Item = { type: "head"; group: Group; shown: number; total: number } | { type: "foot"; group: Group; shown: number; total: number } | { type: "row"; cards: Media[]; group: Group } | { type: "empty"; group: Group };
+type Item = { type: "head"; group: Group; shown: number; total: number } | { type: "foot"; group: Group; shown: number; total: number; folded: number; hidden: number } | { type: "row"; cards: Media[]; group: Group } | { type: "empty"; group: Group };
 /** Pictures from a general search (Commons, Openverse) carry `relevance`; catalogue pictures count as relevant. */
 const UNRELATED = 0.4;
 const relevance = (m: Media) => m.relevance ?? 1;
@@ -101,20 +101,25 @@ export function GatherStage({ slug }: { slug: string }) {
 
   const visible = useMemo(() => {
     const order = new Map(all.map((m, i) => [m.id, i]));
-    const pass = (m: Media) => (!f.kinds.size || f.kinds.has(m.kind)) && (f.source === "all" || m.source === f.source)
+    const filtersPass = (m: Media) => (!f.kinds.size || f.kinds.has(m.kind)) && (f.source === "all" || m.source === f.source)
       && Math.max(m.width, m.height) >= f.minSize && (!f.subject || m.analysis.subject) && (!f.text || m.analysis.text.length > 0 || m.analysis.textFraction > 0.02)
-      && (!f.simple || m.analysis.busyness <= 0.6) && (!f.picked || m.picked)
-      && (!f.hideDupes || rootOf.get(m.id) === m.id || m.picked);
+      && (!f.simple || m.analysis.busyness <= 0.6) && (!f.picked || m.picked);
+    const pass = (m: Media) => filtersPass(m) && (!f.hideDupes || rootOf.get(m.id) === m.id || m.picked);
     const sorter = (a: Media, b: Media) => f.sort === "size" ? b.width * b.height - a.width * a.height
       : f.sort === "source" ? a.source.localeCompare(b.source) || b.suitability - a.suitability
       : f.sort === "newest" ? (order.get(b.id)! - order.get(a.id)!)
       : b.suitability * relevance(b) - a.suitability * relevance(a);
     const list = all.filter(pass).sort(sorter);
-    return { main: list.filter((m) => relevance(m) >= UNRELATED), unrelated: list.filter((m) => relevance(m) < UNRELATED) };
+    const main = list.filter((m) => relevance(m) >= UNRELATED);
+    // what the filters let through but a better copy stands for, so the count can say why it's short
+    const mainFolded = all.filter((m) => relevance(m) >= UNRELATED && filtersPass(m)).length - main.length;
+    return { main, unrelated: list.filter((m) => relevance(m) < UNRELATED), mainFolded };
   }, [all, f, rootOf]);
   const local = all.filter((m) => m.source === "Your files").length;
+  // the main group's hidden pictures count in its total while they're left out, so the count says they're missing
+  const hiddenMain = showHidden ? 0 : (everything ?? []).filter((m) => m.hidden && relevance(m) >= UNRELATED).length;
   const totals = {
-    main: all.filter((m) => relevance(m) >= UNRELATED).length,
+    main: all.filter((m) => relevance(m) >= UNRELATED).length + hiddenMain,
     unrelated: all.filter((m) => relevance(m) < UNRELATED).length,
   };
   const [showUnrelated, setShowUnrelated] = useState(false);
@@ -130,10 +135,10 @@ export function GatherStage({ slug }: { slug: string }) {
       if (g === "unrelated" && !showUnrelated) continue;
       if (!list.length) out.push({ type: "empty", group: g });
       for (let i = 0; i < list.length; i += cols) out.push({ type: "row", group: g, cards: list.slice(i, i + cols) });
-      if (g === "main") out.push({ type: "foot", group: g, shown: list.length, total: totals[g] });
+      if (g === "main") out.push({ type: "foot", group: g, shown: list.length, total: totals[g], folded: visible.mainFolded, hidden: hiddenMain });
     }
     return out;
-  }, [visible, cols, totals.main, totals.unrelated, showUnrelated]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visible, cols, totals.main, totals.unrelated, showUnrelated, hiddenMain]); // eslint-disable-line react-hooks/exhaustive-deps
   const flat = useMemo(() => [...visible.main, ...(showUnrelated ? visible.unrelated : [])], [visible, showUnrelated]);
 
   const v = useVirtualizer({
@@ -279,7 +284,17 @@ export function GatherStage({ slug }: { slug: string }) {
                   </div>
                 ) : it.type === "foot" ? (
                   <div className="groupfoot">
-                    {it.total > 0 && <span>{it.shown === it.total ? `${it.total} ${it.total === 1 ? "picture" : "pictures"}` : `${it.shown} shown of ${it.total}`}</span>}
+                    {it.total > 0 && <span>{it.shown === it.total ? `${it.total} ${it.total === 1 ? "picture" : "pictures"}` : `${it.shown} shown of ${it.total}`}
+                      {it.hidden > 0 && ` · ${it.hidden} hidden`}
+                      {it.folded > 0 && (it.folded === 1 ? " · 1 duplicate folded" : ` · ${it.folded} duplicates folded`)}
+                      {it.total - it.shown - it.folded - it.hidden > 0 && ` · ${it.total - it.shown - it.folded - it.hidden} filtered out`}</span>}
+                    {/* while some are missing: a box for each reason that's leaving some out */}
+                    {it.shown < it.total && it.hidden > 0 && (
+                      <label className="chip" title="Pictures you hid: they're never used in suggestions"><input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Show hidden</label>
+                    )}
+                    {it.shown < it.total && it.folded > 0 && (
+                      <label className="chip" title="Show only the best copy of pictures that are the same"><input type="checkbox" checked={f.hideDupes} onChange={(e) => set({ hideDupes: e.target.checked })} /> Fold duplicates</label>
+                    )}
                     {scanning.length > 0 && <span className="row" style={{ gap: 5 }}><span className="spin" /> scanning your files</span>}
                     {gathering.length > 0 && <span className="row" style={{ gap: 5 }}><span className="spin" /> {gatherText(gathering)}</span>}
                     {(f.source === "all" || f.source === "Your files") && (
