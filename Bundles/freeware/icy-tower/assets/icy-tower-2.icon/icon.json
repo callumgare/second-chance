@@ -1,0 +1,42 @@
+{
+  "fill-specializations" : [
+    {
+      "value" : {
+        "automatic-gradient" : "srgb:0.72549,0.24314,0.14902,1.00000"
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "automatic-gradient" : "srgb:0.32549,0.10980,0.06667,1.00000"
+      }
+    }
+  ],
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "3eb2da1f-3355-404a-9576-eb586f1fd4bc.png",
+          "name" : "3eb2da1f-3355-404a-9576-eb586f1fd4bc"
+        },
+        {
+          "image-name" : "2a015238-347d-416a-8d63-a2bc6f216117.png",
+          "name" : "2a015238-347d-416a-8d63-a2bc6f216117"
+        }
+      ],
+      "lighting" : "individual",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.34999999999999998
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : "shared"
+  }
+}

@@ -8,7 +8,7 @@
     {
       "appearance" : "dark",
       "value" : {
-        "automatic-gradient" : "srgb:0.47451,0.47451,0.38824,1.00000"
+        "automatic-gradient" : "srgb:0.04314,0.03922,0.04314,1.00000"
       }
     }
   ],
@@ -16,8 +16,8 @@
     {
       "layers" : [
         {
-          "image-name" : "83275a03-2959-442a-b6bc-6298900369f0.png",
-          "name" : "83275a03-2959-442a-b6bc-6298900369f0"
+          "image-name" : "595a67d8-1515-4d4f-80f9-09f15d415f1c.png",
+          "name" : "595a67d8-1515-4d4f-80f9-09f15d415f1c"
         }
       ],
       "lighting" : "individual",
@@ -25,7 +25,7 @@
         "kind" : "neutral",
         "opacity" : 0.5
       },
-      "specular" : true,
+      "specular" : false,
       "translucency" : {
         "enabled" : false,
         "value" : 0.5

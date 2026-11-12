@@ -44,3 +44,6 @@ WINE.KEEP-DISCS ${input.disc-1} --into=C:/webmaster-cd
 LAUNCH --mount=type=store,source=saves,target=C:/users/crossover/Documents \
     --wine.clear=C:/users/crossover/AppData/Local/Temp/wmLaunch.tmp \
     --wine.graphics=unknown --wine.colors=256 --wine.display-mode=640x480x8 ${const.disc-dir}/Webmaster.exe
+# Its icon, made in Icon Lab (assets/webmaster.icon, compiled by `sc generate`).
+COPY bundle:assets/webmaster.icns /Resources/webmaster.icns
+APP --icon=/Resources/webmaster.icns

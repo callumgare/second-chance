@@ -12,3 +12,6 @@ COPY --from=${input.game} lure /SharedSupport/game/ # the zip's lure/ folder: th
 LAUNCH --mount=type=store,source=scummvm-saves,target=scummvm:saves/
 LAUNCH --mount=type=store,source=scummvm-settings,target=scummvm:settings/
 LAUNCH scummvm:/SharedSupport/game/ lure
+# Its icon, made in Icon Lab (assets/lure-of-the-temptress.icon, compiled by `sc generate`).
+COPY bundle:assets/lure-of-the-temptress.icns /Resources/lure-of-the-temptress.icns
+APP --icon=/Resources/lure-of-the-temptress.icns

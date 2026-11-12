@@ -2,13 +2,13 @@
   "fill-specializations" : [
     {
       "value" : {
-        "automatic-gradient" : "srgb:0.94118,0.27451,0.06667,1.00000"
+        "automatic-gradient" : "srgb:0.06667,0.65098,0.85882,1.00000"
       }
     },
     {
       "appearance" : "dark",
       "value" : {
-        "automatic-gradient" : "srgb:0.42745,0.12157,0.02745,1.00000"
+        "automatic-gradient" : "srgb:0.03137,0.29412,0.38824,1.00000"
       }
     }
   ],
@@ -16,8 +16,8 @@
     {
       "layers" : [
         {
-          "image-name" : "35c275c4-b1d0-4327-a74d-4717d418aa96.png",
-          "name" : "35c275c4-b1d0-4327-a74d-4717d418aa96"
+          "image-name" : "fcc15338-1b58-4414-9930-8c57ec3b92e9.png",
+          "name" : "fcc15338-1b58-4414-9930-8c57ec3b92e9"
         }
       ],
       "lighting" : "individual",

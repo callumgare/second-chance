@@ -4,6 +4,7 @@ id: "freeware/icy-tower"
 version: 1
 title: "Icy Tower"
 display-name: "Icy Tower"
+allow-paths: ["assets/"]   # its icon
 
 volumes:
   saves:

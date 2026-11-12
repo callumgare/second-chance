@@ -2,27 +2,32 @@
   "fill-specializations" : [
     {
       "value" : {
-        "automatic-gradient" : "srgb:0.72549,0.56078,0.32549,1.00000"
+        "automatic-gradient" : "srgb:0.65882,0.75686,0.90196,1.00000"
       }
     },
     {
       "appearance" : "dark",
       "value" : {
-        "automatic-gradient" : "srgb:0.33725,0.25490,0.13725,1.00000"
+        "automatic-gradient" : "srgb:0.15686,0.31373,0.54510,1.00000"
       }
     }
   ],
   "groups" : [
     {
+      "blur-material" : 0.5,
       "layers" : [
         {
           "image-name" : "530e8cbf-56f2-4244-a241-ef7d390e7f94.png",
           "name" : "530e8cbf-56f2-4244-a241-ef7d390e7f94"
+        },
+        {
+          "image-name" : "5e48883a-8c39-41db-af02-b7775da4b886.png",
+          "name" : "5e48883a-8c39-41db-af02-b7775da4b886"
         }
       ],
-      "lighting" : "individual",
+      "lighting" : "combined",
       "shadow" : {
-        "kind" : "neutral",
+        "kind" : "none",
         "opacity" : 0.34999999999999998
       },
       "specular" : true,

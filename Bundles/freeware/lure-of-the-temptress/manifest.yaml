@@ -4,6 +4,7 @@ id: "freeware/lure-of-the-temptress"
 version: 1
 title: "Lure of the Temptress"
 display-name: "Lure of the Temptress"
+allow-paths: ["assets/"]   # its icon
 
 volumes:
   scummvm-saves:

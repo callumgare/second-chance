@@ -55,3 +55,6 @@ LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="tower
     --wine.quit-confirm-key=escape:hold=5s \
     --wine.fullscreen-setting="file=${const.install-dir}/tower.cfg,format=allegro-packfile,offset=16,bytes=4,fullscreen=-1,windowed=0,checksum-offset=96,checksum-scale=17" \
     "${const.install-dir}/icytower13.exe"
+# Its icon, made in Icon Lab (assets/icy-tower.icon, compiled by `sc generate`).
+COPY bundle:assets/icy-tower.icns /Resources/icy-tower.icns
+APP --icon=/Resources/icy-tower.icns
