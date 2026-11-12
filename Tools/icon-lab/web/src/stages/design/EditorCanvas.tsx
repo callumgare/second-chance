@@ -132,6 +132,14 @@ export function EditorCanvas() {
   const mstart = useRef<{ x: number; y: number; w: number; h: number; layers: Map<string, { x: number; y: number; width: number }> } | null>(null);
   const tr = useRef<Konva.Transformer>(null);
   const pendingDrag = useRef(false);
+  // The press's pointer, which the drag must be told: started with no event, Konva learns it only from the first
+  // move, and ends a drag only on a release by the same pointer, so a tap that never moves would leave it dragging.
+  const pressPointer = useRef<number | undefined>(undefined);
+  const startPendingDrag = () => {
+    if (!pendingDrag.current || !proxy.current) return;
+    pendingDrag.current = false;
+    proxy.current.startDrag({ pointerId: pressPointer.current });
+  };
   // A press on a layer not yet selected starts its drag only once its box is drawn, a frame or a render later. A
   // trackpad's tap-to-click lets go before then, and a drag started after the release never sees one, so the layer
   // would follow the pointer until the next click: a release first cancels it.
@@ -185,7 +193,7 @@ export function EditorCanvas() {
     if (!tr.current) return;
     tr.current.nodes(proxy.current && selLayer && !selLayer.hidden ? [proxy.current] : mproxy.current && union ? [mproxy.current] : []);
     tr.current.getLayer()?.batchDraw();
-    if (pendingDrag.current && proxy.current) { pendingDrag.current = false; proxy.current.startDrag(); }
+    startPendingDrag();
   });
 
   const onDown = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -195,7 +203,13 @@ export function EditorCanvas() {
     if (!st.doc) return;
     const p = e.target.getStage()!.getPointerPosition()!;
     const u = (p.x - ox) / S, v = (p.y - oy) / S;
-    const hit = pickLayer(st.doc, u, v, useApp.getState().media);
+    // Off the canvas only a selected layer's overhang, which is drawn faintly there, can be clicked: another
+    // layer's isn't shown, so it can't be picked from there.
+    const onCanvas = u >= 0 && u <= 1 && v >= 0 && v <= 1;
+    const picked = pickLayer(st.doc, u, v, useApp.getState().media);
+    // A mask's own pixels are never picked, so a selected mask's overhang picks the layer it masks.
+    const selIds = [...selectedLayerIds(st.doc, st.sel), st.sel?.kind === "layer" ? findLayer(st.doc, st.sel.id)?.parent?.id : undefined];
+    const hit = onCanvas || (picked && selIds.includes(picked.id)) ? picked : null;
     // ⇧ or ⌘: add or remove the layer under the pointer.
     if (hit && (e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey)) {
       proxy.current?.stopDrag(); mproxy.current?.stopDrag();
@@ -217,8 +231,9 @@ export function EditorCanvas() {
     if (hit) {
       if (!(st.sel?.kind === "layer" && st.sel.id === hit.id)) st.select({ kind: "layer", id: hit.id });
       pendingDrag.current = true;
+      pressPointer.current = e.pointerId;
       // The proxy may already be this layer's: start at once.
-      requestAnimationFrame(() => { if (pendingDrag.current && proxy.current) { pendingDrag.current = false; proxy.current.startDrag(); } });
+      requestAnimationFrame(startPendingDrag);
     } else {
       st.select({ kind: "icon" });
     }
