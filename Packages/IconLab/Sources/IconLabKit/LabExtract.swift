@@ -173,7 +173,6 @@ nonisolated extension Lab {
             // a picture file's own name keeps its extension rather than gaining another
             let named = FileKinds.identify(URL(fileURLWithPath: shortName), isDir: false).0 == "image" ? shortName : "\(shortName).png"
             var rec = try await store.addMedia(slug, from: file, name: named, source: "Your files", provenance: provenance, kind: kind)
-            rec.suitability = min(5, max(rec.suitability, score / 20))
             if kind != nil { rec.kindSet = true; rec.kindConfidence = 0.8 }
             if roles.contains("main-program-icon") || roles.contains("likely-main-program-icon") { rec.picked = true }
             var extra: [String: JSONValue] = ["roles": .array(roles.sorted().map { .string($0) }), "extractScore": .number(score)]

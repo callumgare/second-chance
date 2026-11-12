@@ -126,6 +126,8 @@ export type ProgramSummary = { slug: string; title: string; year?: number; bundl
 export type MediaKind = "box-front" | "box-back" | "box-spine" | "disc" | "logo" | "icon" | "title-screen" | "screenshot"
   | "banner" | "manual" | "cutout" | "art" | "other"
 
+export type SuitabilityFactor = { label: string; points: number; details?: string[] }
+
 export type Media = {
   id: string
   name: string
@@ -165,6 +167,8 @@ export type Media = {
     scores: Record<string, number>
   }
   suitability: number
+  /** What `suitability` adds up, each with its points; a factor that is a score of its own lists what makes it up. */
+  suitabilityFactors?: SuitabilityFactor[]
   cutoutSize?: [number, number]
   // Stage 2 (api.md, "Stage 2"): all optional.
   remote?: RemoteMedia

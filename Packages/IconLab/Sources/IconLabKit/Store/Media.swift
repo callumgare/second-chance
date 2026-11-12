@@ -16,6 +16,7 @@ nonisolated public struct MediaRecord: Codable, Sendable {
     public var picked: Bool
     public var hasMask: Bool
     public var analysis: MediaAnalysis
+    /// What analysis last measured. What ranks pictures is `Lab.suitability`, worked out afresh from the record.
     public var suitability: Double
     public var added: String
     /// Where it came from online (stage 2's sources): the full-size URL and what the source said about it. The file

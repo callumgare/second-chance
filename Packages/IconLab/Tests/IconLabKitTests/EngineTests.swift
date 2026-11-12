@@ -104,3 +104,46 @@ import Testing
         #expect(e["C"] == nil)
     }
 }
+
+@Suite struct SuitabilityTests {
+    private func record(kind: String = "box-front", size: Int = 512, rank: Double? = nil) -> MediaRecord {
+        var analysis = MediaAnalysis()
+        analysis.subject = true
+        var m = MediaRecord(id: "a", name: "a.png", file: "a.png", kind: kind, source: "Your files", width: size, height: size,
+                            analysis: analysis)
+        if let rank { m.deep = ["extractScore": .number(rank), "scoreReasons": .array([.string("+60 the program's icon")])] }
+        return m
+    }
+
+    @Test func itsFactorsAddUpToIt() {
+        let m = record()
+        let factors = Lab.suitabilityFactors(m)
+        #expect(factors.map(\.label).contains("A clear subject"))
+        #expect(SuitabilityFactor.total(factors) == Lab.suitability(m))
+        // 2 + 1.2 (box front) + 0.7 (512 px) + 0.5 (subject)
+        #expect(Lab.suitability(m) == 4.4)
+    }
+
+    @Test func aRankedPictureIsHalfItsRank() throws {
+        let m = record(kind: "icon", size: 32, rank: 125)
+        let factors = Lab.suitabilityFactors(m)
+        let fromRank = try #require(factors.last)
+        #expect(fromRank.points == 2.5)
+        #expect(fromRank.details?.contains("+60 the program's icon") == true)
+        // own: 2 + 1 (icon) + 0 (small is fine for an icon) + 0.5, halved; and the full rank's half
+        #expect(Lab.suitability(m) == 4.3)
+        #expect(SuitabilityFactor.total(factors) == Lab.suitability(m))
+    }
+
+    @Test func belowNothingIsKeptToNothing() {
+        // a small, long, busy page of a manual: 2 − 1.2 − 1 − 0.8 − 0.4
+        var analysis = MediaAnalysis()
+        analysis.busyness = 0.9
+        let m = MediaRecord(id: "b", name: "b.png", file: "b.png", kind: "manual", source: "Your files", width: 90, height: 30,
+                            analysis: analysis)
+        let factors = Lab.suitabilityFactors(m)
+        #expect(factors.contains { $0.label == "Kept to at least 0" })
+        #expect(Lab.suitability(m) == 0)
+        #expect(SuitabilityFactor.total(factors) == 0)
+    }
+}

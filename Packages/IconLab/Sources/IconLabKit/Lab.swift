@@ -40,6 +40,8 @@ nonisolated public final class Lab: Sendable {
         var picked: Bool
         var analysis: MediaAnalysis
         var suitability: Double
+        /// What `suitability` adds up, for the inspector.
+        var suitabilityFactors: [SuitabilityFactor]
         var remote: RemoteMedia?
         var hires: String?
         var duplicateOf: String?
@@ -67,7 +69,7 @@ nonisolated public final class Lab: Sendable {
                         url: "\(base)/image", thumb: "\(base)/thumb", cutout: m.hasMask ? "\(base)/cutout" : nil,
                         mask: m.hasMask ? "\(base)/mask" : nil, picked: m.anyPicked, analysis: m.analysis,
                         // worked out afresh each time, so a change to the scoring reaches every picture at once
-                        suitability: Lab.suitability(m),
+                        suitability: Lab.suitability(m), suitabilityFactors: Lab.suitabilityFactors(m),
                         remote: m.remote, hires: m.hires, duplicateOf: m.duplicateOf, derivedFrom: m.derivedFrom, cutoutSize: m.cutoutSize,
                         relevance: m.relevance, relevanceWhy: m.relevanceWhy, upgraded: m.upgraded, hidden: m.hidden, deep: m.deep,
                         kindSource: m.kindSource, kindGuesses: m.kindGuesses, sourceLabel: m.sourceLabel ?? m.remote?.sourceLabel,
@@ -132,15 +134,29 @@ nonisolated public final class Lab: Sendable {
 
     /// 0…5, worked out afresh: the picture's own measures (kind, size, subject) and, for an image found in your
     /// files, half from where the extractor found it (its rank: the program's own icon ranks far above a bitmap of
-    /// a printable map, whatever their sizes). A picture added by hand is a 5.
+    /// a printable map, whatever their sizes). A picture added by hand is a 5. Everything that ranks pictures uses
+    /// this, the suggestions as well as the page, so they agree.
     static func suitability(_ m: MediaRecord) -> Double {
+        SuitabilityFactor.total(suitabilityFactors(m))
+    }
+
+    /// What `suitability` adds up: for a ranked picture, its own factors at half their points, and its rank's half.
+    static func suitabilityFactors(_ m: MediaRecord) -> [SuitabilityFactor] {
         // a picture the person added by hand is what they chose: the top of the scale
-        if m.deep?["byHand"] == .bool(true) { return 5 }
-        let own = Analyser.suitability(m.analysis, kind: m.kind == "unknown" ? (m.kindGuesses?.first?.kind ?? "unknown") : m.kind,
-                                       width: m.width, height: m.height)
+        if m.deep?["byHand"] == .bool(true) { return [.init("Added by you", 5)] }
+        var own = Analyser.suitabilityFactors(m.analysis, kind: m.kind == "unknown" ? (m.kindGuesses?.first?.kind ?? "unknown") : m.kind,
+                                              width: m.width, height: m.height)
+        let sum = own.reduce(0) { $0 + $1.points }
+        let kept = max(0, min(5, sum))
+        if kept != sum { own.append(.init(sum > 5 ? "Kept to at most 5" : "Kept to at least 0", kept - sum)) }
         guard let rank = m.deep?["extractScore"]?.doubleValue else { return own }
         let fromRank = max(0, min(5, rank / 25))   // 125 points and more is a 5
-        return ((0.5 * own + 0.5 * fromRank) * 10).rounded() / 10
+        var details = ["\(Int(rank.rounded())) points from scanning the program's files; 125 or more counts in full"]
+        if case .array(let reasons)? = m.deep?["scoreReasons"] {
+            details += reasons.compactMap { if case .string(let r) = $0 { r } else { nil } }
+        }
+        return own.map { SuitabilityFactor($0.label, $0.points / 2, details: $0.details) }
+            + [.init("How likely it's the program's own icon, by where it was found", fromRank / 2, details: details)]
     }
 
     struct ColourCache: Codable { var subject: String; var file: String; var colours: [String: String]; var order: [String] }

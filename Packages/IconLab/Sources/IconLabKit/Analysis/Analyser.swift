@@ -216,23 +216,56 @@ nonisolated public enum Analyser {
         return s.mapValues { ($0 * 1000).rounded() / 1000 }
     }
 
-    /// 0…5: how likely the image is to help make an icon.
+    /// 0…5: how likely the image is to help make an icon: its factors added up, kept within 0…5.
     public static func suitability(_ a: MediaAnalysis, kind: String, width: Int, height: Int) -> Double {
+        SuitabilityFactor.total(suitabilityFactors(a, kind: kind, width: width, height: height))
+    }
+
+    /// What `suitability` adds up, each with the points it gives, so the inspector can say why.
+    public static func suitabilityFactors(_ a: MediaAnalysis, kind: String, width: Int, height: Int) -> [SuitabilityFactor] {
         let aspect = Double(max(width, height)) / Double(max(1, min(width, height)))
-        if aspect > 4 { return 0 }
-        var s = 2.0
-        s += ["box-front": 1.2, "logo": 1.2, "disc": 1, "icon": 1, "title-screen": 0.8, "banner": 0.5, "cutout": 1,
-              "screenshot": -0.3, "box-back": -1, "box-spine": -1, "manual": -1.2][kind] ?? 0
+        if aspect > 4 { return [.init("Too long and thin to use (over 4:1)", 0)] }
+        var factors: [SuitabilityFactor] = [.init("Starting point", 2)]
+        let kindPoints: [String: Double] = ["box-front": 1.2, "logo": 1.2, "disc": 1, "icon": 1, "title-screen": 0.8, "banner": 0.5, "cutout": 1,
+                                            "screenshot": -0.3, "box-back": -1, "box-spine": -1, "manual": -1.2]
+        if let points = kindPoints[kind], points != 0 {
+            factors.append(.init("Kind: \(kind.replacingOccurrences(of: "-", with: " "))", points))
+        }
         // Resolution counts all the way up: each doubling of the shorter side is worth about a third of a point
         // (128 px ±0, 256 +0.35, 512 +0.7, 1024 +1.05, capped at +1.2). A program's own icon is small by nature,
         // so it isn't marked down for it.
         let side = Double(max(1, min(width, height)))
         let sizeTerm = max(-1, min(1.2, (log2(side) - 7) * 0.35))
-        s += kind == "icon" || a.pixelArt == true ? max(0, sizeTerm) : sizeTerm
-        if a.subject { s += 0.5 }
-        if aspect > 2 { s -= 0.8 }
-        if a.busyness > 0.75 { s -= 0.4 }
-        return max(0, min(5, (s * 10).rounded() / 10))
+        let smallIsFine = kind == "icon" || a.pixelArt == true
+        let sizePoints = smallIsFine ? max(0, sizeTerm) : sizeTerm
+        if sizePoints != 0 || (smallIsFine && sizeTerm < 0) {
+            factors.append(.init("Size: \(Int(side)) px on its shorter side" + (smallIsFine && sizeTerm < 0
+                ? (kind == "icon" ? " (an icon isn't marked down for being small)" : " (pixel art isn't marked down for being small)") : ""),
+                sizePoints))
+        }
+        if a.subject { factors.append(.init("A clear subject", 0.5)) }
+        if aspect > 2 { factors.append(.init("Long and thin (over 2:1)", -0.8)) }
+        if a.busyness > 0.75 { factors.append(.init("Very busy", -0.4)) }
+        return factors
+    }
+}
+
+/// One reason a picture's suitability is what it is, and the points it gives (or takes).
+nonisolated public struct SuitabilityFactor: Codable, Sendable, Equatable {
+    public var label: String
+    public var points: Double
+    /// What makes up a factor that is itself a score (where it was found in a program: the scan's reasons).
+    public var details: [String]?
+
+    public init(_ label: String, _ points: Double, details: [String]? = nil) {
+        self.label = label
+        self.points = points
+        self.details = details
+    }
+
+    /// The factors added up, kept within 0…5, to a tenth.
+    public static func total(_ factors: [SuitabilityFactor]) -> Double {
+        max(0, min(5, (factors.reduce(0) { $0 + $1.points } * 10).rounded() / 10))
     }
 }
 

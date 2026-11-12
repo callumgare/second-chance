@@ -48,7 +48,11 @@ type Media = {
     pixelArt?: boolean
     scores: Record<string, number>      // silhouette, fill, disc, logo, scene
   }
-  suitability: number           // 0…5
+  suitability: number           // 0…5: the factors below added up, kept within 0…5; what the suggestions rank by too
+  // Each factor and its points. A picture found by scanning a program's files counts half its own factors and half
+  // how likely it is to be the program's own icon (the scan's score, 125 points a full 5), whose details are the
+  // scan's reasons. One added by hand is a 5.
+  suitabilityFactors: { label: string; points: number; details?: string[] }[]
   cutoutSize?: [number, number] // the cut-out's pixel size, once it has a mask
 }
 

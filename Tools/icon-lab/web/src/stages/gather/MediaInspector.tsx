@@ -116,12 +116,21 @@ export function MediaInspector({ m, all, onSelect, onEdit }: { m: Media | null; 
             </Fact>
           )}
           {d?.roles?.length ? <Fact label="Found as" from="icon-extract: what the image is in the program">{d.roles.join(", ")}</Fact> : null}
-          {d?.extractScore != null && (
-            <Fact label="Rank" from="icon-extract's score: where the image came from matters most">
-              {Math.round(d.extractScore)} points
-              {d.scoreReasons?.length ? <details className="reasons"><summary>why</summary>{d.scoreReasons.map((r, i) => <div key={i}>{r}</div>)}</details> : null}
-            </Fact>
-          )}
+          <Fact label="Suitability" from={"How likely it is to help make an icon: these added up, kept within 0 to 5"
+            + (m.suitabilityFactors?.some((f) => f.details?.length) ? ". Half is from how it looks, half from how likely it's the program's own icon, so the rest count half." : "")}>
+            <Suit n={m.suitability} /> <span className="muted">{m.suitability.toFixed(1)} of 5</span>
+            {m.suitabilityFactors?.length ? (
+              <ul className="factors">
+                {m.suitabilityFactors.map((f, i) => (
+                  <li key={i}>
+                    {f.details?.length
+                      ? <details><summary><Points n={f.points} />{f.label}</summary>{f.details.map((r, j) => <div key={j}>{r}</div>)}</details>
+                      : <><Points n={f.points} />{f.label}</>}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </Fact>
           {d?.foundIn && d.foundIn.length > 1 && <Fact label="Also in" from="The same picture, found in other places">{d.foundIn.slice(1, 6).map((p, i) => <div key={i}><Provenance chain={p} /></div>)}{d.foundIn.length > 6 && <div className="faint">and {d.foundIn.length - 6} more</div>}</Fact>}
           {parent && <Fact label="Made from" from="Our deep analysis"><a href="#" onClick={(e) => { e.preventDefault(); onSelect(parent.id); }}>{kindLabel(parent.kind)} · {parent.width}×{parent.height}</a></Fact>}
           <Fact label="Text" from={a.text.length ? `On-device text recognition · covers ${Math.round(a.textFraction * 100)}%` : undefined}>
@@ -146,7 +155,6 @@ export function MediaInspector({ m, all, onSelect, onEdit }: { m: Media | null; 
             </Fact>
           )}
           {derived.length > 0 && <Fact label="Derived" from="Made from this by the deep analysis">{derived.map((x) => <div key={x.id}><a href="#" onClick={(e) => { e.preventDefault(); onSelect(x.id); }}>{kindLabel(x.kind)} · {x.width}×{x.height}</a></div>)}</Fact>}
-          <Fact label="Suitability" from="Size, shape, subject, text and kind together"><Suit n={m.suitability} /> <span className="muted">{m.suitability.toFixed(1)} of 5</span></Fact>
         </dl>
         <div className="row insp-actions">
           {m.picked && <button className="btn small" onClick={() => void api.deepen(slug, m.id).catch(fail)}>Analyse again</button>}
@@ -265,6 +273,12 @@ function KindFact({ m }: { m: Media }) {
       ))}</div>}
     </Fact>
   );
+}
+
+/** A factor's points, signed: "+1.2", "−0.4", "0". */
+function Points({ n }: { n: number }) {
+  const r = Math.round(n * 100) / 100;
+  return <span className={"pts" + (r > 0 ? " up" : r < 0 ? " down" : "")}>{r > 0 ? "+" : r < 0 ? "−" : ""}{Math.abs(r)}</span>;
 }
 
 function Fact({ label, from, children }: { label: string; from?: string; children: ReactNode }) {

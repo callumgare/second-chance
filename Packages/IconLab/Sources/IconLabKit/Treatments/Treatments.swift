@@ -224,7 +224,7 @@ nonisolated public enum Treatments {
         let pool = picked.isEmpty ? media : picked
         func score(_ m: MediaRecord, _ s: String, _ weights: [String: Double]) -> Double {
             let small = min(m.width, m.height) < 200 ? 0.5 : 1
-            return (m.analysis.scores[s] ?? 0) * (weights[m.kind] ?? 0) * small * (0.6 + m.suitability / 12)
+            return (m.analysis.scores[s] ?? 0) * (weights[m.kind] ?? 0) * small * (0.6 + Lab.suitability(m) / 12)
         }
         var roles: [String: String] = [:]
         let subject = pool.max { score($0, "silhouette", subjectWeight) < score($1, "silhouette", subjectWeight) }
@@ -460,7 +460,7 @@ nonisolated public enum Treatments {
 
     static func t_disc_box(_ c: Ctx) async throws -> Doc? {
         guard let discId = c.roles["disc"], let rec = c.media[discId] else { return nil }
-        guard let boxId = c.media.values.filter({ $0.kind == "box-front" && $0.picked }).max(by: { $0.suitability < $1.suitability })?.id
+        guard let boxId = c.media.values.filter({ $0.kind == "box-front" && $0.picked }).max(by: { Lab.suitability($0) < Lab.suitability($1) })?.id
             ?? c.id("subject"), let box = c.media[boxId] else { return nil }
         var crop: [Double]?
         if let at = rec.analysis.circle, at.count == 3 {
