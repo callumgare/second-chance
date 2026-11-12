@@ -29,7 +29,7 @@ type Filters = { kinds: Set<string>; source: string; minSize: number; subject: b
 const DEFAULT_FILTERS: Filters = { kinds: new Set(), source: "all", minSize: 0, subject: false, text: false, simple: false, hideDupes: true, picked: false, sort: "suitability" };
 
 type Group = "main" | "unrelated";
-type Item = { type: "head"; group: Group; shown: number; total: number } | { type: "row"; cards: Media[]; group: Group } | { type: "empty"; group: Group };
+type Item = { type: "head"; group: Group; shown: number; total: number } | { type: "foot"; group: Group; shown: number; total: number } | { type: "row"; cards: Media[]; group: Group } | { type: "empty"; group: Group };
 /** Pictures from a general search (Commons, Openverse) carry `relevance`; catalogue pictures count as relevant. */
 const UNRELATED = 0.4;
 const relevance = (m: Media) => m.relevance ?? 1;
@@ -125,10 +125,12 @@ export function GatherStage({ slug }: { slug: string }) {
     for (const g of ["main", "unrelated"] as const) {
       const list = visible[g];
       if (g === "unrelated" && !list.length) continue;
-      out.push({ type: "head", group: g, shown: list.length, total: totals[g] });
+      // the main group's count goes below it, with Add from files; the unrelated group's heading opens it
+      if (g === "unrelated") out.push({ type: "head", group: g, shown: list.length, total: totals[g] });
       if (g === "unrelated" && !showUnrelated) continue;
       if (!list.length) out.push({ type: "empty", group: g });
       for (let i = 0; i < list.length; i += cols) out.push({ type: "row", group: g, cards: list.slice(i, i + cols) });
+      if (g === "main") out.push({ type: "foot", group: g, shown: list.length, total: totals[g] });
     }
     return out;
   }, [visible, cols, totals.main, totals.unrelated, showUnrelated]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -138,7 +140,7 @@ export function GatherStage({ slug }: { slug: string }) {
     count: items.length, getScrollElement: () => scroller.current, overscan: 4,
     // Keys, not indexes, so a size measured for a header isn't reused for the row that moves into its place.
     getItemKey: (i) => { const it = items[i]; return it.type === "row" ? `${it.group}:${it.cards[0].id}` : `${it.type}:${it.group}`; },
-    estimateSize: (i) => (items[i].type === "head" ? HEAD : items[i].type === "empty" ? 60 : ROW),
+    estimateSize: (i) => (items[i].type === "head" || items[i].type === "foot" ? HEAD : items[i].type === "empty" ? 60 : ROW),
   });
 
   const sel = all.find((m) => m.id === selId) ?? null;
@@ -270,19 +272,19 @@ export function GatherStage({ slug }: { slug: string }) {
               <div key={vi.key} className="vrow" style={{ transform: `translateY(${vi.start}px)`, height: vi.size }}>
                 {it.type === "head" ? (
                   <div className="groupt">
-                    {it.group === "unrelated" ? (
-                      <button className="linkish unrel" onClick={() => setShowUnrelated(!showUnrelated)} aria-expanded={showUnrelated}
-                        title="Pictures from general searches that probably aren't of this program. They can still be picked.">
-                        {showUnrelated ? "▾" : "▸"} Probably unrelated ({it.shown === it.total ? it.total : `${it.shown} of ${it.total}`})
-                      </button>
-                    ) : <>
-                      Pictures
-                      <small>{it.shown === it.total ? `${it.total}` : `${it.shown} shown of ${it.total}`}</small>
-                    </>}
-                    {it.group === "main" && <>
-                      {scanning.length > 0 && <span className="row muted" style={{ gap: 5, fontWeight: 400 }}><span className="spin" /> scanning your files</span>}
-                      {gathering.length > 0 && <span className="row muted" style={{ gap: 5, fontWeight: 400 }}><span className="spin" /> {gatherText(gathering)}</span>}
-                    </>}
+                    <button className="linkish unrel" onClick={() => setShowUnrelated(!showUnrelated)} aria-expanded={showUnrelated}
+                      title="Pictures from general searches that probably aren't of this program. They can still be picked.">
+                      {showUnrelated ? "▾" : "▸"} Probably unrelated ({it.shown === it.total ? it.total : `${it.shown} of ${it.total}`})
+                    </button>
+                  </div>
+                ) : it.type === "foot" ? (
+                  <div className="groupfoot">
+                    {it.total > 0 && <span>{it.shown === it.total ? `${it.total} ${it.total === 1 ? "picture" : "pictures"}` : `${it.shown} shown of ${it.total}`}</span>}
+                    {scanning.length > 0 && <span className="row" style={{ gap: 5 }}><span className="spin" /> scanning your files</span>}
+                    {gathering.length > 0 && <span className="row" style={{ gap: 5 }}><span className="spin" /> {gatherText(gathering)}</span>}
+                    {(f.source === "all" || f.source === "Your files") && (
+                      <button className="btn small" onClick={() => void addFromFiles()} title="Scan a program's app, installer or folder, or pictures, for images. You can also drop pictures on the grid.">Add from files…</button>
+                    )}
                   </div>
                 ) : it.type === "empty" ? (
                   <p className="faint empty-group">{totals.main ? "Nothing here matches the filters."
