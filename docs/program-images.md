@@ -101,8 +101,9 @@ The roles are:
 | `cursor`, `bitmap-resource`, `picture`, `video-frame`, `carved` | What kind of source it came from |
 
 How a score is made is in `Results/Ranking.swift`. Where an image came from counts most,
-then its shape (size, aspect ratio, strips), then its content (one colour, and solid
-black; a dark picture with detail in it isn't marked down, as it can be an icon's background).
+then its shape (size, aspect ratio, strips), then its content: one colour (one shade over
+most of it), and solid black or white. A dark or light picture with detail in it, or a pattern
+of two close shades, isn't marked down, as it can be an icon's background.
 A family's representative takes its best member's score. Icon Lab's analysis ranks the
 content further; the extractor only supplies the signals.
 

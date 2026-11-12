@@ -485,8 +485,9 @@ nonisolated final class EventLog: @unchecked Sendable {
     }
 }
 
-/// Solid black is ranked as filler; a dark picture with something in it isn't marked down for being dark.
-@Suite struct DarkImageRanking {
+/// Solid black or white is ranked as filler; a dark or light picture with something in it, or a pattern of two close
+/// shades, isn't marked down.
+@Suite struct PlainImageRanking {
     /// A 256 px square: `pixel(x, y)` gives each pixel's RGBA.
     func scored(_ pixel: (Int, Int) -> [UInt8]) throws -> (score: Double, reasons: [String]) {
         var pixels: [UInt8] = []
@@ -504,6 +505,27 @@ nonisolated final class EventLog: @unchecked Sendable {
     @Test func aBlackSilhouetteIsMarkedDown() throws {
         let r = try scored { x, y in (x - 128) * (x - 128) + (y - 128) * (y - 128) < 90 * 90 ? [0, 0, 0, 255] : [0, 0, 0, 0] }
         #expect(r.reasons.contains("-15 nearly black"))
+    }
+
+    @Test func solidWhiteIsMarkedDown() throws {
+        let r = try scored { _, _ in [255, 255, 255, 255] }
+        #expect(r.reasons.contains("-10 nearly white"))
+    }
+
+    @Test func aLightPictureWithDetailIsnt() throws {
+        let r = try scored { x, y in [UInt8(232 + (x * 7 + y * 3) % 24), UInt8(235 + (x * 5 + y * 11) % 20), UInt8(228 + (x + y * 13) % 28), 255] }
+        #expect(!r.reasons.contains("-10 nearly white"))
+    }
+
+    @Test func aPinstripeOfTwoCloseShadesIsnt() throws {
+        // two dark blues six levels apart, in the same bin of the commonest colour
+        let r = try scored { x, _ in x % 6 < 3 ? [16, 32, 88, 255] : [22, 38, 94, 255] }
+        #expect(!r.reasons.contains("-20 mostly one colour"))
+    }
+
+    @Test func aJPEGsNoiseIsStillOneColour() throws {
+        let r = try scored { x, y in [UInt8(40 + (x + y) % 2), 60, UInt8(120 + (x * y) % 2), 255] }
+        #expect(r.reasons.contains("-20 mostly one colour"))
     }
 
     @Test func aDarkPictureWithDetailIsnt() throws {

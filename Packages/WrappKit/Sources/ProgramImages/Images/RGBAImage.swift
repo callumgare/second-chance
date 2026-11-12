@@ -181,6 +181,32 @@ nonisolated public struct RGBAImage: Sendable {
         return Double(counts.values.max() ?? 0) / Double(opaque)
     }
 
+    /// How far the pixels in the commonest colour's bin (as `dominantColourShare` bins them) stray from their own
+    /// mean: the largest channel's standard deviation, 0–255. Near 0 for one shade (with a JPEG's noise, a little
+    /// more); a few levels for two close shades sharing a bin, as a pinstripe of two dark blues does.
+    public var dominantColourSpread: Double {
+        var sums: [Int: (n: Double, s: [Double], q: [Double])] = [:]
+        let step = max(1, (width * height) / 65_536)
+        for pixel in stride(from: 0, to: width * height, by: step) {
+            let index = pixel * 4
+            guard pixels[index + 3] > 127 else { continue }
+            let key = Int(pixels[index] >> 3) << 10 | Int(pixels[index + 1] >> 3) << 5 | Int(pixels[index + 2] >> 3)
+            var e = sums[key] ?? (0, [0, 0, 0], [0, 0, 0])
+            e.n += 1
+            for c in 0..<3 {
+                let v = Double(pixels[index + c])
+                e.s[c] += v
+                e.q[c] += v * v
+            }
+            sums[key] = e
+        }
+        guard let top = sums.values.max(by: { $0.n < $1.n }) else { return 0 }
+        return (0..<3).map { c in
+            let mean = top.s[c] / top.n
+            return (max(0, top.q[c] / top.n - mean * mean)).squareRoot()
+        }.max() ?? 0
+    }
+
     /// Mean brightness of the opaque pixels, 0–255.
     public var meanLuma: Double {
         var total = 0.0
