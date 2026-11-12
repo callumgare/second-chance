@@ -127,7 +127,7 @@ nonisolated public struct WineDrives: Sendable {
     /// device link left from a disc Wine once gave this letter would let it
     /// take the letter back for whichever disc is at that device next.
     public func mount(_ target: String, as letter: Character) throws {
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try makeFolder()
         try replace(link(letter)) { try FileManager.default.createSymbolicLink(atPath: $0.path, withDestinationPath: target) }
         try blockDevice(letter)
     }
@@ -169,7 +169,7 @@ nonisolated public struct WineDrives: Sendable {
     /// before blocking them again, in order, left a late letter such as Y:
     /// empty for long enough to be taken.
     public func showOnly(_ target: String, as letter: Character) throws {
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try makeFolder()
         let keep = letter.lowercased().first ?? letter
         for each in Self.letters where each != keep {
             try blockLetter(each)
@@ -201,7 +201,7 @@ nonisolated public struct WineDrives: Sendable {
     }
 
     func blockLetter(_ letter: Character) throws {
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try makeFolder()
         try replace(link(letter)) { try Self.makeBlockingFile(at: $0) }
         try blockDevice(letter)
     }
@@ -241,19 +241,65 @@ nonisolated public struct WineDrives: Sendable {
     /// for a disc. Wine only reads `dosdevices` by the drives' own names.
     func replace(_ entry: URL, make: (URL) throws -> Void) throws {
         let temporary = folder.appendingPathComponent(".\(entry.lastPathComponent)\(UUID().uuidString)")
-        try make(temporary)
+        do {
+            try make(temporary)
+        } catch {
+            throw failure(Failure.makingEntry, at: entry, error)
+        }
         if rename(temporary.path, entry.path) == 0 { return }
-        let error = POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        var error: Error = POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         // A folder (not a link) at a drive's name can't be renamed over: that
         // one is removed first, as nothing Wine or a build makes is a folder.
-        var isFolder: ObjCBool = false
-        if FileManager.default.fileExists(atPath: entry.path, isDirectory: &isFolder), isFolder.boolValue,
-           (try? FileManager.default.destinationOfSymbolicLink(atPath: entry.path)) == nil {
-            try FileManager.default.removeItem(at: entry)
-            if rename(temporary.path, entry.path) == 0 { return }
+        if Found.at(entry.path) == .folder {
+            do {
+                try FileManager.default.removeItem(at: entry)
+                if rename(temporary.path, entry.path) == 0 { return }
+                error = POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            } catch let removing {
+                error = removing
+            }
         }
+        let failed = failure(Failure.placingEntry, at: entry, error)
         try? FileManager.default.removeItem(at: temporary)
-        throw error
+        throw failed
+    }
+
+    /// Make `folder`, saying what was in the way if it can't be made.
+    func makeFolder() throws {
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        } catch {
+            throw failure(Failure.makingDrivesFolder, at: folder, error)
+        }
+    }
+
+    /// A `Failure` for `entry`, with what is there and above it now, logged
+    /// with every entry in `folder`, so a detailed report's log shows the
+    /// drives as they were.
+    private func failure(_ step: (Failure.Detail) -> Failure, at entry: URL, _ error: Error) -> Failure {
+        let failed = step(Failure.Detail(
+            entry: entry.lastPathComponent, path: entry.path,
+            found: Found.at(entry.path), foundAbove: Found.at(entry.deletingLastPathComponent().path),
+            underlying: error))
+        logger.error("[Drives] \(failed)")
+        logger.notice("[Drives] \(folder.lastPathComponent) holds: \(inventory())")
+        return failed
+    }
+
+    /// Each entry in `folder` and what it is, for the log.
+    func inventory() -> String {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else {
+            return "nothing readable (\(Found.at(folder.path).rawValue))"
+        }
+        if names.isEmpty { return "nothing" }
+        return names.sorted().map { name in
+            let path = folder.appendingPathComponent(name).path
+            let found = Found.at(path)
+            guard found.isLink, let target = try? FileManager.default.destinationOfSymbolicLink(atPath: path) else {
+                return "\(name) \(found.rawValue)"
+            }
+            return "\(name) \(found.rawValue) → \(target)"
+        }.joined(separator: ", ")
     }
 
     static func makeBlockingFile(at url: URL) throws {

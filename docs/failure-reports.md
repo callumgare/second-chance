@@ -95,6 +95,20 @@ game run it is how the run ended: `quit-unexpectedly`, `never-started`,
 (`CopyProtection`). That is only a tag: whether such a wrapper is why a game
 failed is for the report to show, and the launch and the build log it too.
 
+An error that can say more about itself in fixed words conforms to
+`ReportTaggedError` (`WrappLogging`), and its `reportTags` are added to the
+report's tags. When a step can fail several ways that the system reports as
+one error, give each its own case, so the `kind` names the step, and use the
+tags for what was in the way. A drive letter a wrapp couldn't set is
+`WineDrives.Failure` (`makingDrivesFolder`, `makingEntry` or
+`placingEntry`), with `drive_entry` (`dosdevices`, `a:`, `y::`) and `found` and
+`found_above`: what was at the entry and at the folder holding it (`nothing`,
+`folder`, `file`, `link-to-folder`, `link-to-file`, `broken-link`, …).
+Mounting the saves folder once failed with only `NSCocoaErrorDomain 516`
+("file exists"), which a file at `dosdevices` and a link left at `a:` both
+give. The log also lists every entry in `dosdevices` and where each link
+goes, which a detailed report carries.
+
 Every event says how detailed it is in the `report_detail` tag (`basic` or
 `detailed`), so `report_detail:detailed` in Sentry's search finds the ones
 with a zip. A crash sent at the next start also has `crash:previous-run`.

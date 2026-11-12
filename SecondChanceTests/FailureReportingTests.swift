@@ -340,6 +340,23 @@ struct FailureReportTests {
         let other = FailureReport(what: "Building the wrapp", error: WineError.noDisplay)
         #expect(other.tags.isEmpty)
     }
+
+    @Test("An error with report tags adds them, and its step is the kind")
+    func reportTags() throws {
+        let wrapp = FileManager.default.temporaryDirectory.appendingPathComponent("Tags-\(UUID().uuidString).app")
+        defer { try? FileManager.default.removeItem(at: wrapp) }
+        let drives = Wine(wrapp: wrapp).drives
+        try FileManager.default.createDirectory(at: drives.folder.deletingLastPathComponent(), withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: drives.folder.path, contents: nil)
+
+        let thrown = #expect(throws: WineDrives.Failure.self) { try drives.mount("/tmp/saves", as: "a") }
+        let report = FailureReport(what: "Mounting the saves folder", error: try #require(thrown))
+        #expect(report.kind == "WineDrives.Failure.makingDrivesFolder")
+        #expect(report.tags["found"] == "file")
+        #expect(report.tags["found_above"] == "folder")
+        #expect(report.tags["drive_entry"] == "dosdevices")
+        #expect(report.tags["caused_by"]?.hasPrefix("NSCocoaErrorDomain") == true)
+    }
 }
 
 @Suite("Failure reporter")

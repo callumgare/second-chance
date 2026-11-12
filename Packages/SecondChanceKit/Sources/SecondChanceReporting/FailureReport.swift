@@ -96,6 +96,9 @@ nonisolated public struct FailureReport: Sendable {
             if let exitCode = ended.exitCode { tags["exit_code"] = String(exitCode) }
             if let signal = ended.signal { tags["signal"] = SubprocessWatch.signalName(signal) }
         }
+        if let tagged = error as? ReportTaggedError {
+            tags.merge(tagged.reportTags) { ours, _ in ours }
+        }
         self.init(what: what, kind: ErrorChain.identifier(error), game: game, source: source,
                   engine: engine, tags: tags, summary: summary, diagnostics: diagnostics)
     }
