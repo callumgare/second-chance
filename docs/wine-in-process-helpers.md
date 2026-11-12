@@ -815,6 +815,22 @@ beside a window. They take no clicks and never become key, and they go
 when the window starts to leave its Space, starts to enter one, or is shown
 smaller. The log says
 `in its Space: the bars beside the program's 1440x1080 picture are windows of their own`.
+
+Wine also holds the pointer in such a window: win32u clips the cursor to a
+foreground window covering its monitor, and the Mac driver does that with
+`-[NSWindow setMouseConfinementRect:]` (private) on its window, a rect
+relative to the window that macOS joins with the key window's children's.
+The bars alone left the Mac's pointer held to the picture. So the helper
+follows Wine's calls (`setMouseConfinementRect:` on `WineWindow`, replaced),
+and while Wine holds its window each bar is given its own bounds, and the
+pointer may go over them. Wine still pins the position it tells the
+program to its clip, so the program's cursor stays at the picture's edge.
+Shown smaller, the window is given no hold at all: Wine, which still sees
+it cover the screen, goes on clipping, and its rect, kept relative to the
+window, held the Mac's pointer in the smaller window. What Wine last asked
+for is set again when the window covers the screen again. The log says
+`the pointer is free of the program's window` and
+`the pointer is held in the program's window again, as Wine asked`.
 Checked on Webmaster (2026-11-12, a test session, by the cursor AppKit and
 Wine set, as Screen Sharing's pictures leave the pointer out): over a bar
 Wine set the Mac's arrow, and clicks on the picture no longer set it.

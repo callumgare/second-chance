@@ -170,6 +170,8 @@ static void postFrameChangedUnlessSmaller(NSWindow *self, SEL _cmd, NSRect frame
 }
 
 static void endSmaller(NSWindow *window, const char *why);
+static void watchMouseConfinement(void);
+static void applyWineConfinement(NSWindow *window);
 
 static void setFrameFromWineEndingSmaller(NSWindow *self, SEL _cmd, NSRect contentRect) {
     if (isOurs(self)) {
@@ -453,8 +455,10 @@ int scaledPictureWindowBegin(NSWindow *window) {
     gTrueShadow = window.hasShadow;
     gTrueGravity = window.contentView.layer.contentsGravity;
     gTrueAspect = window.contentAspectRatio;
+    watchMouseConfinement();
     gWindow = window;
     gActive = YES;
+    applyWineConfinement(window);
 
     NSWindowStyleMask style = (gTrueStyle & ~NSWindowStyleMaskBorderless) | kSmallerStyle;
     NSRect frame = smallerFrame(window, style);
@@ -475,6 +479,7 @@ static void endSmaller(NSWindow *window, const char *why) {
     gHasLastSmaller = YES;
     gActive = NO;
     gWindow = nil;
+    applyWineConfinement(window);
     // A window with no aspect ratio of its own is resized freely again.
     if (gTrueAspect.width > 0 && gTrueAspect.height > 0) window.contentAspectRatio = gTrueAspect;
     else window.contentResizeIncrements = NSMakeSize(1, 1);
@@ -525,6 +530,87 @@ void scaledPictureWindowEnd(NSWindow *window) {
 
 static char kBarsKey;
 
+// Wine keeps the pointer in a fullscreen window's picture when it clips the
+// cursor to the window, as win32u does for every window covering the
+// monitor: -[NSWindow setMouseConfinementRect:] (private) on the key window,
+// a rect, relative to the window, that macOS unions with those of the key
+// window's children. So while Wine confines its window, each bar confines
+// to its own bounds, and the pointer can go over the bars as well as the
+// picture; Wine still pins the position it reports to the program
+// (-clipCursorLocation:), so the program's cursor stops at the picture's
+// edge. A bar never confines otherwise: alone, its rect would hold the
+// pointer in the bars. Shown smaller, the window keeps none: Wine, which
+// still sees it cover the screen, goes on clipping, and its rect would hold
+// the pointer in the smaller window. What Wine last asked for is kept and
+// set again when the window covers the screen again.
+
+@interface NSWindow (SecondChanceMouseConfinement)
+- (NSRect)mouseConfinementRect;
+- (void)setMouseConfinementRect:(NSRect)rect;
+@end
+
+static IMP gWineSetMouseConfinement;
+static char kWineConfinementKey;
+
+static void confineBarsLikeParent(NSWindow *window);
+
+static void setConfinement(NSWindow *window, NSRect rect) {
+    if (!gWineSetMouseConfinement) return;
+    ((void (*)(id, SEL, NSRect))gWineSetMouseConfinement)(window, @selector(setMouseConfinementRect:), rect);
+}
+
+static void applyWineConfinement(NSWindow *window) {
+    if (!gWineSetMouseConfinement) return;
+    NSValue *wine = objc_getAssociatedObject(window, &kWineConfinementKey);
+    NSRect rect = isOurs(window) || !wine ? NSZeroRect : wine.rectValue;
+    if (!NSEqualRects(window.mouseConfinementRect, rect)) {
+        helperReport("ScaledPictureWindow", "notice", NSIsEmptyRect(rect) ? "the pointer is free of the program's window"
+                                                                          : "the pointer is held in the program's window again, as Wine asked");
+        setConfinement(window, rect);
+    }
+    confineBarsLikeParent(window);
+}
+
+static void confineBarsLikeParent(NSWindow *window) {
+    NSArray<NSWindow *> *bars = objc_getAssociatedObject(window, &kBarsKey);
+    if (!bars || ![window respondsToSelector:@selector(mouseConfinementRect)]) return;
+    BOOL confined = !NSIsEmptyRect(window.mouseConfinementRect);
+    for (NSWindow *bar in bars) {
+        NSRect rect = confined && bar.parentWindow == window ? bar.contentView.bounds : NSZeroRect;
+        if (!NSEqualRects(bar.mouseConfinementRect, rect)) bar.mouseConfinementRect = rect;
+    }
+}
+
+static void setMouseConfinementWithBars(NSWindow *self, SEL _cmd, NSRect rect) {
+    NSValue *before = objc_getAssociatedObject(self, &kWineConfinementKey);
+    if (!before || !NSEqualRects(before.rectValue, rect)) {
+        helperReport("ScaledPictureWindow", "notice", "Wine %s the pointer in its window%s",
+                     NSIsEmptyRect(rect) ? "lets go of" : "holds", isOurs(self) ? " (shown smaller: left free)" : "");
+    }
+    objc_setAssociatedObject(self, &kWineConfinementKey, [NSValue valueWithRect:rect], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    applyWineConfinement(self);
+}
+
+static void watchMouseConfinement(void) {
+    static BOOL attempted = NO;
+    if (attempted) return;
+    attempted = YES;
+    SEL selector = @selector(setMouseConfinementRect:);
+    Class window = NSClassFromString(@"WineWindow");
+    if (window && [NSWindow instancesRespondToSelector:selector] && [NSWindow instancesRespondToSelector:@selector(mouseConfinementRect)]) {
+        gWineSetMouseConfinement = replaceOwnMethod(window, selector, (IMP)setMouseConfinementWithBars);
+    }
+    // A rect Wine set before now is the one it asked for.
+    for (NSWindow *each in NSApp.windows) {
+        if (gWineSetMouseConfinement && [each isKindOfClass:window] && !isOurs(each) && !objc_getAssociatedObject(each, &kWineConfinementKey))
+            objc_setAssociatedObject(each, &kWineConfinementKey, [NSValue valueWithRect:each.mouseConfinementRect], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (!gWineSetMouseConfinement) {
+        helperReport("ScaledPictureWindow", "warning",
+                     "no -setMouseConfinementRect: to follow; while Wine clips the cursor, the pointer stays off the bars beside the picture");
+    }
+}
+
 static NSWindow *newBar(void) {
     NSWindow *bar = [[SecondChancePictureBarWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1, 1)
                                                                     styleMask:NSWindowStyleMaskBorderless
@@ -544,12 +630,14 @@ void scaledPictureBarsRemove(NSWindow *window) {
     if (!bars) return;
     objc_setAssociatedObject(window, &kBarsKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     for (NSWindow *bar in bars) {
+        if ([bar respondsToSelector:@selector(setMouseConfinementRect:)]) bar.mouseConfinementRect = NSZeroRect;
         if (bar.parentWindow) [bar.parentWindow removeChildWindow:bar];
         [bar orderOut:nil];
     }
 }
 
 void scaledPictureBarsShow(NSWindow *window, NSRect picture) {
+    watchMouseConfinement();
     NSScreen *screen = window.screen;
     // Only once the window is in its Space, covering its screen: not while
     // it moves in or out, nor shown smaller.
@@ -590,6 +678,7 @@ void scaledPictureBarsShow(NSWindow *window, NSRect picture) {
         if (bar.parentWindow != window) [window addChildWindow:bar ordered:NSWindowAbove];
         [bar.contentView.window invalidateCursorRectsForView:bar.contentView];
     }
+    confineBarsLikeParent(window);
     if (made) {
         helperReport("ScaledPictureWindow", "notice", "in its Space: the bars beside the program's %.0fx%.0f picture are windows of their own",
                      picture.size.width, picture.size.height);
