@@ -6,6 +6,21 @@ nonisolated extension IconLabAPI {
     static func addLabRoutes(_ router: inout Router, lab: Lab) {
         router.get("/api/programs") { _ in try json(await lab.programs()) }
         router.get("/api/programs/:slug") { c in try json(try await lab.program(try c.param("slug"))) }
+        // Programs that are one program (a search result opened as both): the others' pictures, designs and pins
+        // move into this one, and they're removed.
+        router.post("/api/programs/:slug/absorb") { c in
+            let slug = try c.param("slug")
+            guard await lab.store.program(slug) != nil else { throw APIError.notFound }
+            for other in try decode(AbsorbBody.self, c.request).from where other != slug {
+                guard let p = await lab.store.program(other) else { continue }
+                try await lab.store.absorb(other, into: slug)
+                if var into = await lab.store.program(slug) {
+                    into.ids = (into.ids ?? [:]).merging(p.ids ?? [:]) { a, _ in a }
+                    try await lab.store.saveProgram(into)
+                }
+            }
+            return try json(await lab.programs().first { $0.slug == slug })
+        }
         router.get("/api/programs/:slug/look") { c in try json(try await lab.look(try c.param("slug"))) }
         router.get("/api/treatments") { _ in try json(Treatments.info) }
 
@@ -167,6 +182,7 @@ nonisolated extension IconLabAPI {
 
 nonisolated struct MediaPatch: Decodable { var picked: Bool?; var kind: String?; var rotation: Int?; var hidden: Bool? }
 nonisolated struct PinsOrder: Decodable { var pins: [String] }
+nonisolated struct AbsorbBody: Decodable { var from: [String] }
 nonisolated struct SuggestBody: Decodable, Sendable { var params: SuggestionParams?; var treatments: [String]? }
 nonisolated struct ContentBody: Decodable {
     var program: String

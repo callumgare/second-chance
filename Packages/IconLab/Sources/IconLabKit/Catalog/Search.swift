@@ -126,7 +126,10 @@ public actor Catalog {
         return id
     }
 
-    public func snapshot(_ id: String) -> Snapshot? { searches[id]?.snapshot }
+    public func snapshot(_ id: String) async -> Snapshot? {
+        guard let s = searches[id]?.snapshot else { return nil }
+        return await linked(s)
+    }
 
     func run(_ id: String, _ q: String, _ ready: [(Int, any ProgramSource)]) async {
         recompute(id)
@@ -227,6 +230,7 @@ public actor Catalog {
     }
 
     func send(_ s: Snapshot) async {
+        let s = await linked(s)
         let e = JSONEncoder()
         e.outputFormatting = [.withoutEscapingSlashes]
         guard let d = try? e.encode(s), let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return }
@@ -238,6 +242,12 @@ public actor Catalog {
     /// Creates a program from a chosen result: a slug from its title (with the year if that's taken), and
     /// `program.json` with its title, year, ids and platforms.
     public func createProgram(_ r: ProgramResult) async throws -> String {
+        // opened before (it shares ids with a program, or it was merged with one): that program again
+        if r.bundleId == nil, let slug = await openedProgram(for: r), var p = await lab.store.program(slug) {
+            p.ids = (p.ids ?? [:]).merging(r.ids) { a, _ in a }
+            try await lab.store.saveProgram(p)
+            return slug
+        }
         if let bundle = r.bundleId {
             let slug = try await lab.openKnown(bundle).slug
             if var p = await lab.store.program(slug) {

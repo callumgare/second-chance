@@ -245,6 +245,8 @@ export type ProgramResult = {
   hits: ProgramHit[]; mergeReasons: string[]; score: number
   /** The person merged it: it can be unmerged. */
   mergedByYou?: boolean
+  /** The programs already opened from it, the one with the most designs first. */
+  programs?: OpenedProgram[]
   /** One of its hits is the host's program with this bundle id (source "secondchance"). */
   bundleId?: string
 }
@@ -277,6 +279,9 @@ export type ScanLine =
   | { event: "done"; nodes: number; images: number; families: number; skipped: number; records: string; seconds: number }
 
 export type RoleKey = "subject" | "fill" | "disc" | "logo" | "icon"
+
+/** A program opened from a search result before, with what it holds. */
+export type OpenedProgram = { slug: string; title: string; media: number; picked: number; pins: number; thumb?: string }
 
 export type Program = {
   slug: string; title: string; year?: number
@@ -425,6 +430,8 @@ export const api = {
   /** Saves the doc and pins it, in one call. */
   pinDoc: (slug: string, doc: Doc) => req<{ pins: string[] }>("POST", `/api/programs/${enc(slug)}/pins`, { doc }),
   /** The pins in a new order: Design and Review show it, and saving follows it. */
+  /** Makes these programs one: theirs moves into `slug`'s, and they're removed. */
+  absorb: (slug: string, from: string[]) => req<ProgramSummary>("POST", `/api/programs/${enc(slug)}/absorb`, { from }),
   orderPins: (slug: string, pins: string[]) => req<{ pins: string[] }>("PUT", `/api/programs/${enc(slug)}/pins`, { pins }),
   unpin: (slug: string, id: string) => req<{ pins: string[] }>("DELETE", `/api/programs/${enc(slug)}/pins/${enc(id)}`),
   save: (slug: string, ids: string[]) =>

@@ -161,7 +161,8 @@ nonisolated public final class Lab: Sendable {
     }
 
     public struct ProgramSummary: Codable, Sendable {
-        var slug, title: String
+        public var slug: String
+        var title: String
         var year: Int?
         var bundleId: String?
         var thumb: String?

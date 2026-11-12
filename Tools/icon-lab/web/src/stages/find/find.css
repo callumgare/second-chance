@@ -61,3 +61,12 @@
 .mergebox.on { background: var(--accent); border-color: var(--accent) }
 .merge .hit { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap }
 .merge .hit .sep { margin-left: auto; font-size: 11px }
+
+/* Results opened before: what they hold, designs most of all, so a program with designs is easy to come back to. */
+.res.opened { box-shadow: inset 3px 0 0 var(--line-strong) }
+.res.designed { box-shadow: inset 3px 0 0 var(--pin); background: color-mix(in srgb, var(--pin) 7%, transparent) }
+.opened-note { display: block; margin-top: 5px; font-size: 12px; color: var(--muted) }
+.opened-note b { color: var(--fg); font-weight: 600 }
+.opened-note.designs b { color: var(--pin) }
+.opened-note .go { color: var(--accent) }
+.pinned-icons { display: inline-flex; gap: 4px; vertical-align: middle; margin-right: 8px }

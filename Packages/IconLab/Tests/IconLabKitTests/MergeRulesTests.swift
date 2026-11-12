@@ -52,3 +52,30 @@ import Testing
         #expect(rules == MergeRules())
     }
 }
+
+// Two programs that turn out to be one: what each holds ends up in one.
+@Suite struct AbsorbTests {
+    @Test func picturesDesignsAndPinsMoveAndTheOtherGoes() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("iconlab-absorb-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = Store(root: root)
+        try await store.saveProgram(.init(slug: "a", title: "Webmaster", ids: ["wikidata": "Q1"], platforms: nil, updated: nil))
+        try await store.saveProgram(.init(slug: "b", title: "Webmaster", ids: ["lutris": "webmaster"], platforms: nil, updated: nil))
+        let png = root.appendingPathComponent("p.png")
+        try Bitmap(width: 4, height: 4, fill: (200, 10, 10, 255)).writePNG(to: png)
+        _ = try await store.addMedia("b", from: png, name: "box.png", source: "Your files")
+        try await store.saveDoc("b", id: "d1", json: Data(#"{"id":"d1","program":"b","name":"Lifted"}"#.utf8))
+        var st = Store.State(); st.pins = ["d1"]
+        try await store.saveState("b", st)
+
+        try await store.absorb("b", into: "a")
+
+        #expect(await store.program("b") == nil)
+        #expect(await store.media("a").count == 1)
+        let moved = try #require(await store.media("a").first)
+        #expect(FileManager.default.fileExists(atPath: store.mediaFile("a", moved.file).path))
+        #expect(await store.state("a").pins == ["d1"])
+        let doc = try #require(await store.doc("a", "d1"))
+        #expect((try JSONSerialization.jsonObject(with: doc) as? [String: Any])?["program"] as? String == "a")
+    }
+}

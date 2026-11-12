@@ -4,7 +4,8 @@
 // one program, and a merged row's hits can be separated or its merge undone; merges are remembered. Recent programs
 // sit below; the sources panel says what each source is doing.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, hitKey, type KnownProgram, type ProgramResult, type ProgramSummary, type SearchSnapshot, type SourceInfo } from "../../api";
+import { IconArt } from "../../components/IconArt";
+import { api, hitKey, type Doc, type KnownProgram, type OpenedProgram, type ProgramResult, type ProgramSummary, type SearchSnapshot, type SourceInfo } from "../../api";
 import { go, type Route } from "../../lib/router";
 import { useApp } from "../../state/app";
 import { useSearch } from "../../state/search";
@@ -67,6 +68,9 @@ export function FindStage({ route }: { route: Route }) {
     setBusy(r.key);
     try {
       const p = await api.createProgram(r);
+      // opened before: back to it, where it was left (its designs, else its pictures), without gathering again
+      const was = r.programs?.find((o) => o.slug === p.slug);
+      if (was) { void useApp.getState().loadPrograms(); go(p.slug, was.pins ? "design" : "gather"); return; }
       api.gather(p.slug).catch((e: unknown) => useApp.getState().say("Couldn't start gathering images: " + (e as Error).message, "error"));
       void useApp.getState().loadPrograms();
       go(p.slug, "gather");
@@ -149,6 +153,47 @@ export function FindStage({ route }: { route: Route }) {
   );
 }
 
+/** The program's pinned designs, small, from Icon Composer's renders: what was made, at a glance. */
+function PinnedIcons({ slug }: { slug: string }) {
+  const [docs, setDocs] = useState<Doc[]>([]);
+  useEffect(() => {
+    let live = true;
+    api.docs(slug).then((s) => { if (live) setDocs(s.pins.map((id) => s.docs.find((d) => d.id === id)).filter((d): d is Doc => !!d).slice(0, 5)); })
+      .catch(() => { /* the count still says it */ });
+    return () => { live = false; };
+  }, [slug]);
+  if (!docs.length) return null;
+  return <span className="pinned-icons">{docs.map((d) => <IconArt key={d.id} doc={d} size={28} real="visible" priority={3} />)}</span>;
+}
+
+async function combine(programs: OpenedProgram[]) {
+  const [into, ...rest] = programs;
+  try {
+    await api.absorb(into.slug, rest.map((p) => p.slug));
+    useApp.getState().say(`Combined into “${into.title}”`);
+    void useApp.getState().loadPrograms();
+    const q = useSearch.getState().q;
+    if (q) void useSearch.getState().run(q);
+  } catch (e) { useApp.getState().say("Couldn't combine them: " + (e as Error).message, "error"); }
+}
+
+/** What a result opened before already holds: its designs first, as that's what's worth coming back to. */
+function OpenedNote({ programs }: { programs: OpenedProgram[] }) {
+  const p = programs[0];
+  const pictures = `${p.media} ${p.media === 1 ? "picture" : "pictures"}${p.picked ? `, ${p.picked} picked` : ""}`;
+  return (
+    <span className={"opened-note" + (p.pins ? " designs" : "")}>
+      {p.pins
+        ? <><PinnedIcons slug={p.slug} /><b>★ {p.pins === 1 ? "1 icon design pinned" : `${p.pins} icon designs pinned`}</b> · {pictures} · <span className="go">Continue designing →</span></>
+        : <><b>Opened before</b> · {pictures} · <span className="go">Carry on →</span></>}
+      {programs.length > 1 && <span className="faint"> · also opened {programs.length - 1 === 1 ? "once more" : `${programs.length - 1} more times`} as {programs.slice(1).map((o) => o.slug).join(", ")}{" "}
+        <span className="linkish" role="button" tabIndex={0} title="Move their pictures, designs and pins into one program"
+          onClick={(e) => { e.stopPropagation(); void combine(programs); }}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); void combine(programs); } }}>Combine them</span></span>}
+    </span>
+  );
+}
+
 function ResultRow({ r, active, busy, names, onChoose, onHover, merging, chosen, onToggle, onSeparate, onUnmerge }: {
   r: ProgramResult; active: boolean; busy: boolean; names: Map<string, string>; onChoose(): void; onHover(): void
   merging: boolean; chosen: boolean; onToggle(): void; onSeparate(key: string, name: string): void; onUnmerge(): void
@@ -157,10 +202,11 @@ function ResultRow({ r, active, busy, names, onChoose, onHover, merging, chosen,
   const [broken, setBroken] = useState(false);
   useEffect(() => { if (active) ref.current?.scrollIntoView({ block: "nearest" }); }, [active]);
   const srcs = [...new Set(r.hits.map((h) => h.source))];
-  const thumb = r.thumb ?? r.hits.find((h) => h.thumb)?.thumb;
+  const opened = r.programs?.[0];
+  const thumb = r.thumb ?? r.hits.find((h) => h.thumb)?.thumb ?? opened?.thumb;
   const linkOnly = Object.entries(r.links ?? {}).filter(([id]) => !srcs.includes(id));
   return (
-    <div ref={ref} className={"res" + (active && !merging ? " top" : "") + (chosen ? " chosen" : "") + (r.bundleId ? " ours" : "")} role="option" aria-selected={merging ? chosen : active} onMouseEnter={onHover}>
+    <div ref={ref} className={"res" + (active && !merging ? " top" : "") + (chosen ? " chosen" : "") + (r.bundleId ? " ours" : "") + (opened ? " opened" : "") + (opened?.pins ? " designed" : "")} role="option" aria-selected={merging ? chosen : active} onMouseEnter={onHover}>
       <button className="res-main" onClick={merging ? onToggle : onChoose} disabled={busy} aria-pressed={merging ? chosen : undefined}>
         {merging && <span className={"mergebox" + (chosen ? " on" : "")} aria-hidden>{chosen ? "✓" : ""}</span>}
         {thumb && !broken ? <img className="th" src={thumb} alt="" loading="lazy" onError={() => setBroken(true)} /> : <KindIcon kind={r.kind} />}
@@ -176,6 +222,7 @@ function ResultRow({ r, active, busy, names, onChoose, onHover, merging, chosen,
             {r.kind === "remake" && <span className="warnText"> · a remake: it may run on a Mac already</span>}
           </span>
           <span className="srcs">{srcs.map((s) => <span key={s} className="tag">{names.get(s) ?? s}</span>)}</span>
+          {opened && <OpenedNote programs={r.programs ?? []} />}
         </span>
         <span className="match"><b>{Math.round(r.score)}</b>match<span>{srcs.length} {srcs.length === 1 ? "source" : "sources"}</span></span>
       </button>

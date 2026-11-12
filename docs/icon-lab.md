@@ -28,7 +28,14 @@ A program goes through four stages, each a route of the page
    it gathers, so its pictures are looked up by the catalogues' ids. When the
    automatic merge misses, **Merge results…** joins several results into one
    program, and a merged result's entries can be separated or its merge
-   undone; merges are remembered (`merges.json` in the data folder).
+   undone; merges are remembered (`merges.json` in the data folder). A result
+   opened before says so, and one with designs shows them, pinned, with
+   **Continue designing**; choosing it opens that program again. Merging
+   results that had each been opened makes one program of them (its pictures,
+   designs and pins together, Second Chance's own program or else the one with
+   the most sources taking the rest), and separating them leaves it with the
+   part that has the most sources. A result opened as two programs offers
+   **Combine them**.
 2. **Gather.** Pictures from the sources, and from **Add from files**, which
    scans an app, installer, disc image or folder for every image in it
    (WrappKit's `ProgramImages`, [program-images.md](program-images.md)), in

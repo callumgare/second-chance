@@ -64,6 +64,8 @@ nonisolated public struct ProgramResult: Codable, Sendable {
     public var mergedByYou: Bool?
     /// One of its hits is the host's program with this bundle id: choosing it opens that program.
     public var bundleId: String?
+    /// The programs already opened from it (designs first): set as results are sent, never by the merge.
+    public var programs: [OpenedProgram]?
 }
 
 /// What stage 2 knows about the chosen program, for media sources to look it up by.

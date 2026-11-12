@@ -56,6 +56,14 @@ type MediaKind = "box-front" | "box-back" | "box-spine" | "disc" | "logo" | "ico
   | "banner" | "manual" | "cutout" | "art" | "other"
 ```
 
+`POST /api/programs/:slug/absorb` `{ from: string[] }` → `ProgramSummary` makes these programs one: each one's
+pictures, masks, documents (renamed to this program), pins (after this one's), scans and saved icons move here, and
+it's removed. Search results say which programs were opened from them (`ProgramResult.programs`, the one with the
+most pins first, matched by shared ids or the host's bundle), and merging results that each had one does the same
+(the host's program, else the one whose result has the most sources, takes the rest); separating a result leaves
+its program with the part that has the most sources, and the others' ids are taken off it. Choosing a result that
+was opened before opens that program again.
+
 `GET /api/programs/:slug/look` → `{ colours, colourOrder, roles }`, the parts of `Program` that follow from its
 pictures. They change as gathering and analysis go on (the subject image is chosen, a larger copy replaces it), so
 the page asks again a moment after its pictures change rather than keeping what it was given when it opened the

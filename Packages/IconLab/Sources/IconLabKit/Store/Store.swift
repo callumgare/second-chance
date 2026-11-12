@@ -154,6 +154,47 @@ public actor Store {
         try json.write(to: d.appendingPathComponent("\(Store.slugify(id)).json"), options: .atomic)
     }
 
+    // MARK: Merging programs
+
+    /// Moves everything one program holds into another, then removes it: its pictures (a picture both have is kept
+    /// once, the target's record winning), their masks, its documents (each now naming the target), its pins after
+    /// the target's, its scans and saved icons (a name both have stays the target's). For two search results the
+    /// person merged that had each been opened as a program.
+    public func absorb(_ source: String, into target: String) throws {
+        guard source != target, program(source) != nil, program(target) != nil else { return }
+        let fm = FileManager.default
+        let from = dir(source), to = dir(target)
+        // files, folder by folder; what the target already has stays
+        for sub in ["media", "masks", "scans", "saved"] {
+            let src = from.appendingPathComponent(sub)
+            guard let names = try? fm.contentsOfDirectory(atPath: src.path), !names.isEmpty else { continue }
+            let dst = to.appendingPathComponent(sub)
+            try fm.createDirectory(at: dst, withIntermediateDirectories: true)
+            for n in names where !fm.fileExists(atPath: dst.appendingPathComponent(n).path) {
+                try fm.moveItem(at: src.appendingPathComponent(n), to: dst.appendingPathComponent(n))
+            }
+        }
+        var records = media(target)
+        let have = Set(records.map(\.id))
+        records += media(source).filter { !have.contains($0.id) }
+        try saveMedia(target, records)
+        // documents name their program
+        for d in docs(source) {
+            guard var obj = try JSONSerialization.jsonObject(with: d) as? [String: Any], let id = obj["id"] as? String else { continue }
+            obj["program"] = target
+            try saveDoc(target, id: id, json: try JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]))
+        }
+        var st = state(target)
+        for pin in state(source).pins where !st.pins.contains(pin) { st.pins.append(pin) }
+        try saveState(target, st)
+        // the target's colours follow from its pictures again
+        let colours = to.appendingPathComponent("colours.json")
+        if fm.fileExists(atPath: colours.path) { try fm.removeItem(at: colours) }
+        try fm.removeItem(at: from)
+        mediaCache[source] = nil
+        touch(target)
+    }
+
     // MARK: Helpers
 
     public static func json<T: Encodable>(_ v: T) throws -> Data {

@@ -93,9 +93,17 @@ extension Catalog {
         case merge([String]), separate(String), unmerge([String])
     }
 
-    /// Changes the merges, keeps them, and sends every search again with them applied.
+    /// Changes the merges, keeps them, and sends every search again with them applied. Results merged that had each
+    /// been opened as a program make one program of them; a result split leaves its program with the part that has
+    /// the most sources (OpenedPrograms).
     public func changeMerges(_ change: MergeChange) async throws -> MergeRules {
         var rules = mergeRules()
+        var split: [(slug: String, hits: Set<String>)] = []
+        switch change {
+        case .merge(let keys): await mergePrograms(keys)
+        case .separate(let key): split = await programsBeforeSplit([key])
+        case .unmerge(let keys): split = await programsBeforeSplit(keys)
+        }
         switch change {
         case .merge(let keys): rules.merge(keys)
         case .separate(let key): rules.separate(key)
@@ -105,10 +113,9 @@ extension Catalog {
         e.outputFormatting = [.prettyPrinted, .sortedKeys]
         try e.encode(rules).write(to: mergesFile, options: .atomic)
         loadedRules = rules
-        for id in searchOrder {
-            recompute(id)
-            await emit(id, force: true)
-        }
+        for id in searchOrder { recompute(id) }
+        await settleSplit(split)
+        for id in searchOrder { await emit(id, force: true) }
         return rules
     }
 
