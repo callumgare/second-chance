@@ -2,8 +2,8 @@
 //  VolumeKindsTests.swift
 //  SecondChanceKitTests
 //
-//  What a volume is, from Disk Arbitration's description of it, and the
-//  file the volumes seen are kept in.
+//  What a volume is, from Disk Arbitration's description of it, and which
+//  volumes a run knows.
 
 import DiskArbitration
 import Foundation
@@ -26,20 +26,6 @@ struct VolumeKindsTests {
         #expect(kind([:]) == .unknown)
     }
 
-    @Test("Volumes seen are kept, the old ones dropped")
-    func store() throws {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("volume-kinds-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: folder) }
-        let store = folder.appendingPathComponent("volume-kinds.json")
-        VolumeKinds.update(store: store) {
-            $0["/Volumes/Old"] = MountedVolume(kind: .externalDrive, seen: Date(timeIntervalSinceNow: -VolumeKinds.maximumAge - 60))
-            $0["/Volumes/Nancy Drew"] = MountedVolume(kind: .discImage, seen: Date())
-        }
-        let kept = VolumeKinds.load(store)
-        #expect(kept["/Volumes/Nancy Drew"]?.kind == .discImage)
-        #expect(kept["/Volumes/Old"] == nil)
-    }
-
     @Test("A file on the startup disk needs no volume noted")
     func startupDisk() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("volume-kinds-\(UUID().uuidString).txt")
@@ -48,5 +34,14 @@ struct VolumeKindsTests {
         #expect(VolumeKinds.mountPoint(of: file) == nil)
         // Nor one since removed, nor its folder.
         #expect(VolumeKinds.mountPoint(of: file.appendingPathComponent("gone/x.iso")) == nil)
+    }
+
+    @Test("The volumes mounted now are known, the startup disk's left out")
+    func scan() {
+        let known = VolumeKinds.known()
+        #expect(known["/"] == nil)
+        #expect(!known.keys.contains { $0.hasPrefix("/System/Volumes") })
+        let listed = VolumeKinds.mounted().compactMap(VolumeKinds.volume).map(\.0)
+        #expect(Set(listed).isSubset(of: Set(known.keys)))
     }
 }

@@ -190,13 +190,16 @@ after a slash that names no folder at the top of the disk (`start /wait`,
 ### Volumes
 
 What a volume is can only be asked while it's mounted, and a report may come
-after it's gone: a build detaches its images, and a crash is reported at the
-next start. So `VolumeKinds` notes the volume of every path the person
-chooses (the open panels and the env-var inputs in `WrappBuildInput`), of
-each image `ISOMounter` mounts, and of the running app itself, in
-`~/Library/Application Support/SecondChance/volume-kinds.json` (by mount
-point, for 180 days). A report reads that and asks again of every volume
-mounted then. A volume is a network drive by its file system; otherwise Disk
+after it's gone: a build detaches its images. So `VolumeKinds` looks at every
+volume mounted when Second Chance or a wrapp starts (`VolumeKinds.start()`,
+beside `FailureReporter.start`), and adds the volume of every path the person
+chooses (the open panels and the env-var inputs in `WrappBuildInput`) and of
+each image `ISOMounter` mounts as they come. It's kept in memory for the run
+only; nothing is written. A crash reported at the next start goes by what's
+mounted at that start, and a report sent before the start's look has
+finished looks for itself. The look lists mounts from the kernel's own list
+(`getfsstat` with `MNT_NOWAIT`), so a network share that has gone away can't
+hold it up. A volume is a network drive by its file system; otherwise Disk
 Arbitration says whether it's a disk image, a disc's media, or an internal or
 external drive. A mount point outside `/Volumes` counts as one (a disc
 mounted in a home folder), and one under `/Volumes` nothing is known of is

@@ -33,6 +33,9 @@ func main() {
     // Before anything can fail. CrashMarker after it: when Sentry handles
     // crashes, CrashMarker installs no handler of its own.
     FailureReporter.start(process: .wrapp)
+    // What each mounted volume is (the one this wrapp runs from among them),
+    // for a report to redact a path on it.
+    VolumeKinds.start()
     CrashMarker.arm()
     installTerminationHandlers()
     // The wrapp is in the background behind the game for as long as it

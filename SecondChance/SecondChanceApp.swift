@@ -127,6 +127,8 @@ struct SecondChanceApp: App {
         // FailureReporter first: when Sentry handles crashes, CrashMarker
         // installs no handler of its own (docs/failure-reports.md).
         FailureReporter.start(process: .app)
+        // What each mounted volume is, for a report to redact a path on it.
+        VolumeKinds.start()
         FailureReporter.setRunLogs(in: appLogs, prefix: "run")
         CrashMarker.install(in: appLogs, logger: logger)
         WrappBuildHelper.shared.sweepStaleTemporaryWrapps()

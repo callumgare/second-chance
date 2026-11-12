@@ -150,9 +150,6 @@ nonisolated public enum FailureReporter {
         }
         watchMemoryPressure()
         state.withLock { $0.started = true }
-        // Where this app runs from: a drive's name, should it be on one,
-        // is redacted even in a crash reported after the drive has gone.
-        VolumeKinds.note(Bundle.main.bundleURL)
         CrashMarker.sentryHandlesCrashes = true
         logger.notice("Failure reports are on (\(ReportingPreferences.load().level.rawValue))")
     }
