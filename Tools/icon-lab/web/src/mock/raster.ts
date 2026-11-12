@@ -233,12 +233,15 @@ export function renderShape(shape: Shape, size: number): HTMLCanvasElement {
         for (let x = -S; x < S; x += cell) g.fillRect(x, -S, cell / 2, S * 2);
         g.restore();
       } else if (shape.pattern === "dots") {
-        for (let y = 0; y < S + cell; y += cell) for (let x = 0; x < S + cell; x += cell) { g.beginPath(); g.arc(x + ((y / cell) % 2 ? cell / 2 : 0), y, cell * 0.22, 0, 7); g.fill(); }
+        // Rows and columns counted, as the engine's Shapes.pattern does, so the two match to the pixel.
+        const n = Math.ceil(S / cell);
+        for (let row = 0; row <= n; row++) for (let col = 0; col <= n; col++) { g.beginPath(); g.arc(col * cell + (row % 2 ? cell / 2 : 0), row * cell, cell * 0.22, 0, 7); g.fill(); }
       } else if (shape.pattern === "grid") {
-        for (let x = 0; x < S; x += cell) g.fillRect(x, 0, 10 * k, S);
-        for (let y = 0; y < S; y += cell) g.fillRect(0, y, S, 10 * k);
+        const n = Math.ceil(S / cell);
+        for (let i = 0; i < n; i++) { g.fillRect(i * cell, 0, 10 * k, S); g.fillRect(0, i * cell, S, 10 * k); }
       } else if (shape.pattern === "checker") {
-        for (let y = 0; y < S; y += cell) for (let x = 0; x < S; x += cell) if (((x + y) / cell) % 2 === 0) g.fillRect(x, y, cell, cell);
+        const n = Math.ceil(S / cell);
+        for (let row = 0; row < n; row++) for (let col = 0; col < n; col++) if ((row + col) % 2 === 0) g.fillRect(col * cell, row * cell, cell, cell);
       } else {
         g.translate(S / 2, S / 2);
         for (let i = 0; i < 16; i++) { g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, S, (i * 2 * Math.PI) / 16, ((i * 2 + 1) * Math.PI) / 16); g.fill(); }

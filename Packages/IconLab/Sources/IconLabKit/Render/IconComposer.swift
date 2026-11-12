@@ -9,7 +9,7 @@ nonisolated public struct IconComposer: Sendable {
     public let renderer: Renderer
     public let cacheDir: URL
     /// Part of every cache key: bump when rendering changes what it makes.
-    public static let revision = "r5"
+    public static let revision = "r6"
 
     /// Icon Composer's renderer, if this Mac has it (`LabTools.ictool`).
     public let ictool: String?

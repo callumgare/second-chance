@@ -86,61 +86,54 @@ nonisolated public enum Shapes {
         }
     }
 
+    /// The patterns as the page's preview draws them (`mock/raster.ts`'s `renderShape`, same coordinates, y down), so
+    /// what's designed is what Icon Composer gets: they once differed, rays coming from the bottom-right corner here
+    /// and from the centre in the page. Rows and columns are counted, not divided out, so both agree to the pixel.
     static func pattern(_ ctx: CGContext, kind: String, a: RGB, b: RGB, k: Double, n: Int) {
-        let span = Double(n)
+        let span = Double(n), cell = 96 * k
         ctx.setFillColor(a.cgColor)
         ctx.fill(CGRect(x: 0, y: 0, width: span, height: span))
         ctx.setFillColor(b.cgColor)
-        ctx.setStrokeColor(b.cgColor)
+        let count = Int((span / cell).rounded(.up))
         switch kind {
         case "stripes":
-            var i = -span
-            while i < 2 * span {
-                ctx.move(to: CGPoint(x: i, y: 0)); ctx.addLine(to: CGPoint(x: i + 48 * k, y: 0))
-                ctx.addLine(to: CGPoint(x: i + 48 * k - span, y: span)); ctx.addLine(to: CGPoint(x: i - span, y: span)); ctx.closePath()
-                i += 96 * k
+            ctx.saveGState()
+            ctx.translateBy(x: span / 2, y: span / 2)
+            ctx.rotate(by: .pi / 4)
+            var x = -span
+            while x < span {
+                ctx.fill(CGRect(x: x, y: -span, width: cell / 2, height: span * 2))
+                x += cell
             }
-            ctx.fillPath()
+            ctx.restoreGState()
         case "dots":
-            var y = 0.0, row = 0
-            while y < span + 64 * k {
-                var x = 0.0
-                while x < span + 64 * k {
-                    let o = row % 2 == 1 ? 32 * k : 0
-                    ctx.fillEllipse(in: CGRect(x: x + o - 14 * k, y: y - 14 * k, width: 28 * k, height: 28 * k))
-                    x += 64 * k
+            for row in 0...count {
+                for col in 0...count {
+                    let x = Double(col) * cell + (row % 2 == 1 ? cell / 2 : 0), y = Double(row) * cell, r = cell * 0.22
+                    ctx.fillEllipse(in: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2))
                 }
-                y += 64 * k; row += 1
             }
         case "grid":
-            ctx.setLineWidth(6 * k)
-            var i = 0.0
-            while i < span {
-                ctx.move(to: CGPoint(x: i, y: 0)); ctx.addLine(to: CGPoint(x: i, y: span))
-                ctx.move(to: CGPoint(x: 0, y: i)); ctx.addLine(to: CGPoint(x: span, y: i))
-                i += 80 * k
+            for i in 0..<count {
+                ctx.fill(CGRect(x: Double(i) * cell, y: 0, width: 10 * k, height: span))
+                ctx.fill(CGRect(x: 0, y: Double(i) * cell, width: span, height: 10 * k))
             }
-            ctx.strokePath()
+        case "checker":
+            for row in 0..<count {
+                for col in 0..<count where (row + col) % 2 == 0 {
+                    ctx.fill(CGRect(x: Double(col) * cell, y: Double(row) * cell, width: cell, height: cell))
+                }
+            }
         case "rays":
-            let c = CGPoint(x: span * 0.9, y: span * 0.9)
-            for deg in stride(from: 0, to: 360, by: 12) {
-                let r = Double(deg) * .pi / 180
+            // 16 wedges from the centre, each half of its sixteenth of the circle
+            let c = CGPoint(x: span / 2, y: span / 2)
+            for i in 0..<16 {
+                let from = Double(i) * 2 * .pi / 16, to = Double(i * 2 + 1) * .pi / 16
                 ctx.move(to: c)
-                ctx.addLine(to: CGPoint(x: c.x + 2000 * k * cos(r), y: c.y + 2000 * k * sin(r)))
-                ctx.addLine(to: CGPoint(x: c.x + 2000 * k * cos(r + 0.1), y: c.y + 2000 * k * sin(r + 0.1)))
+                ctx.addArc(center: c, radius: span, startAngle: from, endAngle: to, clockwise: false)
                 ctx.closePath()
             }
             ctx.fillPath()
-        case "checker":
-            var y = 0.0
-            while y < span {
-                var x = 0.0
-                while x < span {
-                    if (Int(x / (128 * k)) + Int(y / (128 * k))) % 2 == 1 { ctx.fill(CGRect(x: x, y: y, width: 128 * k, height: 128 * k)) }
-                    x += 128 * k
-                }
-                y += 128 * k
-            }
         default:
             break
         }
