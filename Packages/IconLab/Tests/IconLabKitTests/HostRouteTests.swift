@@ -226,6 +226,29 @@ nonisolated enum Xcode {
         #expect(rendered.width == 1024)
     }
 
+    /// Choosing Second Chance's program from a search result that a program was already opened from (by its ids)
+    /// makes the bundle's program with that one's pins and design in it, rather than an empty one beside it.
+    @Test func choosingTheBundlesResultCarriesOnTheWorkDoneOnIt() async throws {
+        let store = api.lab.store
+        var old = Store.ProgramInfo(slug: "plain-old", title: "Plain")
+        old.ids = ["wikidata": "Q42"]
+        try await store.saveProgram(old)
+        var st = Store.State()
+        st.pins = ["d1", "d2"]
+        st.current = "d3"
+        st.dropped = ["d2"]
+        try await store.saveState("plain-old", st)
+
+        var r = Merger.merge([hit("wikidata", "Q42", "Plain", ids: ["wikidata": "Q42"])])[0]
+        r.bundleId = "freeware/plain"
+        let slug = try await api.catalog.createProgram(r)
+        #expect(slug == KnownProgram.slug(forBundle: "freeware/plain"))
+        #expect(await store.program("plain-old") == nil)
+        let now = await store.state(slug)
+        #expect(now.pins == ["d1", "d2"] && now.current == "d3" && now.dropped == ["d2"])
+        #expect(await store.program(slug)?.ids?["wikidata"] == "Q42")
+    }
+
     @Test func aQueuedJobCanBeCancelled() async throws {
         let jobs = Jobs(width: 1)
         let gate = AsyncStream<Void>.makeStream()

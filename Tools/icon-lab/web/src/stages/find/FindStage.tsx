@@ -34,7 +34,14 @@ export function FindStage({ route }: { route: Route }) {
   const [toMerge, setToMerge] = useState<Set<string>>(new Set());
   const input = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { void useSearch.getState().loadSources(); void useApp.getState().loadPrograms(); }, []);
+  useEffect(() => {
+    void useSearch.getState().loadSources();
+    void useApp.getState().loadPrograms();
+    // back on Find: the search shown is fetched again, as what each result holds (the programs opened from it) may
+    // have changed meanwhile
+    const { current } = useSearch.getState();
+    if (current) api.searchSnapshot(current).then((s) => useSearch.getState().snapshot(s)).catch(() => { /* kept as it was */ });
+  }, []);
   // Search as you type, a moment after you stop.
   useEffect(() => {
     if (text === useSearch.getState().q) return;
@@ -73,9 +80,9 @@ export function FindStage({ route }: { route: Route }) {
     setBusy(r.key);
     try {
       const p = await api.createProgram(r);
-      // opened before: back to it, where it was left (its designs, else its pictures), without gathering again
-      const was = r.programs?.find((o) => o.slug === p.slug);
-      if (was) { void useApp.getState().loadPrograms(); go(p.slug, was.pins ? "design" : "gather"); return; }
+      // opened before (as this program, or as one moved into it, Second Chance's own made now): back to it, where it was
+      // left (its designs, else its pictures), without gathering again
+      if (r.programs?.length) { void useApp.getState().loadPrograms(); go(p.slug, p.pins ? "design" : "gather"); return; }
       api.gather(p.slug).catch((e: unknown) => useApp.getState().say("Couldn't start gathering images: " + (e as Error).message, "error"));
       void useApp.getState().loadPrograms();
       go(p.slug, "gather");

@@ -1,4 +1,7 @@
 import Foundation
+import Logging
+
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.IconLab.Search")
 
 /// Stage 1's search: fans a query out to every ready source at once, merges and ranks the hits as they arrive, asks
 /// Wikidata for the items behind the ids the other sources gave (the merge hub), and streams snapshots to the page.
@@ -249,7 +252,16 @@ public actor Catalog {
             return slug
         }
         if let bundle = r.bundleId {
-            let slug = try await lab.openKnown(bundle).slug
+            // what was opened from the result before (by its ids or title), to move into the bundle's program if it's
+            // only now made: choosing Second Chance's program carries on the work done on it, rather than starting over
+            let before = linking([r], await openedPrograms()).first?.programs ?? []
+            let (slug, created) = try await lab.openKnown(bundle)
+            if created {
+                for o in before where o.slug != slug {
+                    try await lab.store.absorb(o.slug, into: slug)
+                    logger.notice("Moved program \(o.slug) into \(slug), the program of the bundle its result is")
+                }
+            }
             if var p = await lab.store.program(slug) {
                 p.ids = (p.ids ?? [:]).merging(r.ids) { a, _ in a }
                 if p.platforms?.isEmpty ?? true { p.platforms = r.platforms }

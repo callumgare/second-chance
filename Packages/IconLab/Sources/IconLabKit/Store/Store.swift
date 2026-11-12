@@ -167,8 +167,9 @@ public actor Store {
 
     /// Moves everything one program holds into another, then removes it: its pictures (a picture both have is kept
     /// once, the target's record winning but picked if either was), their masks, its documents (each now naming the target), its pins after
-    /// the target's, its scans and saved icons (a name both have stays the target's). For two search results the
-    /// person merged that had each been opened as a program.
+    /// the target's (and which of them Review leaves out), the design it was editing if the target has none, its scans
+    /// and saved icons (a name both have stays the target's). For two search results the person merged that had each
+    /// been opened as a program.
     public func absorb(_ source: String, into target: String) throws {
         guard source != target, program(source) != nil, program(target) != nil else { return }
         let fm = FileManager.default
@@ -198,7 +199,11 @@ public actor Store {
             try saveDoc(target, id: id, json: try JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]))
         }
         var st = state(target)
-        for pin in state(source).pins where !st.pins.contains(pin) { st.pins.append(pin) }
+        let theirState = state(source)
+        for pin in theirState.pins where !st.pins.contains(pin) { st.pins.append(pin) }
+        for pin in theirState.dropped where !st.dropped.contains(pin) { st.dropped.append(pin) }
+        // the design being edited there carries on here, if this had none
+        if st.current == nil { st.current = theirState.current }
         try saveState(target, st)
         // the target's colours follow from its pictures again
         let colours = to.appendingPathComponent("colours.json")
