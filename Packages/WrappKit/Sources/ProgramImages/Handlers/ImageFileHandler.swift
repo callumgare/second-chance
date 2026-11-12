@@ -80,7 +80,7 @@ nonisolated enum Carving {
     }
 
     static func carve(_ data: Data, label: String?, node: Node, crawl: Crawl) {
-        let hits = ImageCarver.carve(data.prefix(limit))
+        let hits = ImageCarver.carve(data.prefix(limit), stop: { crawl.isCancelled })
         for hit in hits {
             guard let bytes = data.bytes(in: hit.range) else { continue }
             let images = ImageIODecoder.decode(bytes, maxImages: 1)

@@ -37,7 +37,9 @@ nonisolated extension Lab {
                 }
                 if obj["event"] as? String == "progress", let nodes = obj["nodes"] as? Double, let queued = obj["queued"] as? Double {
                     let images = obj["images"] as? Int ?? seen
-                    await progress(min(0.9, nodes / max(1, nodes + queued)), "\(Int(nodes)) files looked at, \(images) images")
+                    // the first folder's walk lists its files before any is looked at
+                    await progress(min(0.9, nodes / max(1, nodes + queued)), nodes <= 1 && queued > 0
+                        ? "Listing the files: \(Int(queued)) so far" : "\(Int(nodes)) of \(Int(nodes + queued)) files looked at, \(images) images")
                 }
                 if obj["event"] as? String == "image" { seen += 1 }
             }

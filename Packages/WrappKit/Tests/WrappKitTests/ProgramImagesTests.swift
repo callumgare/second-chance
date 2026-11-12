@@ -307,11 +307,44 @@ struct ProgramImageCrawlTests {
         #expect(PathFilter.glob("*.txt", "readme.txt"))
         #expect(!PathFilter.glob("*.txt", "a/readme.txt"))
         #expect(PathFilter.glob("program files*/common files/**", "program files (x86)/common files/x"))
+        // `**/` is whole folders, not any run of characters
+        #expect(!PathFilter.glob("**/system/**", "mysystem/a.dll"))
+        #expect(PathFilter.glob("**/system/**", "a/b/system/c/d.dll"))
+        #expect(PathFilter.glob("unins*.dat", "unins000.dat"))
+        #expect(PathFilter.glob("contents/resources/?*", "contents/resources/a"))
+        #expect(!PathFilter.glob("contents/resources/?*", "contents/resources/"))
+        #expect(PathFilter.glob("thumbs.db", "thumbs.db"))
+        #expect(!PathFilter.glob("thumbs.db", "thumbs.dbx"))
         let filter = PathFilter(keep: ["autorun.inf"], skip: [.init(pattern: "*.inf", reason: "text")],
                                 demote: [.init(pattern: "**/system32/**", reason: "system")])
         #expect(filter.verdict(for: "AUTORUN.INF") == .read)
         #expect(filter.verdict(for: "drivers/x.inf") == .skip("text"))
         #expect(filter.verdict(for: "windows/system32/a.dll") == .demote("system"))
+        #expect(filter.verdict(for: "System32/") == .demote("system"))
+    }
+
+    @Test("A crawl cancelled while it walks a big folder stops there")
+    func cancelledDuringAWalk() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("program-images-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        for folder in 0..<10 {
+            let dir = root.appendingPathComponent("in/\(folder)")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            for file in 0..<100 { try Data([1]).write(to: dir.appendingPathComponent("\(file).bin")) }
+        }
+        let asked = Counter()
+        var options = ExtractionOptions(outputDirectory: root.appendingPathComponent("out"))
+        // the run loop asks once before the first folder; the walk asks next
+        options.isCancelled = { asked.next() > 1 }
+        options.useTools = false
+        let nodes = Counter()
+        await #expect(throws: CancellationError.self) {
+            _ = try await ProgramImageExtractor.extract(root.appendingPathComponent("in"), options: options) { event in
+                if case .node = event { _ = nodes.next() }
+            }
+        }
+        // only the input itself was looked at
+        #expect(nodes.value == 1)
     }
 
     @Test("In a wrapp, only its program and its own icon are read")
@@ -534,4 +567,12 @@ nonisolated final class EventLog: @unchecked Sendable {
         #expect(!r.reasons.contains("-15 nearly black"))
         #expect(!r.reasons.contains("-20 mostly one colour"))
     }
+}
+
+/// A count shared with a crawl's thread.
+private nonisolated final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.withLock { count } }
+    func next() -> Int { lock.withLock { count += 1; return count } }
 }

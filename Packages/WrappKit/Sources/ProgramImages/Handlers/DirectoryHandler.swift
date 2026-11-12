@@ -35,6 +35,12 @@ nonisolated struct DirectoryHandler: NodeHandler {
         var files: [(url: URL, relative: String)] = []
         var names: Set<String> = []
         for case let url as URL in walker {
+            // A big folder takes a while to walk: what's found so far is
+            // the crawl's progress, and cancelling stops it here.
+            if files.count % 256 == 0 {
+                if crawl.isCancelled { return [] }
+                if !files.isEmpty { crawl.reportProgress(walked: files.count) }
+            }
             guard let values = try? url.resourceValues(forKeys: Set(keys)) else { continue }
             let resolvedParent = url.deletingLastPathComponent().resolvingSymlinksInPath().path
             let relative = String((resolvedParent + "/" + url.lastPathComponent).dropFirst(rootPath.count + 1))

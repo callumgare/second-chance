@@ -233,7 +233,7 @@ nonisolated final class Crawl: @unchecked Sendable {
 
         var stoppedEarly = false
         while let node = queue.popLast() {
-            if Task.isCancelled || options.isCancelled?() == true {
+            if isCancelled {
                 guard options.keepWhatWasFoundWhenCancelled else { throw CancellationError() }
                 stoppedEarly = true
                 break
@@ -245,6 +245,11 @@ nonisolated final class Crawl: @unchecked Sendable {
             nodesSeen += 1
             process(node)
             reportProgress()
+        }
+        // A step that stopped part way (a folder's walk, a tool) leaves less queued, perhaps nothing.
+        if !stoppedEarly, isCancelled {
+            guard options.keepWhatWasFoundWhenCancelled else { throw CancellationError() }
+            stoppedEarly = true
         }
         var summary = try finish()
         summary.stoppedEarly = stoppedEarly
@@ -293,10 +298,17 @@ nonisolated final class Crawl: @unchecked Sendable {
         }
     }
 
-    private func reportProgress() {
+    /// Whoever started the crawl wants it to stop: checked between files,
+    /// and while a long step (walking a big folder, a tool) is under way.
+    var isCancelled: Bool { Task.isCancelled || options.isCancelled?() == true }
+
+    /// At most twice a second; long steps call it as they go, so a big
+    /// folder's walk shows it's moving before its first file is read.
+    /// `walked`: the files a folder's walk has found so far, counted as queued.
+    func reportProgress(walked: Int = 0) {
         guard Date().timeIntervalSince(lastProgress) > 0.5 else { return }
         lastProgress = Date()
-        emit(.progress(nodes: nodesSeen, images: images.count, queued: queue.count, bytesExtracted: bytesExtracted))
+        emit(.progress(nodes: nodesSeen, images: images.count, queued: queue.count + walked, bytesExtracted: bytesExtracted))
     }
 
     // MARK: - For handlers
@@ -463,7 +475,12 @@ nonisolated final class Crawl: @unchecked Sendable {
         let perFile = min(room, max(inputSize * options.maxExpansionRatio, 64 << 20))
         let run = SandboxedRunner.run(tool, arguments: arguments(inputFile, output),
                                       readable: [inputFile.deletingLastPathComponent()], output: output,
-                                      timeout: timeout ?? options.toolTimeout, maxFileBytes: max(perFile, 1 << 20))
+                                      timeout: timeout ?? options.toolTimeout, maxFileBytes: max(perFile, 1 << 20),
+                                      isCancelled: { [self] in isCancelled })
+        if run.cancelled {
+            try? FileManager.default.removeItem(at: output)
+            return false
+        }
         if run.bytesWritten > inputSize * options.maxExpansionRatio, run.bytesWritten > 64 << 20 {
             try? FileManager.default.removeItem(at: output)
             skip(node, "\(tool.name) wrote more than \(options.maxExpansionRatio) times its input; left alone")

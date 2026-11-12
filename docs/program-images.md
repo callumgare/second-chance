@@ -8,7 +8,9 @@ tool. Icon Lab, which designs a Mac icon for an old program, calls the library i
 process (`ProgramImageExtractor.extract`, whose crawl stops when its task is cancelled, or
 when `ExtractionOptions.isCancelled` says so; with `keepWhatWasFoundWhenCancelled` it still
 ranks and writes what it found before stopping, and its summary says `stoppedEarly`) and
-reads the same records and events.
+reads the same records and events. The crawl asks between files and inside the steps that
+take long on their own: walking a big folder, searching a big file for images, and an
+outside tool, which is killed.
 
 It builds on `WindowsFormats` (PE and NE resources, icon groups, `.ico`, shortcuts,
 `autorun.inf`, MSI streams) and `ClassicMacFormats` (resource forks, MacBinary, AppleSingle
@@ -116,7 +118,7 @@ Each line is an object with `event` set to one of these:
 | `node` | `id`, `parent` (absent for the input), `name`, `kind` (the identifier's `FileKind`: `pe`, `iso`, `hfs-volume`…), `size`, `depth`, `display`, `installer` (`inno`, `nsis`, `installshield`…, if any), `macType` (`type/creator`, for a classic Mac file) |
 | `image` | `sha256`, `node`, `width`, `height`, `bitDepth`, `display`, `new` (false for one already found elsewhere) |
 | `skip` | `node` (if it had one), `name`, `reason`: a filtered path, a tool that isn't installed, a deferred format, a limit reached |
-| `progress` | `nodes`, `images`, `queued`, `bytesExtracted`, at most every half second |
+| `progress` | `nodes`, `images`, `queued`, `bytesExtracted`, at most every half second; while a folder is walked, before its files are queued, `queued` counts those found so far |
 | `done` | `nodes`, `images`, `families`, `skipped`, `records` (the path of `records.jsonl`), `seconds` |
 
 The `node` events' `id` and `parent` make the scan's tree. The PNG named in an `image`
@@ -132,8 +134,10 @@ event is on disk when the event is sent.
    text, sound, fonts, installers' own parts, Wine's own Windows, a wrapp's engines and
    frameworks, the classic Finder's desktop database. `keep` rules win over the rest, `skip`
    rules leave a path alone, and `demote` rules read it but rank its images down. Patterns
-   are lower-cased globs: `**` matches any number of folders, `*` matches within a name,
-   and a pattern without a `/` matches the name alone. Folders are skipped whole, and links
+   are lower-cased globs: `**/` matches any number of whole folders, `/**` everything
+   below, `*` matches within a name and `?` one character; a pattern with a `/` matches at
+   any depth, and one without matches the name alone. Each is compiled once, as a crawl
+   asks about every file. Folders are skipped whole, and links
    aren't followed (a prefix's `dosdevices/z:` is `/`).
    When the input is a wrapp (it has `Contents/Resources/AppSettings.plist`), the `wrapp`
    rules apply too. A wrapp's program is all in `Contents/SharedSupport`. Everything in

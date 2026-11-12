@@ -36,6 +36,10 @@ nonisolated public struct PathFilter: Sendable {
     private let skip: [Rule]
     private let demote: [Rule]
     private let wrapp: [Rule]
+    // Compiled once: a crawl asks for every file's verdict, tens of thousands of times.
+    private let keepMatchers: [Matcher]
+    private let skipMatchers: [(rule: Rule, matcher: Matcher)]
+    private let demoteMatchers: [(rule: Rule, matcher: Matcher)]
 
     /// The table shipped with the package, or the one at `url`.
     public init(contentsOf url: URL? = nil) throws {
@@ -43,17 +47,17 @@ nonisolated public struct PathFilter: Sendable {
             throw CocoaError(.fileNoSuchFile, userInfo: [NSLocalizedDescriptionKey: "The filter table isn't with the program"])
         }
         let table = try JSONDecoder().decode(Table.self, from: Data(contentsOf: url))
-        keep = table.keep.map { $0.lowercased() }
-        skip = table.skip
-        demote = table.demote
-        wrapp = table.wrapp ?? []
+        self.init(keep: table.keep, skip: table.skip, demote: table.demote, wrapp: table.wrapp ?? [])
     }
 
     public init(keep: [String] = [], skip: [Rule] = [], demote: [Rule] = [], wrapp: [Rule] = []) {
-        self.keep = keep
+        self.keep = keep.map { $0.lowercased() }
         self.skip = skip
         self.demote = demote
         self.wrapp = wrapp
+        keepMatchers = self.keep.map(Matcher.init)
+        skipMatchers = skip.map { ($0, Matcher($0.pattern)) }
+        demoteMatchers = demote.map { ($0, Matcher($0.pattern)) }
     }
 
     /// The filter for a wrapp: its `wrapp` rules too, keeping `paths` (its
@@ -91,45 +95,146 @@ nonisolated public struct PathFilter: Sendable {
 
     /// The verdict for `path`, a file's path inside its container.
     public func verdict(for path: String) -> Verdict {
-        let path = path.lowercased()
-        let name = path.split(separator: "/").last.map(String.init) ?? path
-        func matches(_ pattern: String) -> Bool {
-            let pattern = pattern.lowercased()
-            return pattern.contains("/") ? Self.glob(pattern, path) || Self.glob("**/" + pattern, path)
-                : Self.glob(pattern, name)
-        }
-        if keep.contains(where: matches) { return .read }
-        if let rule = skip.first(where: { matches($0.pattern) }) { return .skip(rule.reason) }
-        if let rule = demote.first(where: { matches($0.pattern) }) { return .demote(rule.reason) }
+        let path = Array(path.lowercased().utf8)
+        let name = path.split(separator: UInt8(ascii: "/")).last.map(Array.init) ?? path
+        if keepMatchers.contains(where: { $0.matches(path: path, name: name) }) { return .read }
+        if let rule = skipMatchers.first(where: { $0.matcher.matches(path: path, name: name) }) { return .skip(rule.rule.reason) }
+        if let rule = demoteMatchers.first(where: { $0.matcher.matches(path: path, name: name) }) { return .demote(rule.rule.reason) }
         return .read
+    }
+
+    /// A rule's pattern, compiled: one with a slash is matched against the
+    /// whole path at any depth (as if it began `**/`), one without against
+    /// the file's name.
+    struct Matcher: Sendable {
+        let glob: Glob
+        let wholePath: Bool
+
+        init(_ pattern: String) {
+            let pattern = pattern.lowercased()
+            wholePath = pattern.contains("/")
+            glob = Glob(wholePath && !pattern.hasPrefix("**/") ? "**/" + pattern : pattern)
+        }
+
+        func matches(path: [UInt8], name: [UInt8]) -> Bool { glob.matches(wholePath ? path : name) }
     }
 
     /// Glob matching: `**/` any number of folders, `/**` everything below,
     /// `*` anything but a slash, `?` one character.
     static func glob(_ pattern: String, _ text: String) -> Bool {
-        let pattern = Array(pattern)
-        let text = Array(text)
-        var memo: [Int: Bool] = [:]
-        func match(_ p: Int, _ t: Int) -> Bool {
-            let key = p * (text.count + 1) + t
-            if let known = memo[key] { return known }
-            let result: Bool
-            if p == pattern.count {
-                result = t == text.count
-            } else if pattern[p] == "*", p + 1 < pattern.count, pattern[p + 1] == "*" {
-                // "**/" may match nothing; "**" matches anything, slashes too.
-                let next = p + 2 < pattern.count && pattern[p + 2] == "/" ? p + 3 : p + 2
-                result = match(next, t) || (t < text.count && match(p, t + 1))
-            } else if pattern[p] == "*" {
-                result = match(p + 1, t) || (t < text.count && text[t] != "/" && match(p, t + 1))
-            } else if t < text.count, pattern[p] == "?" || pattern[p] == text[t] {
-                result = match(p + 1, t + 1)
-            } else {
-                result = false
-            }
-            memo[key] = result
-            return result
+        Glob(pattern).matches(Array(text.utf8))
+    }
+
+    /// A glob compiled to tokens, matched in one pass over the text's bytes,
+    /// keeping the set of places in the pattern the text so far could reach.
+    struct Glob: Sendable {
+        enum Token: Sendable, Equatable {
+            case byte(UInt8)
+            /// `?`
+            case one
+            /// `*`: anything but a slash.
+            case star
+            /// `**`: anything.
+            case anything
+            /// `**/`: nothing, or anything ending in a slash.
+            case folders
         }
-        return match(0, 0)
+
+        let tokens: [Token]
+        /// The pattern's longest run of plain characters, which any text it
+        /// matches contains: most texts are turned down by that alone.
+        private let required: [UInt8]
+
+        init(_ pattern: String) {
+            let bytes = Array(pattern.utf8)
+            var tokens: [Token] = []
+            var i = 0
+            while i < bytes.count {
+                switch bytes[i] {
+                case UInt8(ascii: "*") where i + 1 < bytes.count && bytes[i + 1] == UInt8(ascii: "*"):
+                    if i + 2 < bytes.count, bytes[i + 2] == UInt8(ascii: "/") {
+                        tokens.append(.folders)
+                        i += 3
+                    } else {
+                        tokens.append(.anything)
+                        i += 2
+                    }
+                    continue
+                case UInt8(ascii: "*"): tokens.append(.star)
+                case UInt8(ascii: "?"): tokens.append(.one)
+                case let byte: tokens.append(.byte(byte))
+                }
+                i += 1
+            }
+            self.tokens = tokens
+            var longest: [UInt8] = []
+            var run: [UInt8] = []
+            for token in tokens + [.one] {
+                if case .byte(let byte) = token { run.append(byte); continue }
+                if run.count > longest.count { longest = run }
+                run = []
+            }
+            required = longest
+        }
+
+        func matches(_ text: [UInt8]) -> Bool {
+            if !required.isEmpty {
+                guard text.count >= required.count else { return false }
+                let found = text.withUnsafeBytes { haystack in
+                    required.withUnsafeBytes { needle in
+                        memmem(haystack.baseAddress, haystack.count, needle.baseAddress, needle.count) != nil
+                    }
+                }
+                guard found else { return false }
+            }
+            let count = tokens.count
+            // the places reached, in order, each once; `closed`, those whose
+            // tokens that can match nothing have let the next one start too
+            var current: [Int] = []
+            var seen = [Bool](repeating: false, count: count + 1)
+            var closed = seen
+            func add(_ state: Int, to states: inout [Int], closing: Bool = true) {
+                var state = state
+                var closing = closing
+                while true {
+                    if !seen[state] {
+                        seen[state] = true
+                        states.append(state)
+                    }
+                    guard closing, state < count, !closed[state] else { return }
+                    closed[state] = true
+                    switch tokens[state] {
+                    case .star, .anything, .folders: state += 1
+                    case .byte, .one: return
+                    }
+                    closing = true
+                }
+            }
+            add(0, to: &current)
+            let slash = UInt8(ascii: "/")
+            var next: [Int] = []
+            for byte in text {
+                for i in seen.indices {
+                    seen[i] = false
+                    closed[i] = false
+                }
+                next.removeAll(keepingCapacity: true)
+                for state in current where state < count {
+                    switch tokens[state] {
+                    case .byte(let wanted): if wanted == byte { add(state + 1, to: &next) }
+                    case .one: add(state + 1, to: &next)
+                    case .star: if byte != slash { add(state, to: &next) }
+                    case .anything: add(state, to: &next)
+                    case .folders:
+                        // inside a folder's name it can't end; after its slash it can
+                        add(state, to: &next, closing: false)
+                        if byte == slash { add(state + 1, to: &next) }
+                    }
+                }
+                guard !next.isEmpty else { return false }
+                swap(&current, &next)
+            }
+            return current.contains(count)
+        }
     }
 }

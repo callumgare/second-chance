@@ -54,19 +54,22 @@ nonisolated public struct ExternalTool: Sendable, Hashable {
 nonisolated public struct ToolRun: Sendable {
     public let status: Int32
     public let timedOut: Bool
+    /// Stopped because the crawl was cancelled.
+    public let cancelled: Bool
     /// The end of what it wrote to stderr (and stdout), for the log.
     public let messages: String
     /// Bytes it left in its output folder, after the checks.
     public let bytesWritten: Int
-    public var succeeded: Bool { status == 0 && !timedOut }
+    public var succeeded: Bool { status == 0 && !timedOut && !cancelled }
 }
 
 nonisolated enum SandboxedRunner {
     /// Run `tool` with `arguments`, able to read `readable` and write only
     /// `output` (which must exist and be empty), for at most `timeout`
-    /// seconds, no file it writes larger than `maxFileBytes`.
+    /// seconds, no file it writes larger than `maxFileBytes`. Stopped as
+    /// soon as `isCancelled` says so, within a quarter of a second.
     static func run(_ tool: ExternalTool, arguments: [String], readable: [URL], output: URL,
-                    timeout: TimeInterval, maxFileBytes: Int) -> ToolRun {
+                    timeout: TimeInterval, maxFileBytes: Int, isCancelled: () -> Bool = { false }) -> ToolRun {
         let scratch = output.appendingPathComponent(".sandbox-tmp")
         try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         let log = output.deletingLastPathComponent().appendingPathComponent(output.lastPathComponent + ".log")
@@ -106,7 +109,7 @@ nonisolated enum SandboxedRunner {
         let spawned = posix_spawn(&pid, argv[0], &actions, &attributes, argvPointers, environmentPointers)
         guard spawned == 0 else {
             logger.error("Couldn't start \(tool.name): \(String(cString: strerror(spawned)))")
-            return ToolRun(status: -1, timedOut: false, messages: "couldn't start", bytesWritten: 0)
+            return ToolRun(status: -1, timedOut: false, cancelled: false, messages: "couldn't start", bytesWritten: 0)
         }
 
         // Its exit, or the time running out, whichever first.
@@ -118,11 +121,21 @@ nonisolated enum SandboxedRunner {
         var status: Int32 = 0
         var reaped = waitpid(pid, &status, WNOHANG) == pid
         var timedOut = false
+        var cancelled = false
         if !reaped {
-            if exited.wait(timeout: .now() + timeout) == .timedOut {
-                timedOut = true
-                logger.warning("\(tool.name) ran past \(Int(timeout)) s; stopping it")
+            let deadline = DispatchTime.now() + timeout
+            while exited.wait(timeout: min(deadline, .now() + 0.25)) == .timedOut {
+                if isCancelled() {
+                    cancelled = true
+                    logger.notice("\(tool.name) stopped: the crawl was cancelled")
+                } else if DispatchTime.now() >= deadline {
+                    timedOut = true
+                    logger.warning("\(tool.name) ran past \(Int(timeout)) s; stopping it")
+                } else {
+                    continue
+                }
                 kill(-pid, SIGKILL)
+                break
             }
             reaped = waitpid(pid, &status, 0) == pid
         }
@@ -135,7 +148,7 @@ nonisolated enum SandboxedRunner {
         let written = sanitise(output)
         let messages = (try? String(contentsOf: log, encoding: .utf8)).map { String($0.suffix(2000)) } ?? ""
         try? FileManager.default.removeItem(at: log)
-        return ToolRun(status: exitStatus, timedOut: timedOut, messages: messages, bytesWritten: written)
+        return ToolRun(status: exitStatus, timedOut: timedOut, cancelled: cancelled, messages: messages, bytesWritten: written)
     }
 
     /// Deny everything, then allow: running the shell and the tool, reading

@@ -51,13 +51,61 @@ nonisolated public struct RGBAImage: Sendable {
         pixels[index + 3] = a
     }
 
-    public var hasAlpha: Bool {
-        stride(from: 3, to: pixels.count, by: 4).contains { pixels[$0] != 255 }
-    }
+    // The measures below loop over the buffer by hand: a crawl measures
+    // hundreds of pictures at its end, and in a debug build a generic
+    // `stride` or a dictionary per pixel takes seconds over them.
+
+    public var hasAlpha: Bool { anyAlpha { $0 != 255 } }
 
     /// Whether every pixel is see-through: a blank mask, nothing to show.
-    public var isFullyTransparent: Bool {
-        !stride(from: 3, to: pixels.count, by: 4).contains { pixels[$0] != 0 }
+    public var isFullyTransparent: Bool { !anyAlpha { $0 != 0 } }
+
+    private func anyAlpha(_ test: (UInt8) -> Bool) -> Bool {
+        pixels.withUnsafeBufferPointer { buffer in
+            var index = 3
+            while index < buffer.count {
+                if test(buffer[index]) { return true }
+                index += 4
+            }
+            return false
+        }
+    }
+
+    /// Every `step`th pixel that is mostly opaque, as its R, G, B: at most
+    /// about 65,536 of them.
+    private func forEachOpaqueSample(_ body: (UInt8, UInt8, UInt8) -> Void) {
+        let count = width * height
+        let step = max(1, count / 65_536)
+        pixels.withUnsafeBufferPointer { buffer in
+            var pixel = 0
+            while pixel < count {
+                let index = pixel * 4
+                if buffer[index + 3] > 127 { body(buffer[index], buffer[index + 1], buffer[index + 2]) }
+                pixel += step
+            }
+        }
+    }
+
+    /// The commonest colour, quantised to 5 bits a channel, among the
+    /// opaque samples: its bin, how many fell in it, and how many in all.
+    private var dominantBin: (bin: Int, count: Int, opaque: Int) {
+        var counts = [Int](repeating: 0, count: 1 << 15)
+        var opaque = 0
+        var best = 0
+        var bestCount = 0
+        counts.withUnsafeMutableBufferPointer { counts in
+            forEachOpaqueSample { r, g, b in
+                let bin = Int(r >> 3) << 10 | Int(g >> 3) << 5 | Int(b >> 3)
+                counts[bin] += 1
+                opaque += 1
+                // the first bin to reach the top count keeps it
+                if counts[bin] > bestCount || (counts[bin] == bestCount && bin < best) {
+                    best = bin
+                    bestCount = counts[bin]
+                }
+            }
+        }
+        return (best, bestCount, opaque)
     }
 
     // MARK: - From and to Core Graphics
@@ -125,30 +173,47 @@ nonisolated public struct RGBAImage: Sendable {
         withUnsafeBytes(of: UInt32(width).bigEndian) { hasher.update(bufferPointer: $0) }
         withUnsafeBytes(of: UInt32(height).bigEndian) { hasher.update(bufferPointer: $0) }
         var normalised = pixels
-        for index in stride(from: 0, to: normalised.count, by: 4) where normalised[index + 3] == 0 {
-            normalised[index] = 0
-            normalised[index + 1] = 0
-            normalised[index + 2] = 0
+        normalised.withUnsafeMutableBufferPointer { buffer in
+            var index = 0
+            while index < buffer.count {
+                if buffer[index + 3] == 0 {
+                    buffer[index] = 0
+                    buffer[index + 1] = 0
+                    buffer[index + 2] = 0
+                }
+                index += 4
+            }
         }
         normalised.withUnsafeBytes { hasher.update(bufferPointer: $0) }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     /// A 64-bit difference hash: the image, over mid grey, shrunk to 9×8
-    /// by area averaging, each bit whether a cell is brighter than the one
-    /// to its right. Sizes and depths of the same art come out close.
+    /// by averaging (all of a small image, a sample of a big one), each bit
+    /// whether a cell is brighter than the one to its right. Sizes and
+    /// depths of the same art come out close.
     public var differenceHash: UInt64 {
         var cells = [Double](repeating: 0, count: 9 * 8)
         var weights = [Double](repeating: 0, count: 9 * 8)
-        for y in 0..<height {
-            let cellY = min(7, y * 8 / height)
-            for x in 0..<width {
-                let cellX = min(8, x * 9 / width)
-                let index = (y * width + x) * 4
-                let alpha = Double(pixels[index + 3]) / 255
-                let luma = 0.299 * Double(pixels[index]) + 0.587 * Double(pixels[index + 1]) + 0.114 * Double(pixels[index + 2])
-                cells[cellY * 9 + cellX] += luma * alpha + 128 * (1 - alpha)
-                weights[cellY * 9 + cellX] += 1
+        // At most about 256 rows and columns, evenly spread: a cell's
+        // average barely moves, and a big picture costs little more.
+        let stepY = max(1, height / 256)
+        let stepX = max(1, width / 256)
+        pixels.withUnsafeBufferPointer { buffer in
+            var y = 0
+            while y < height {
+                let cellY = min(7, y * 8 / height)
+                var x = 0
+                while x < width {
+                    let cellX = min(8, x * 9 / width)
+                    let index = (y * width + x) * 4
+                    let alpha = Double(buffer[index + 3]) / 255
+                    let luma = 0.299 * Double(buffer[index]) + 0.587 * Double(buffer[index + 1]) + 0.114 * Double(buffer[index + 2])
+                    cells[cellY * 9 + cellX] += luma * alpha + 128 * (1 - alpha)
+                    weights[cellY * 9 + cellX] += 1
+                    x += stepX
+                }
+                y += stepY
             }
         }
         var hash: UInt64 = 0
@@ -167,55 +232,40 @@ nonisolated public struct RGBAImage: Sendable {
     /// The share of opaque pixels that are the commonest colour (quantised
     /// to 5 bits a channel): near 1 for a blank or flat image.
     public var dominantColourShare: Double {
-        var counts: [Int: Int] = [:]
-        var opaque = 0
-        let step = max(1, (width * height) / 65_536)
-        for pixel in stride(from: 0, to: width * height, by: step) {
-            let index = pixel * 4
-            guard pixels[index + 3] > 127 else { continue }
-            opaque += 1
-            let key = Int(pixels[index] >> 3) << 10 | Int(pixels[index + 1] >> 3) << 5 | Int(pixels[index + 2] >> 3)
-            counts[key, default: 0] += 1
-        }
-        guard opaque > 0 else { return 1 }
-        return Double(counts.values.max() ?? 0) / Double(opaque)
+        let top = dominantBin
+        guard top.opaque > 0 else { return 1 }
+        return Double(top.count) / Double(top.opaque)
     }
 
     /// How far the pixels in the commonest colour's bin (as `dominantColourShare` bins them) stray from their own
     /// mean: the largest channel's standard deviation, 0–255. Near 0 for one shade (with a JPEG's noise, a little
     /// more); a few levels for two close shades sharing a bin, as a pinstripe of two dark blues does.
     public var dominantColourSpread: Double {
-        var sums: [Int: (n: Double, s: [Double], q: [Double])] = [:]
-        let step = max(1, (width * height) / 65_536)
-        for pixel in stride(from: 0, to: width * height, by: step) {
-            let index = pixel * 4
-            guard pixels[index + 3] > 127 else { continue }
-            let key = Int(pixels[index] >> 3) << 10 | Int(pixels[index + 1] >> 3) << 5 | Int(pixels[index + 2] >> 3)
-            var e = sums[key] ?? (0, [0, 0, 0], [0, 0, 0])
-            e.n += 1
-            for c in 0..<3 {
-                let v = Double(pixels[index + c])
-                e.s[c] += v
-                e.q[c] += v * v
-            }
-            sums[key] = e
+        let top = dominantBin
+        guard top.count > 0 else { return 0 }
+        var n = 0.0
+        var sum = (0.0, 0.0, 0.0)
+        var squares = (0.0, 0.0, 0.0)
+        forEachOpaqueSample { r, g, b in
+            guard Int(r >> 3) << 10 | Int(g >> 3) << 5 | Int(b >> 3) == top.bin else { return }
+            let (vr, vg, vb) = (Double(r), Double(g), Double(b))
+            n += 1
+            sum.0 += vr; sum.1 += vg; sum.2 += vb
+            squares.0 += vr * vr; squares.1 += vg * vg; squares.2 += vb * vb
         }
-        guard let top = sums.values.max(by: { $0.n < $1.n }) else { return 0 }
-        return (0..<3).map { c in
-            let mean = top.s[c] / top.n
-            return (max(0, top.q[c] / top.n - mean * mean)).squareRoot()
-        }.max() ?? 0
+        func deviation(_ s: Double, _ q: Double) -> Double {
+            let mean = s / n
+            return max(0, q / n - mean * mean).squareRoot()
+        }
+        return max(deviation(sum.0, squares.0), deviation(sum.1, squares.1), deviation(sum.2, squares.2))
     }
 
     /// Mean brightness of the opaque pixels, 0–255.
     public var meanLuma: Double {
         var total = 0.0
         var count = 0
-        let step = max(1, (width * height) / 65_536)
-        for pixel in stride(from: 0, to: width * height, by: step) {
-            let index = pixel * 4
-            guard pixels[index + 3] > 127 else { continue }
-            total += 0.299 * Double(pixels[index]) + 0.587 * Double(pixels[index + 1]) + 0.114 * Double(pixels[index + 2])
+        forEachOpaqueSample { r, g, b in
+            total += 0.299 * Double(r) + 0.587 * Double(g) + 0.114 * Double(b)
             count += 1
         }
         return count > 0 ? total / Double(count) : 0

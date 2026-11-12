@@ -21,14 +21,31 @@ nonisolated public enum ImageCarver {
 
     /// Up to `limit` images in `data`, in order, none overlapping. Images
     /// under `minimumSize` bytes (a tracking pixel, a stray signature) are
-    /// left out.
-    public static func carve(_ data: Data, limit: Int = 2000, minimumSize: Int = 64) -> [Hit] {
+    /// left out. `stop` is asked every few megabytes, as a big file takes a
+    /// while: true ends the search with what it has found so far.
+    public static func carve(_ data: Data, limit: Int = 2000, minimumSize: Int = 64,
+                             stop: () -> Bool = { false }) -> [Hit] {
         data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) -> [Hit] in
             let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let base = bytes.baseAddress else { return [] }
             let count = bytes.count
             var hits: [Hit] = []
             var index = 0
+            var nextCheck = 0
             while index + 8 < count, hits.count < limit {
+                if index >= nextCheck {
+                    if stop() { break }
+                    nextCheck = index + (4 << 20)
+                }
+                // Most bytes start nothing: pass them by quickly (a raw
+                // pointer, not the buffer's checked subscript).
+                let last = min(count - 8, nextCheck)
+                while index < last {
+                    let byte = base[index]
+                    if byte == 0x89 || byte == 0xFF || byte == 0x47 || byte == 0x42 { break }
+                    index += 1
+                }
+                guard index < last else { continue }
                 let byte = bytes[index]
                 var end: Int?
                 var kind = Kind.png
