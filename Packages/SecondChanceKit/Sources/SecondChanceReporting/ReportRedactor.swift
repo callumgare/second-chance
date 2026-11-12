@@ -3,10 +3,12 @@
 //  Shared
 //
 //  Takes the person out of what a failure report sends. Logs name the home
-//  folder on almost every line (`/Users/<name>/…`), and Steam's files carry
-//  the account it signed in with; none of that helps diagnose a failure.
-//  Everything a report sends — event text, log files, diagnostics bundles —
-//  goes through `redact` first.
+//  folder on almost every line (`/Users/<name>/…`), the folders the person
+//  keeps their games in, and Steam's files carry the account it signed in
+//  with; none of that helps diagnose a failure. Everything a report sends —
+//  event text, log files, diagnostics bundles — goes through `redact`
+//  first: paths by `PathRedactor`, which keeps only what isn't the
+//  person's, then the names that identify them wherever they still stand.
 
 import Foundation
 import SecondChanceKit
@@ -22,13 +24,19 @@ nonisolated struct ReportRedactor: Sendable {
         var computerNames: [String]
         /// Steam account and persona names, from the saved sign-in.
         var steamNames: [String]
+        /// What's known of the volumes a path may be on, by mount point.
+        var mounts: [String: MountedVolume] = [:]
     }
 
     let identity: Identity
     private let replacements: [(String, String)]
+    /// The paths in the report's text. One per redactor, so its placeholders
+    /// are numbered afresh for each report and alike throughout it.
+    private let paths: PathRedactor
 
     init(identity: Identity) {
         self.identity = identity
+        paths = PathRedactor(homePath: identity.homePath, mounts: identity.mounts)
         var pairs: [(String, String)] = []
         let home = identity.homePath.hasSuffix("/") ? String(identity.homePath.dropLast()) : identity.homePath
         if !home.isEmpty {
@@ -55,11 +63,14 @@ nonisolated struct ReportRedactor: Sendable {
         userName: NSUserName(),
         fullName: NSFullUserName(),
         computerNames: currentComputerNames(),
-        steamNames: currentSteamNames()
+        steamNames: currentSteamNames(),
+        mounts: VolumeKinds.known()
     )) }
 
     func redact(_ text: String) -> String {
-        var result = text
+        // Paths first, while the home folder is still there to be found in
+        // them; the replacements below then catch it anywhere else.
+        var result = paths.redact(text)
         for (needle, replacement) in replacements where result.contains(needle) {
             result = result.replacingOccurrences(of: needle, with: replacement)
         }

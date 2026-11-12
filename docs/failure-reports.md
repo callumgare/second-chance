@@ -122,10 +122,10 @@ Every event, ours or the SDK's, passes through `scrub` in `beforeSend`:
   `ReportScrubber.basicContextKeys` and drops extras and breadcrumbs;
 - it runs every remaining string through `ReportRedactor`.
 
-`ReportRedactor` replaces:
+`ReportRedactor` first redacts the paths in the text (`PathRedactor`, in
+`SecondChanceKit`, below), then replaces, wherever they still stand:
 
-- the home folder (as a path, a `file://` URL, percent-encoded, and as Wine
-  shows it, `Z:\Users\<name>`) with `~`;
+- the home folder with `~`, anywhere a path didn't catch it;
 - any other `/Users/<name>` or `\Users\<name>` with `/Users/<user>`;
 - the user's short and full names, the home folder's name, and the Steam
   account and persona names from the saved sign-in, with `<user>`; the
@@ -134,7 +134,73 @@ Every event, ours or the SDK's, passes through `scrub` in `beforeSend`:
 - SteamID64s, and the `[U:1:…]` Steam3 IDs in Steam's logs, with `<steam-id>`.
 
 It is made afresh for each report, so a Steam sign-in made since the last one
-is covered.
+is covered, and one report's event and zip share it (`FailureReporter` hands
+`scrub` the redactor the zip was made with), so a placeholder means the same
+place in both.
+
+### Paths
+
+A path keeps what isn't the person's and loses the rest. `PathRedactor` walks
+each path from the top of the disk:
+
+- **Kept**: macOS's own layout — the folders at the top of the disk (`/System`,
+  `/Library`, `/usr`, `/Applications`…), a home's standard folders (`Desktop`,
+  `Downloads`, `Library`…), the Library's (`Caches`, `Application Support`,
+  `Logs`…), and the temporary folders (`/private/var/folders/…/T`, `/tmp`);
+  everything from a folder of ours on (`SecondChance` or an app id
+  `au.gare.callum.…` in a Library folder, `/Users/Shared/second-chance`, so a
+  wrapp's prefix and its stores too); and everything on a disc image or a real
+  disc, or inside a program — a name ending in a disc image's extension
+  (`.iso`, `.dmg`, `.sparsebundle`, `.toast`…) or a program's (`.app`, `.exe`,
+  `.msi`, `.framework`…), name and all (`PathRedactor.keepExtensions`). A bundle
+  of the person's own (`.photoslibrary`) is no program.
+- **Redacted**: the rest, a run of the person's folders becoming one
+  placeholder that says what it was: `<folder-N>`, `<file-N>` for a last name
+  with an extension, `<cloud-N>` under `~/Library/CloudStorage` and
+  `~/Library/Mobile Documents` (kept themselves), and for a volume that isn't a
+  disc `<external-drive-N>`, `<internal-drive-N>`, `<network-drive-N>`, or
+  `<volume-N>` when nothing is known of it. Another app's folder in the
+  Library is redacted too; a container's app id goes, its `Data` read as a
+  home. A Steam account's number in `userdata/` becomes `<steam-id>`.
+
+```text
+/Users/nancy/Downloads/stuff/nancy-drew.iso         → ~/Downloads/<folder-1>/nancy-drew.iso
+/Users/nancy/Library/CloudStorage/Dropbox/a/b.iso   → ~/Library/CloudStorage/<cloud-1>/b.iso
+/Volumes/MyHD/games/White Wolf.app/Contents/x       → /Volumes/<external-drive-1>/White Wolf.app/Contents/x
+/Volumes/Nancy Drew/install/installer.exe (an image) → unchanged
+//nancy@nas.local/share on /Volumes/share (smbfs)   → //<network-drive-1> on /Volumes/<network-drive-1> (smbfs)
+```
+
+A placeholder's number stands for one place throughout a report, so two lines
+naming one folder show it, and starts at 1 again in the next, so reports can't
+be linked by them. A network drive's server, account and share are one
+placeholder, whether as `smb://…`, `//user@host/share` or its mount point.
+
+Paths are found where they start in running text — `/…`, `~/…`, Wine's
+`Z:\…` (and `Z:\\…` in a quoted string), `file://` (percent-encoded), the
+network schemes and `//host/share` — and run to a quote, a bracket that
+closes the one before them, a colon and a space, a tab, or the start of another path. Inside
+a path a name may have spaces; the last name is the unclear one, as the line
+goes on after it. It ends with a known extension (`Setup.exe exited 1`), or
+else at a comma, an opening bracket or a dash with a space before it; failing those, the rest of the line is taken as
+the name and redacted, so what can't be told is lost rather than sent. A word
+after a slash that names no folder at the top of the disk (`start /wait`,
+`/qn`) is no path. Redacting twice changes nothing more.
+
+### Volumes
+
+What a volume is can only be asked while it's mounted, and a report may come
+after it's gone: a build detaches its images, and a crash is reported at the
+next start. So `VolumeKinds` notes the volume of every path the person
+chooses (the open panels and the env-var inputs in `WrappBuildInput`), of
+each image `ISOMounter` mounts, and of the running app itself, in
+`~/Library/Application Support/SecondChance/volume-kinds.json` (by mount
+point, for 180 days). A report reads that and asks again of every volume
+mounted then. A volume is a network drive by its file system; otherwise Disk
+Arbitration says whether it's a disk image, a disc's media, or an internal or
+external drive. A mount point outside `/Volumes` counts as one (a disc
+mounted in a home folder), and one under `/Volumes` nothing is known of is
+`<volume-N>`.
 
 The zip's text files go through the same redactor (`ReportBundle`), and a
 text file that isn't UTF-8 is left out rather than sent unchecked.

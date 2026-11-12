@@ -297,6 +297,7 @@ class WrappBuildInput {
     func getHerInstallerPath() async throws -> URL {
         if let path = environment["HER_INSTALLER_PATH"] {
             let url = URL(fileURLWithPath: path)
+            VolumeKinds.note(url)
             var isDirectory: ObjCBool = false
             let fileExists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
             guard fileExists, Self.isHerDownload(url, isDirectory: isDirectory.boolValue) else {
@@ -335,6 +336,7 @@ class WrappBuildInput {
     @MainActor
     func getMacROM(rejected: URL? = nil, asking: Bool = true) async throws -> URL? {
         if rejected == nil, let path = environment["MAC_ROM_PATH"] {
+            VolumeKinds.note(URL(fileURLWithPath: path))
             return URL(fileURLWithPath: path)
         }
         guard asking, viewModel != nil, environment["NON_INTERACTIVE"] != "true" else { return nil }
@@ -603,6 +605,7 @@ class WrappBuildInput {
     func getSaveLocation(for gameInfo: GameInfo) async throws -> URL {
         if let path = environment["OUTPUT_PATH"] {
             let url = URL(fileURLWithPath: path)
+            VolumeKinds.note(url)
             do {
                 try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
             } catch {
@@ -969,7 +972,7 @@ class WrappBuildInput {
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw WrappBuildError.invalidPath("\(label) path does not exist: \(path)")
         }
-
+        VolumeKinds.note(url)
         return url
     }
 
@@ -1000,7 +1003,11 @@ class WrappBuildInput {
         } else {
             response = panel.runModal()
         }
-        return response == .OK ? panel.url : nil
+        guard response == .OK, let url = panel.url else { return nil }
+        // What it's on (a disc image, a drive), for a report to redact a
+        // path on it rightly after it's gone (VolumeKinds).
+        VolumeKinds.note(url)
+        return url
     }
 
     /// Ask for a game disc. Disc images are accepted as well, though the

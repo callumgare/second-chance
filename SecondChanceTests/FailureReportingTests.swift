@@ -18,17 +18,18 @@ struct ReportRedactorTests {
 
     @Test("The home folder becomes ~, as a path, a file URL and percent-encoded")
     func homeFolder() {
-        #expect(redactor.redact("prefix: /Users/nancy/Library/Caches/x") == "prefix: ~/Library/Caches/x")
-        #expect(redactor.redact("file:///Users/nancy/Games/a.iso") == "file://~/Games/a.iso")
+        #expect(redactor.redact("prefix: /Users/nancy/Library/Caches/SecondChance/x") == "prefix: ~/Library/Caches/SecondChance/x")
+        #expect(redactor.redact("file:///Users/nancy/Downloads/a.iso") == "file://~/Downloads/a.iso")
         let spaced = ReportRedactor(identity: .init(homePath: "/Users/Nancy Drew", userName: "x", fullName: "",
                                                     computerNames: [], steamNames: []))
-        #expect(spaced.redact("/Users/Nancy%20Drew/a and /Users/Nancy Drew/b") == "~/a and ~/b")
+        #expect(spaced.redact("/Users/Nancy%20Drew/Desktop/a.iso and /Users/Nancy Drew/Desktop/b.iso")
+                == "~/Desktop/a.iso and ~/Desktop/b.iso")
     }
 
     @Test("Another account's home keeps that it was a home, not whose; /Users/Shared stays")
     func otherHomes() {
         #expect(redactor.redact("/Users/george/Desktop") == "/Users/<user>/Desktop")
-        #expect(redactor.redact("/Users/Shared/Games") == "/Users/Shared/Games")
+        #expect(redactor.redact("/Users/Shared/second-chance/installers") == "/Users/Shared/second-chance/installers")
     }
 
     @Test("Names go as whole words, whatever their case, and not from inside other words")
@@ -44,7 +45,7 @@ struct ReportRedactorTests {
         let short = ReportRedactor(identity: .init(homePath: "/Users/al", userName: "al", fullName: "",
                                                    computerNames: [], steamNames: []))
         #expect(short.redact("total: al") == "total: al")
-        #expect(short.redact("/Users/al/x") == "~/x")
+        #expect(short.redact("/Users/al/Desktop/x.iso") == "~/Desktop/x.iso")
     }
 
     @Test("The computer's names and Steam IDs are replaced")
@@ -57,9 +58,11 @@ struct ReportRedactorTests {
     @Test("Steam3 IDs, Wine's view of the home folder and a name on its own are taken out")
     func moreIdentifiers() {
         #expect(redactor.redact("account [U:1:52079950] signed in") == "account [<steam-id>] signed in")
-        #expect(redactor.redact(#"Z:\Users\nancy\Library\x"#) == #"Z:~\Library\x"#)
+        #expect(redactor.redact(#"Z:\Users\nancy\Library\Logs\SecondChance\x"#) == #"Z:~\Library\Logs\SecondChance\x"#)
         #expect(redactor.redact(#"C:\users\george\Saves"#) == #"C:\Users\<user>\Saves"#)
-        #expect(redactor.redact("/Volumes/Drew Backup") == "/Volumes/<user> Backup")
+        #expect(redactor.redact("a Drew Backup drive") == "a <user> Backup drive")
+        // A volume nothing is known about goes whole (PathRedactorTests).
+        #expect(redactor.redact("/Volumes/Drew Backup") == "/Volumes/<volume-1>")
         // Lower case, a name part may be an ordinary word.
         #expect(redactor.redact("drew a window") == "drew a window")
     }
@@ -77,21 +80,21 @@ struct ReportRedactorTests {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let source = directory.appendingPathComponent("a.ips")
-        try Data(#"{"crashReporterKey" : "ABC-123","sleepWakeUUID":"DEF","procPath":"/Users/nancy/x"}"#.utf8).write(to: source)
+        try Data(#"{"crashReporterKey" : "ABC-123","sleepWakeUUID":"DEF","procPath":"/Users/nancy/Desktop/x.app"}"#.utf8).write(to: source)
         let destination = directory.appendingPathComponent("b.ips")
         try redactor.redactCrashReport(at: source, to: destination)
         let text = try String(contentsOf: destination, encoding: .utf8)
         #expect(!text.contains("ABC-123"))
         #expect(!text.contains("DEF"))
-        #expect(text.contains("~/x"))
+        #expect(text.contains("~/Desktop/x.app"))
     }
 
     @Test("Redacting a JSON-like value reaches nested strings")
     func nested() throws {
-        let value = redactor.redact(value: ["a": ["/Users/nancy/x", 3], "b": ["c": "nancy"]] as [String: Any])
+        let value = redactor.redact(value: ["a": ["/Users/nancy/Desktop/x.iso", 3], "b": ["c": "nancy"]] as [String: Any])
         let dictionary = try #require(value as? [String: Any])
         let a = try #require(dictionary["a"] as? [Any])
-        #expect(a.first as? String == "~/x")
+        #expect(a.first as? String == "~/Desktop/x.iso")
         #expect(a.last as? Int == 3)
         #expect((dictionary["b"] as? [String: Any])?["c"] as? String == "<user>")
     }
@@ -287,20 +290,20 @@ struct FailureReportTests {
             "device": ["arch": "arm64", "model": "Mac15,3", "free_storage": 123, "boot_time": "x"],
             "app": ["app_version": "0.4.0", "app_start_time": "x", "device_app_hash": "abc"],
             "culture": ["timezone": "Australia/Melbourne"],
-            "failure": ["kind": "X.y", "stage": "/Users/nancy/odd"],
+            "failure": ["kind": "X.y", "stage": "/Users/nancy/Desktop/odd.iso"],
         ]
         let scrubbed = ReportScrubber.contexts(contexts, detail: .basic, redactor: redactor)
         #expect(Set(scrubbed.keys) == ["os", "device", "app", "failure"])
         #expect(Set(scrubbed["os"]?.keys.map { $0 } ?? []) == ["name", "version"])
         #expect(Set(scrubbed["device"]?.keys.map { $0 } ?? []) == ["arch", "model"])
         #expect(Set(scrubbed["app"]?.keys.map { $0 } ?? []) == ["app_version"])
-        #expect(scrubbed["failure"]?["stage"] as? String == "~/odd")
+        #expect(scrubbed["failure"]?["stage"] as? String == "~/Desktop/odd.iso")
     }
 
     @Test("A detailed report keeps every context, redacted")
     func detailedContexts() {
-        let scrubbed = ReportScrubber.contexts(["culture": ["path": "/Users/nancy/x"]], detail: .detailed, redactor: redactor)
-        #expect(scrubbed["culture"]?["path"] as? String == "~/x")
+        let scrubbed = ReportScrubber.contexts(["culture": ["path": "/Users/nancy/Downloads/x.dmg"]], detail: .detailed, redactor: redactor)
+        #expect(scrubbed["culture"]?["path"] as? String == "~/Downloads/x.dmg")
     }
 
     @Test("The fingerprint groups by process, what failed, how and when — not by game")
@@ -442,17 +445,17 @@ struct ReportBundleTests {
         defer { try? FileManager.default.removeItem(at: work) }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let log = work.appendingPathComponent("run.log")
-        try Data("opened \(home)/Library/x\n".utf8).write(to: log)
+        try Data("opened \(home)/Library/Caches/SecondChance/x\n".utf8).write(to: log)
         let ips = work.appendingPathComponent("crash.ips")
         try Data(#"{"crashReporterKey":"ABC-123"}"#.utf8).write(to: ips)
 
-        let preview = ReportPreview.previousRunCrash(exception: "EXC_BAD_ACCESS: at \(home)/x", tags: ["game": "royal-tower"],
+        let preview = ReportPreview.previousRunCrash(exception: "EXC_BAD_ACCESS: at \(home)/Downloads/x.app", tags: ["game": "royal-tower"],
                                                      log: log, crashReport: ips, process: .app)
         defer { preview.removeFiles() }
-        #expect(preview.fields.contains { $0.value == "EXC_BAD_ACCESS: at ~/x" })
+        #expect(preview.fields.contains { $0.value == "EXC_BAD_ACCESS: at ~/Downloads/x.app" })
         #expect(preview.fields.contains { $0.value == "royal-tower" })
         #expect(preview.files.map(\.id) == ["log.txt", "crash.ips"])
-        #expect(preview.files.first?.content == .text("opened ~/Library/x\n"))
+        #expect(preview.files.first?.content == .text("opened ~/Library/Caches/SecondChance/x\n"))
         #expect(preview.files.last.map { file in
             if case .text(let text) = file.content { !text.contains("ABC-123") } else { false }
         } == true)

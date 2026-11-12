@@ -188,6 +188,8 @@ class ISOMounter {
 
                 // Track that we mounted this
                 await tracker.insert(mountURL, image: isoPath, shadow: shadow)
+                // The drive the image is on, for a report's redaction.
+                VolumeKinds.note(isoPath)
                 logger.notice("Mounted: \(mountURL.path)")
                 return mountURL
             }
@@ -229,6 +231,7 @@ class ISOMounter {
                 return nil
             }
             await tracker.insert(mountPoint, image: isoPath, device: device, shadow: shadow)
+            VolumeKinds.note(isoPath)
             logger.notice("Mounted: \(mountPoint.path) (\(device), ISO 9660)")
             return mountPoint
         } catch {

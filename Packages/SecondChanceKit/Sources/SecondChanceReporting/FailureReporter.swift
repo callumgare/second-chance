@@ -47,6 +47,10 @@ nonisolated public enum FailureReporter {
         /// Sent basic if the process leaves before it is answered, unless
         /// Settings has since said otherwise (`unansweredDetail`).
         var unanswered: FailureReport?
+        /// The redactor each event being sent was put together with, by
+        /// event id, so `scrub` numbers its placeholders as the event's zip
+        /// did: `<folder-1>` is one folder throughout a report.
+        var redactors: [String: ReportRedactor] = [:]
     }
     private static let state = OSAllocatedUnfairLock(initialState: State())
     /// Entered while a report is being put together and handed to the SDK,
@@ -146,6 +150,9 @@ nonisolated public enum FailureReporter {
         }
         watchMemoryPressure()
         state.withLock { $0.started = true }
+        // Where this app runs from: a drive's name, should it be on one,
+        // is redacted even in a crash reported after the drive has gone.
+        VolumeKinds.note(Bundle.main.bundleURL)
         CrashMarker.sentryHandlesCrashes = true
         logger.notice("Failure reports are on (\(ReportingPreferences.load().level.rawValue))")
     }
@@ -278,6 +285,9 @@ nonisolated public enum FailureReporter {
         let redactor = ReportRedactor.current
 
         let event = Event(level: .error)
+        let eventID = event.eventId.sentryIdString
+        state.withLock { $0.redactors[eventID] = redactor }
+        defer { state.withLock { _ = $0.redactors.removeValue(forKey: eventID) } }
         event.message = SentryMessage(formatted: report.title)
         event.fingerprint = report.fingerprint(process: process.rawValue)
 
@@ -510,6 +520,10 @@ nonisolated public enum FailureReporter {
     /// when the SDK's own capture of the crash comes out short) go only in a
     /// detailed report.
     private static func resend(_ event: Event, detail: ReportDetail, log: URL?, crashReport: URL?) {
+        let redactor = ReportRedactor.current
+        let eventID = event.eventId.sentryIdString
+        state.withLock { $0.redactors[eventID] = redactor }
+        defer { state.withLock { _ = $0.redactors.removeValue(forKey: eventID) } }
         var attachment: Attachment?
         let workDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("second-chance-crash-\(event.eventId.sentryIdString)", isDirectory: true)
@@ -519,7 +533,7 @@ nonisolated public enum FailureReporter {
                 try FileManager.default.createDirectory(at: workDirectory, withIntermediateDirectories: true)
                 let text = try log.map { String(decoding: try Data(contentsOf: $0), as: UTF8.self) }
                 let zip = try ReportBundle.make(log: text ?? "[no log was kept for the run that crashed]\n",
-                                                diagnostics: nil, crashReport: crashReport, redactor: .current, in: workDirectory)
+                                                diagnostics: nil, crashReport: crashReport, redactor: redactor, in: workDirectory)
                 attachment = Attachment(path: zip.path, filename: "failure-report.zip", contentType: "application/zip")
             } catch {
                 logger.error("Couldn't attach the crashed run's log: \(ErrorChain.describe(error))")
@@ -566,7 +580,7 @@ nonisolated public enum FailureReporter {
             }
             return nil
         }
-        let redactor = ReportRedactor.current
+        let redactor = state.withLock { $0.redactors[event.eventId.sentryIdString] } ?? ReportRedactor.current
 
         event.serverName = nil
         event.request = nil
