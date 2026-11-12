@@ -802,8 +802,8 @@ and the helper's own lines `out of fullscreen: showing the program's …` and
 A window in a Space covers the screen, so where the picture is narrower
 than the screen the pointer never leaves Wine's window: Wine shows the
 game's cursor over the black bars too, and moves the game's cursor there.
-Out of a Space the Mac's arrow comes back as the pointer leaves the window
-and the game's cursor stays at the edge it left by, because Wine looks for
+Out of a Space the Mac's arrow comes back as the pointer leaves the window,
+because Wine looks for
 the window under the pointer (`+[NSWindow windowNumberAtPoint:…]` in
 `-handleMouseMove:`) and leaves the pointer to the Mac when it isn't one of
 Wine's. Wine's window can't be made the picture's size instead: in a Space
@@ -823,8 +823,9 @@ relative to the window that macOS joins with the key window's children's.
 The bars alone left the Mac's pointer held to the picture. So the helper
 follows Wine's calls (`setMouseConfinementRect:` on `WineWindow`, replaced),
 and while Wine holds its window each bar is given its own bounds, and the
-pointer may go over them. Wine still pins the position it tells the
-program to its clip, so the program's cursor stays at the picture's edge.
+pointer may go over them. The program's own cursor isn't kept at the
+picture's edge: Webmaster's goes on past it, out of sight under the bars,
+while the Mac's arrow shows where the pointer is.
 Shown smaller, the window is given no hold at all: Wine, which still sees
 it cover the screen, goes on clipping, and its rect, kept relative to the
 window, held the Mac's pointer in the smaller window. What Wine last asked
@@ -833,7 +834,10 @@ for is set again when the window covers the screen again. The log says
 `the pointer is held in the program's window again, as Wine asked`.
 Checked on Webmaster (2026-11-12, a test session, by the cursor AppKit and
 Wine set, as Screen Sharing's pictures leave the pointer out): over a bar
-Wine set the Mac's arrow, and clicks on the picture no longer set it.
+Wine set the Mac's arrow, and clicks on the picture no longer set it. By
+eye, the same day: the Mac's arrow shows over the bars and the game's glove
+over the picture, alone after a click, and the smaller window lets the
+pointer go.
 
 What the scaling costs was measured on Bioscopia (2026-11-07, a test session
 on an M1 Max): the time from moving the pointer to the game drawing its

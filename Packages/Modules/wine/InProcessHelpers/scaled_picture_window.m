@@ -501,13 +501,12 @@ void scaledPictureWindowEnd(NSWindow *window) {
 //
 // In a Space the window covers the screen, the bars beside the picture
 // included, so the pointer never leaves it: Wine shows the game's cursor
-// over the bars too, and moves it there. Out of a Space, the Mac's cursor
-// comes back as the pointer leaves the window, and the game's stays at the
-// edge it left by: Wine finds the window under the pointer
+// over the bars too. Out of a Space, the Mac's cursor comes back as the
+// pointer leaves the window: Wine finds the window under the pointer
 // (+[NSWindow windowNumberAtPoint:...] in -handleMouseMove:) and leaves it
 // alone if it isn't one of Wine's. So in a Space the bars are windows of
-// this file's own, black, children of Wine's window, and the same happens
-// at the picture's edge.
+// this file's own, black, children of Wine's window, and the Mac's cursor
+// shows over them too.
 
 @interface SecondChancePictureBarWindow : NSWindow
 @end
@@ -536,9 +535,9 @@ static char kBarsKey;
 // a rect, relative to the window, that macOS unions with those of the key
 // window's children. So while Wine confines its window, each bar confines
 // to its own bounds, and the pointer can go over the bars as well as the
-// picture; Wine still pins the position it reports to the program
-// (-clipCursorLocation:), so the program's cursor stops at the picture's
-// edge. A bar never confines otherwise: alone, its rect would hold the
+// picture. (The program's own cursor isn't kept at the picture's edge:
+// Webmaster's goes on past it, under the bars.) A bar never confines
+// otherwise: alone, its rect would hold the
 // pointer in the bars. Shown smaller, the window keeps none: Wine, which
 // still sees it cover the screen, goes on clipping, and its rect would hold
 // the pointer in the smaller window. What Wine last asked for is kept and
