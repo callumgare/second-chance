@@ -256,6 +256,11 @@ struct SecondChanceApp: App {
         Window("Icon Lab", id: IconLabWindow.id) {
             IconLabWindow(host: .shared)
         }
+        // twice its smallest size, 900 × 600, as far as the screen has room
+        .defaultWindowPlacement { _, context in
+            let room = context.defaultDisplay.visibleRect.size
+            return WindowPlacement(size: CGSize(width: min(1800, room.width), height: min(1200, room.height)))
+        }
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
     }
