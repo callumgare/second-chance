@@ -14,6 +14,19 @@ nonisolated let repoRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent()
 nonisolated let bundlesRoot = repoRoot.appendingPathComponent("Bundles")
 
+/// The bundle folders in one of `Bundles/`'s groups (`nancy-drew`,
+/// `freeware`), by name: folders only, and none hidden, so a Finder
+/// `.DS_Store` beside them, which a checkout may have though git ignores
+/// it, isn't taken for a bundle.
+nonisolated func bundleNames(in group: String) throws -> [String] {
+    let folder = bundlesRoot.appendingPathComponent(group)
+    return try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey],
+                                                       options: [.skipsHiddenFiles])
+        .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+        .map(\.lastPathComponent)
+        .sorted()
+}
+
 /// Where the shipped modules' paths are: their kits', as a host gives them.
 nonisolated let shippedPlaces = PathPlaces([WinePaths.self, DOSBoxPaths.self, ScummVMPaths.self, BigFishPaths.self])
 

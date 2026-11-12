@@ -9,7 +9,7 @@ struct ProgramTestTests {
     }
 
     @Test("Every bundle's test loads: its scenario, parameters and needles",
-          arguments: try FileManager.default.contentsOfDirectory(atPath: bundlesRoot.appendingPathComponent("nancy-drew").path).sorted())
+          arguments: try bundleNames(in: "nancy-drew"))
     func everyBundle(slug: String) throws {
         let test = try test(slug)
         #expect(test.scenario.id == "nancy-drew/quit-from-menu")
@@ -69,7 +69,7 @@ struct ProgramTestTests {
     }
 
     @Test("Every bundle beyond Nancy Drew has a test, with something for each handler to wait for",
-          arguments: try FileManager.default.contentsOfDirectory(atPath: bundlesRoot.appendingPathComponent("freeware").path).sorted())
+          arguments: try bundleNames(in: "freeware"))
     func freeware(name: String) throws {
         let test = try ProgramTest.load(bundleFolder: bundlesRoot.appendingPathComponent("freeware/\(name)"), modulesRoot: modulesRoot)
         for handler in test.scenario.handlers where handler.when != "blank" {
