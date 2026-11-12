@@ -7,7 +7,8 @@ import type { Doc } from "../../api";
 import { findLayer, placedLayer, setPlacedTransform } from "../../lib/doc";
 import { RENDER_INSET, requestIconRender, cachedIconRender, iconKey } from "../../render/iconRenders";
 import { loadImage, resources } from "../../render/resources";
-import { drawInBox, drawSketch, layerBox, pickLayer } from "../../render/sketch";
+import { drawInBox, drawSketch, flatColourAt, flatSketch, layerBox, pickLayer } from "../../render/sketch";
+import { canvasMounted, stopPicking, useEyedropper } from "../../state/eyedropper";
 import { useApp } from "../../state/app";
 import { selectedLayerIds, useDesign } from "../../state/design";
 import { clickLayer, insertLayers } from "./actions";
@@ -97,6 +98,9 @@ export function EditorCanvas() {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
     };
   }, [doc == null]);
+
+  const eyedropper = useEyedropper((s) => !!s.picking);
+  const loupe = useEyedropperOnCanvas(wrap, { ox, oy, S });
 
   // Redraw when pixels arrive.
   const layerRef = useRef<Konva.Layer>(null);
@@ -291,7 +295,7 @@ export function EditorCanvas() {
   const showReal = glass && real.img && !transient;
 
   return (
-    <div ref={wrap} className={"stage backdrop-" + backdrop} onDragOver={(e) => { if (designDrag(e.dataTransfer)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }} onDrop={onDrop}>
+    <div ref={wrap} className={"stage backdrop-" + backdrop + (eyedropper ? " picking" : "")} onDragOver={(e) => { if (designDrag(e.dataTransfer)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }} onDrop={onDrop}>
       <Stage width={box.w} height={box.h} onMouseDown={onDown}>
         <KLayer ref={layerRef}>
           <Group x={ox} y={oy}>
@@ -350,8 +354,68 @@ export function EditorCanvas() {
       {glass && real.pending && <div className="render-wait"><span className="render-note"><span className="spin" /> Rendering the final icon…</span></div>}
       {glass && real.error && !real.pending && <div className="render-note bad">The real render failed: {real.error}</div>}
       <SmallPreviews doc={doc} appearance={appearance} />
+      {eyedropper && <div className="eyedropper-note">Click the design to take its colour · Esc to stop</div>}
+      {eyedropper && loupe && (
+        <div className="eyedropper-loupe" style={{ left: loupe.x + 14, top: loupe.y + 14 }}>
+          <span className={"swatch" + (loupe.hex ? "" : " none")} style={loupe.hex ? { background: loupe.hex } : undefined} />
+          <span>{loupe.hex ?? "Nothing here"}</span>
+        </div>
+      )}
     </div>
   );
+}
+
+/** While a colour control is picking (state/eyedropper.ts), a click on the canvas takes the design's own colour there
+ * (the flat sketch: layers with their effects over the fill, before Icon Composer's glass) instead of selecting, and
+ * the pointer shows the colour it would take. Esc, or a click anywhere else, stops. */
+function useEyedropperOnCanvas(wrap: React.RefObject<HTMLDivElement | null>, at: { ox: number; oy: number; S: number }) {
+  useEffect(() => canvasMounted(), []);
+  const picking = useEyedropper((s) => s.picking);
+  const [loupe, setLoupe] = useState<{ x: number; y: number; hex: string | null } | null>(null);
+  const where = useRef(at);
+  where.current = at;
+  // The flat sketch, drawn again only when what it shows has changed.
+  const flat = useRef<{ canvas: HTMLCanvasElement; key: unknown[] } | null>(null);
+  const colourAt = (clientX: number, clientY: number) => {
+    const el = wrap.current, d = useDesign.getState();
+    if (!el || !d.doc) return null;
+    const r = el.getBoundingClientRect(), { ox, oy, S } = where.current;
+    const media = useApp.getState().media;
+    const key = [d.doc, d.appearance, S, media, resources.version];
+    if (!flat.current || flat.current.key.some((k, i) => k !== key[i])) {
+      const canvas = flat.current?.canvas ?? document.createElement("canvas");
+      flatSketch(d.doc, S, d.appearance, media, canvas);
+      flat.current = { canvas, key };
+    }
+    return flatColourAt(flat.current.canvas, (clientX - r.left - ox) / S, (clientY - r.top - oy) / S);
+  };
+  useEffect(() => {
+    const el = wrap.current;
+    if (!picking || !el) { setLoupe(null); flat.current = null; return; }
+    const inside = (e: Event) => e.target instanceof Node && el.contains(e.target);
+    // Caught before Konva sees the press, so nothing is selected or dragged.
+    const down = (e: PointerEvent | MouseEvent) => {
+      if (!inside(e)) { stopPicking(); return; }
+      e.stopPropagation(); e.preventDefault();
+      if (e.type !== "pointerdown") return;
+      const hex = colourAt(e.clientX, e.clientY);
+      if (hex) picking(hex);
+      stopPicking();
+    };
+    const move = (e: PointerEvent) => {
+      if (!inside(e)) { setLoupe(null); return; }
+      const r = el.getBoundingClientRect();
+      setLoupe({ x: e.clientX - r.left, y: e.clientY - r.top, hex: colourAt(e.clientX, e.clientY) });
+    };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); e.preventDefault(); stopPicking(); } };
+    window.addEventListener("pointerdown", down, true); window.addEventListener("mousedown", down, true);
+    window.addEventListener("pointermove", move, true); window.addEventListener("keydown", key, true);
+    return () => {
+      window.removeEventListener("pointerdown", down, true); window.removeEventListener("mousedown", down, true);
+      window.removeEventListener("pointermove", move, true); window.removeEventListener("keydown", key, true);
+    };
+  }, [picking]);
+  return loupe;
 }
 
 /** The selected layer drawn faintly in full, so a part outside the icon (or masked away) can still be seen. */

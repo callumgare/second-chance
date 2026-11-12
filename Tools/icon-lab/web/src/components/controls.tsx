@@ -5,6 +5,7 @@ import { HexColorPicker } from "react-colorful";
 import { isHex } from "../lib/colour";
 import { useApp } from "../state/app";
 import { Popup, usePopup } from "./Popup";
+import { startPicking, useEyedropper } from "../state/eyedropper";
 
 /** A labelled slider with a number field. `onChange` fires while dragging; `onCommit` when it's let go. */
 export function Slider({ label, value, min, max, step = 0.01, onChange, onCommit, format, disabled }: {
@@ -96,7 +97,7 @@ export function ColourField({ value, onChange, allowNone, label }: {
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
       {nameOf && <span className="faint wraps" style={{ fontSize: 10.5 }}>{nameOf}</span>}
       <Popup anchor={pop.anchor} onClose={pop.close}>
-        <FreePicker named={named} value={value} onChange={onChange} />
+        <FreePicker named={named} value={value} onChange={onChange} onPicking={pop.close} />
         {allowNone && <button className="btn small" onClick={() => { onChange(undefined); pop.close(); }}>Automatic</button>}
       </Popup>
     </span>
@@ -104,11 +105,19 @@ export function ColourField({ value, onChange, allowNone, label }: {
 }
 
 /** A free colour picker, with the program's colours as swatches under it (every one, wherever it opens). */
-function FreePicker({ named, value, onChange }: { named: [string, string][]; value: string | undefined | null; onChange(v: string): void }) {
+function FreePicker({ named, value, onChange, onPicking }: {
+  named: [string, string][]; value: string | undefined | null; onChange(v: string): void; onPicking(): void
+}) {
   const v = value?.toLowerCase();
+  const canvas = useEyedropper((s) => s.canvases > 0);
   return (
     <>
       <HexColorPicker color={value ?? "#888888"} onChange={(c) => onChange(c)} />
+      <button className="btn small eyedropper" disabled={!canvas}
+        title={canvas ? "Take a colour from the design: its layers with their effects, before the glass" : "Open the canvas to take a colour from it"}
+        onClick={() => { startPicking(onChange); onPicking(); }}>
+        <EyedropperIcon /> From the canvas
+      </button>
       {named.length > 0 && <>
         <div className="faint" style={{ fontSize: 10.5 }}>The program's colours</div>
         <div className="names">
@@ -156,7 +165,7 @@ export function SwatchRow({ value, onChange }: { value: string | undefined; onCh
       <button className={"swatch" + (custom ? " on" : "")} title="Custom…" style={{ background: custom ? value : "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)" }}
         onClick={(e) => pop.toggle(e.currentTarget)} />
       <Popup anchor={pop.anchor} onClose={pop.close}>
-        <FreePicker named={named} value={value} onChange={onChange} />
+        <FreePicker named={named} value={value} onChange={onChange} onPicking={pop.close} />
       </Popup>
     </div>
   );
@@ -170,4 +179,13 @@ function useNamedColours(): [string, string][] {
     const names = order?.length ? [...order.filter((n) => n in colours), ...Object.keys(colours).filter((n) => !order.includes(n))] : Object.keys(colours);
     return names.map((n) => [n, colours[n]] as [string, string]);
   }, [colours, order]);
+}
+
+function EyedropperIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.5 2.5l3 3-1.6 1.6-3-3z" fill="currentColor" />
+      <path d="M8.6 4.4l3 3-6.4 6.4H2.2v-3z" />
+    </svg>
+  );
 }

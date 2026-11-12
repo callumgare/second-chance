@@ -128,6 +128,10 @@ kbd { font-family: var(--ui); font-size: 10.5px; border: 1px solid var(--line-st
 .colour-field .hex { width: 70px; font-family: var(--mono); font-size: 11px }
 .popover { position: fixed; z-index: 100; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: var(--shadow); padding: 10px; display: grid; gap: 8px }
 .popover .react-colorful { width: 200px; height: 160px }
+.popover .eyedropper { display: inline-flex; align-items: center; gap: 5px; justify-self: start }
+.stage.picking, .stage.picking * { cursor: crosshair !important }
+.eyedropper-loupe { position: absolute; z-index: 5; pointer-events: none; display: flex; align-items: center; gap: 6px; padding: 4px 7px; border-radius: 7px; background: var(--panel); border: 1px solid var(--line-strong); box-shadow: var(--shadow); font: 11px var(--mono) }
+.eyedropper-note { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5; pointer-events: none; padding: 4px 10px; border-radius: 7px; background: var(--panel); border: 1px solid var(--line-strong); font-size: 11.5px }
 .popover .names { display: grid; grid-template-columns: repeat(7, 22px); gap: 5px }
 .menu { position: fixed; z-index: 100; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: var(--shadow); padding: 4px; min-width: 170px; display: grid }
 .menu button { border: 0; background: transparent; text-align: left; padding: 4px 10px; border-radius: 5px; font-size: 12.5px; display: flex; justify-content: space-between; gap: 16px }

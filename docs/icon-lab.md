@@ -61,7 +61,12 @@ A program goes through four stages, each a route of the page
    dragged onto another in the Layers panel (or a layer's **Mask the layer
    above / below**): nested under it, it shows the layer only where it has
    pixels, moving with it unless unlocked
-   ([document.md](../Packages/IconLab/docs/document.md#mask-layers-2026-11-12)). Designs worth keeping
+   ([document.md](../Packages/IconLab/docs/document.md#mask-layers-2026-11-12)).
+   A colour picker's **From the canvas** takes a colour from where the
+   canvas is clicked: the design's own colour there, its layers with their
+   effects over a plain fill, without what Icon Composer adds (the fill's
+   gradient, specular, translucency, shadows, the tinted and clear looks),
+   drawn by the sketch's `flat` mode (`src/state/eyedropper.ts`). Designs worth keeping
    are pinned. A pin never changes by editing: opening one edits a copy, and
    **Update pin** saves the copy back to it.
 4. **Review.** Every pinned design side by side, in each appearance and at the

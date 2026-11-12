@@ -14,6 +14,10 @@ export type SketchOptions = {
   /** Clip to the icon shape. */
   clip?: boolean
   hiddenLayer?: string | null
+  /** The design's own colours, for the eyedropper: the layers (with their effects) over a plain fill, without what
+   * Icon Composer adds (the fill's gradient, the appearance's changes, specular, translucency, shadows, the rim).
+   * Tinted and clear are Icon Composer's, so they draw as light. */
+  flat?: boolean
 }
 
 export const TINT = "#8aa7ff";
@@ -101,9 +105,11 @@ export function drawSketch(ctx: CanvasRenderingContext2D, doc: Doc, size: number
   if (opts.clip !== false) { iconPath(ctx, size); ctx.clip(); }
 
   // Fill: Icon Composer's automatic gradient is lighter at the top.
-  const fc = fillColour(doc, opts.appearance);
+  const flat = !!opts.flat;
+  const appearance: Appearance = flat && opts.appearance !== "dark" ? "light" : opts.appearance;
+  const fc = fillColour(doc, appearance);
   if (fc) {
-    if (doc.fill.kind === "gradient" || opts.appearance === "tinted" || opts.appearance === "clear") {
+    if (!flat && (doc.fill.kind === "gradient" || appearance === "tinted" || appearance === "clear")) {
       const g = ctx.createLinearGradient(0, 0, 0, size);
       g.addColorStop(0, shade(fc, 1.16));
       g.addColorStop(0.55, fc);
@@ -113,7 +119,7 @@ export function drawSketch(ctx: CanvasRenderingContext2D, doc: Doc, size: number
     ctx.fillRect(0, 0, size, size);
   }
 
-  const layerFilter = opts.appearance === "tinted" ? "grayscale(1) brightness(1.15) contrast(1.1)"
+  const layerFilter = flat ? "none" : opts.appearance === "tinted" ? "grayscale(1) brightness(1.15) contrast(1.1)"
     : opts.appearance === "clear" ? "grayscale(1) brightness(1.5) contrast(0.85)"
     : opts.appearance === "dark" ? "brightness(0.94)" : "none";
 
@@ -182,6 +188,7 @@ export function drawSketch(ctx: CanvasRenderingContext2D, doc: Doc, size: number
     if (!drewAny) continue;
 
     // Specular: a soft light across the top of the group's own pixels.
+    if (flat) { ctx.drawImage(gctx.canvas, 0, 0, px, px, 0, 0, size, size); continue; }
     if (group.glass.specular && opts.appearance !== "clear") {
       gctx.save();
       gctx.globalCompositeOperation = "source-atop";
@@ -217,7 +224,7 @@ export function drawSketch(ctx: CanvasRenderingContext2D, doc: Doc, size: number
     ctx.restore();
   }
 
-  if (opts.appearance === "tinted") {
+  if (opts.appearance === "tinted" && !flat) {
     ctx.save();
     ctx.globalCompositeOperation = "color";
     ctx.globalAlpha = 0.75;
@@ -227,7 +234,7 @@ export function drawSketch(ctx: CanvasRenderingContext2D, doc: Doc, size: number
   }
 
   // A thin rim of light along the edge, as the glass has.
-  if (opts.clip !== false && fc) {
+  if (opts.clip !== false && fc && !flat) {
     ctx.save();
     iconPath(ctx, size);
     const [r, g, b] = hexToRgb("#ffffff");
@@ -319,4 +326,27 @@ export function canvasMasks(layer: Layer): { mask: Mask; invert: boolean }[] {
   if (layer.mask) out.push({ mask: layer.mask, invert: false });
   out.push(...splitMasks(layer.content).trailing);
   return out;
+}
+
+/** The design's own colour at a point (canvas units 0…1), from a flat sketch (`SketchOptions.flat`) drawn into
+ * `canvas` at `size` × `pixelRatio`, which the caller keeps while nothing changes. Null where nothing is drawn. */
+export function flatColourAt(canvas: HTMLCanvasElement, u: number, v: number): string | null {
+  const x = Math.floor(u * canvas.width), y = Math.floor(v * canvas.height);
+  if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return null;
+  let d: Uint8ClampedArray;
+  try { d = canvas.getContext("2d", { willReadFrequently: true })!.getImageData(x, y, 1, 1).data; } catch { return null; }
+  if (d[3] < 8) return null;
+  return "#" + [d[0], d[1], d[2]].map((n) => n.toString(16).padStart(2, "0")).join("");
+}
+
+/** Draws the flat sketch of `doc` for `flatColourAt`. */
+export function flatSketch(doc: Doc, size: number, appearance: Appearance, media: Map<string, Media> | undefined, canvas: HTMLCanvasElement) {
+  const pr = window.devicePixelRatio || 1;
+  const px = Math.max(1, Math.round(size * pr));
+  if (canvas.width !== px || canvas.height !== px) { canvas.width = px; canvas.height = px; }
+  const g = canvas.getContext("2d", { willReadFrequently: true })!;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, px, px);
+  g.scale(pr, pr);
+  drawSketch(g, doc, size, { appearance, pixelRatio: pr, media, flat: true });
 }
