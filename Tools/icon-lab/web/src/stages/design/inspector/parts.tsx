@@ -9,6 +9,7 @@ import { useApp } from "../../../state/app";
 import { useDesign } from "../../../state/design";
 import { CurrentPart } from "./Subpage";
 import { XYPad } from "../../../components/XYPad";
+import { useReorder } from "../../../lib/reorder";
 
 export type Update<T> = (fn: (v: T) => T | void, live?: boolean) => void;
 const commit = () => useDesign.getState().commit();
@@ -27,8 +28,9 @@ export function ShapeEditor({ shape, update, kinds }: { shape: Shape; update: Up
       </label>
       {shape.type === "solid" && <ColourRow label="Colour" value={shape.color} onChange={(v) => set("color", v, true)} />}
       {shape.type === "gradient" && <>
-        <ColourRow label="From" value={shape.from} onChange={(v) => set("from", v, true)} />
-        <ColourRow label="To" value={shape.to} onChange={(v) => set("to", v, true)} />
+        <ColourStops kind="gradient" stops={[["From", shape.from], ["To", shape.to]]}
+          onChange={(i, v) => set(i ? "to" : "from", v, true)}
+          onMove={() => update((s) => { const g = s as Extract<Shape, { type: "gradient" }>; [g.from, g.to] = [g.to, g.from]; })} />
         <Slider label="Angle" value={shape.angle} min={0} max={360} step={1} format={(v) => `${Math.round(v)}°`} onChange={(v) => set("angle", v, true)} onCommit={commit} />
       </>}
       {shape.type === "pattern" && <>
@@ -41,14 +43,10 @@ export function ShapeEditor({ shape, update, kinds }: { shape: Shape; update: Up
         <ColourRow label="Marks" value={shape.b} onChange={(v) => set("b", v, true)} />
       </>}
       {shape.type === "bands" && <>
-        {shape.colors.map((c, i) => (
-          <div key={i} className="kv wide"><span>Band {i + 1}</span>
-            <span className="row">
-              <ColourField value={c} onChange={(v) => v && update((s) => { (s as any).colors[i] = v; }, true)} />
-              <button className="icon-btn" disabled={shape.colors.length < 2} onClick={() => update((s) => { (s as any).colors.splice(i, 1); })} aria-label="Remove band">✕</button>
-            </span>
-          </div>
-        ))}
+        <ColourStops kind="bands" stops={shape.colors.map((c, i) => [`Band ${i + 1}`, c])}
+          onChange={(i, v) => update((s) => { (s as any).colors[i] = v; }, true)}
+          onMove={(from, to) => update((s) => { const l = (s as any).colors as string[]; const [c] = l.splice(from, 1); l.splice(to, 0, c); })}
+          onRemove={shape.colors.length < 2 ? undefined : (i) => update((s) => { (s as any).colors.splice(i, 1); })} />
         <button className="btn small" style={{ justifySelf: "start" }} onClick={() => update((s) => { (s as any).colors.push(shape.colors[shape.colors.length - 1] ?? "#888888"); })}>＋ Band</button>
       </>}
       {shape.type === "window" && <>
@@ -93,6 +91,29 @@ export function ColourRow({ label, value, onChange, allowNone }: { label: string
   );
 }
 
+/** Colours in an order that matters (a gradient's ends, a gradient map's shadows and highlights, bands), each
+ *  dragged by its handle to a new place. The labels stay where they are: dragging a colour to the top makes it
+ *  the first. */
+function ColourStops({ kind, stops, onChange, onMove, onRemove }: {
+  kind: string; stops: [string, string][]; onChange(i: number, v: string): void; onMove(from: number, to: number): void
+  onRemove?(i: number): void
+}) {
+  const r = useReorder(kind, onMove);
+  return <>
+    {stops.map(([label, c], i) => (
+      <div key={i} className={"kv wide stop" + (r.dragging === i ? " dragging" : "")} {...r.row(i)}>
+        <span className="row" style={{ gap: 3 }}>
+          <span className="grip" {...r.handle(i)} title="Drag to reorder" aria-label={`Move ${label}`}>⠿</span>{label}
+        </span>
+        <span className="row">
+          <ColourField label={label} value={c} onChange={(v) => v && onChange(i, v)} />
+          {onRemove && <button className="icon-btn" onClick={() => onRemove(i)} aria-label={`Remove ${label}`}>✕</button>}
+        </span>
+      </div>
+    ))}
+  </>;
+}
+
 // ---------------------------------------------------------------- effects
 
 export type MaskCtx = { layerAsset?: string; layerTransform: Transform; onChooseImage(index: number): void };
@@ -100,12 +121,15 @@ export type MaskCtx = { layerAsset?: string; layerTransform: Transform; onChoose
 export function EffectsEditor({ effects, update, maskCtx }: { effects: Effect[]; update: Update<Effect[]>; maskCtx: MaskCtx }) {
   const add = usePopup();
   const named = useApp((s) => s.program?.colours ?? NO_COLOURS);
-  const move = (i: number, by: number) => update((list) => { const j = i + by; if (j < 0 || j >= list.length) return; const [e] = list.splice(i, 1); list.splice(j, 0, e); });
+  const moveTo = (i: number, j: number) => update((list) => { if (j < 0 || j >= list.length) return; const [e] = list.splice(i, 1); list.splice(j, 0, e); });
+  const move = (i: number, by: number) => moveTo(i, i + by);
+  const r = useReorder("effects", moveTo);
   return (
     <div className="col">
       {effects.map((e, i) => (
-        <div key={i} className="fx">
-          <div className="fx-h">
+        <div key={i} className={"fx" + (r.dragging === i ? " dragging" : "")} {...r.row(i)}>
+          <div className="fx-h" {...r.handle(i)} title="Drag to change the order effects are applied in">
+            <span className="grip" aria-hidden>⠿</span>
             <b>{EFFECT_LABELS[e.op]}</b>
             <span className="grow" />
             <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Apply earlier" title="Apply earlier">↑</button>
@@ -142,7 +166,9 @@ function EffectParams({ e, update }: { e: Effect; update: Update<Effect> }) {
       <div className="kv wide"><span>Band</span><Seg value={String(e.level) as "0" | "1" | "2"} options={["0", "1", "2"] as const} labels={{ 0: "Dark", 1: "Mid", 2: "Light" }} onChange={(v) => set("level", +v)} /></div>
       {colour("color", "Colour")}
     </>;
-    case "gradient-map": return <>{colour("dark", "Shadows")}{colour("light", "Highlights")}</>;
+    case "gradient-map": return <ColourStops kind="gradient-map" stops={[["Shadows", e.dark], ["Highlights", e.light]]}
+      onChange={(i, v) => set(i ? "light" : "dark", v, true)}
+      onMove={() => update((x) => { const g = x as Extract<Effect, { op: "gradient-map" }>; [g.dark, g.light] = [g.light, g.dark]; })} />;
     case "blur": return slider("radius", "Radius", 0, 0.05, 0.0005, pts);
     case "edges": return colour("color", "Colour");
     case "riso": return <>
