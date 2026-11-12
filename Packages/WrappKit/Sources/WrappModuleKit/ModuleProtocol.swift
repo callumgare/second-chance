@@ -154,6 +154,14 @@ public nonisolated struct Nothing: Codable, Sendable {
 /// One end of the protocol: reads a message a line from `input`, answers
 /// each request through `handler` (concurrently), matches each reply to the
 /// request it answers, and writes a message a line to `output`.
+///
+/// A notification is handled in order, on the reader, and finished before
+/// the next message is read, so what the other end says before a reply has
+/// been heard when its request returns: a program's `emit`s before its
+/// step's reply belong to the step. When each was a task of its own, a
+/// step could be done before its last `emit` was handled. Requests run
+/// concurrently, since one may wait on the other end (`input`, `ask`); a
+/// notification's handler must not.
 public nonisolated final class RPCConnection: Sendable {
     public typealias Handler = @Sendable (_ method: String, _ params: Data?) async throws -> Data?
 
@@ -183,7 +191,7 @@ public nonisolated final class RPCConnection: Sendable {
             do {
                 for try await line in input.bytes.lines {
                     guard let self else { return }
-                    self.received(line)
+                    await self.received(line)
                 }
             } catch {}
             self?.closed()
@@ -237,7 +245,7 @@ public nonisolated final class RPCConnection: Sendable {
         try writing.withLock { _ in try output.write(contentsOf: line) }
     }
 
-    private func received(_ line: String) {
+    private func received(_ line: String) async {
         guard let message = try? JSONDecoder().decode(RPCMessage.self, from: Data(line.utf8)) else { return }
         if let method = message.method {
             if method == "$/cancelRequest" {
@@ -247,28 +255,28 @@ public nonisolated final class RPCConnection: Sendable {
                 return
             }
             let handler = handler.withLock { $0 }
-            let id = message.id
+            guard let id = message.id else {
+                // A notification: in order, before anything after it.
+                _ = try? await handler?(method, message.params?.data)
+                return
+            }
             let task = Task.detached { [weak self] in
                 guard let self else { return }
                 do {
                     guard let handler else { throw RPCError(.methodNotFound, "nothing answers \(method)") }
                     let result = try await handler(method, message.params?.data)
-                    if let id { try? self.send(RPCMessage(id: id, result: RawJSON(data: result ?? Data("null".utf8)))) }
+                    try? self.send(RPCMessage(id: id, result: RawJSON(data: result ?? Data("null".utf8))))
                 } catch {
-                    if let id { try? self.send(RPCMessage(id: id, error: RPCError(error))) }
+                    try? self.send(RPCMessage(id: id, error: RPCError(error)))
                 }
                 // One that ends before it's registered is noted, so it isn't
                 // registered after.
-                if let id {
-                    self.running.withLock { running in
-                        if running.tasks.removeValue(forKey: id) == nil { running.finished.insert(id) }
-                    }
+                self.running.withLock { running in
+                    if running.tasks.removeValue(forKey: id) == nil { running.finished.insert(id) }
                 }
             }
-            if let id {
-                running.withLock { running in
-                    if running.finished.remove(id) == nil { running.tasks[id] = task }
-                }
+            running.withLock { running in
+                if running.finished.remove(id) == nil { running.tasks[id] = task }
             }
             return
         }
