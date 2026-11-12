@@ -173,6 +173,9 @@ async function combine(programs: OpenedProgram[]) {
   try {
     await api.absorb(into.slug, rest.map((p) => p.slug));
     useApp.getState().say(`Combined into “${into.title}”`);
+    // the open program, if it took part, is fetched again (one combined away now points at the one kept)
+    const open = useApp.getState().program?.slug;
+    if (open && programs.some((p) => p.slug === open)) void useApp.getState().loadProgram(into.slug);
     void useApp.getState().loadPrograms();
     const q = useSearch.getState().q;
     if (q) void useSearch.getState().run(q);

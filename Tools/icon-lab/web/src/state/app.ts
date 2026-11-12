@@ -1,6 +1,6 @@
 // What the whole app shares: which API it talks to, the programs, and the open program with its media.
 import { create } from "zustand";
-import { api, type Media, type Program, type ProgramSummary } from "../api";
+import { api, ApiError, type Media, type Program, type ProgramSummary } from "../api";
 import { withParts } from "../parts/shim";
 
 // Stable empties for selectors (a new {} or [] each time would re-render for ever).
@@ -60,6 +60,10 @@ function cachedProgram(slug: string): Program | null {
     return raw ? (JSON.parse(raw) as Program) : null;
   } catch { return null; }
 }
+function forget(slug: string) {
+  seen.delete(slug);
+  try { localStorage.removeItem(storeKey(slug)); } catch { /* blocked */ }
+}
 function remember(p: Program) {
   seen.set(p.slug, p);
   try { localStorage.setItem(storeKey(p.slug), JSON.stringify(p)); } catch { /* full or blocked: memory still has it */ }
@@ -80,10 +84,14 @@ export const useApp = create<AppState>((set, get) => ({
 
   async loadProgram(slug) {
     wanted = slug;
-    if (get().program?.slug === slug) { refreshLookSoon(slug); return; }
-    const c0 = cachedProgram(slug);
-    const cached = c0 ? { ...c0, media: c0.media.map((m) => withParts(slug, m)) } : c0;
-    set({ program: cached, programError: null, media: new Map((cached?.media ?? []).map((m) => [m.id, m])) });
+    // Shown at once from what the page has (the open program, else its last copy), then always fetched again: the
+    // engine may have changed it meanwhile (another program combined into it, pictures added while it was away).
+    let cached: Program | null = get().program?.slug === slug ? get().program : null;
+    if (!cached) {
+      const c0 = cachedProgram(slug);
+      cached = c0 ? { ...c0, media: c0.media.map((m) => withParts(slug, m)) } : null;
+      set({ program: cached, programError: null, media: new Map((cached?.media ?? []).map((m) => [m.id, m])) });
+    }
     try {
       const raw = await api.program(slug);
       if (wanted !== slug) return;   // moved on meanwhile
@@ -91,7 +99,11 @@ export const useApp = create<AppState>((set, get) => ({
       const p = { ...raw, media: raw.media.map((m) => withParts(slug, m)) };
       set({ program: p, media: new Map(p.media.map((m) => [m.id, m])) });
     } catch (e) {
-      if (!cached) set({ programError: (e as Error).message });
+      // gone (combined into another program): its remembered copy goes too
+      if (e instanceof ApiError && e.status === 404 && !e.routeMissing) {
+        forget(slug);
+        if (wanted === slug) set({ program: null, media: new Map(), programError: "This program isn't here any more: it may have been combined with another. Find it again in Find." });
+      } else if (!cached) set({ programError: (e as Error).message });
     }
   },
 
