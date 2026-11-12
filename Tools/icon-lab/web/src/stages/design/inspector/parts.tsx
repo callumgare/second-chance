@@ -146,7 +146,7 @@ export function EffectsEditor({ effects, update, maskCtx }: { effects: Effect[];
       ))}
       {!effects.length && <div className="faint" style={{ fontSize: 11.5 }}>No effects: the image as it is.</div>}
       <button className="btn small" style={{ justifySelf: "start" }} onClick={(ev) => add.toggle(ev.currentTarget)}>＋ Effect ▾</button>
-      <Menu anchor={add.anchor} onClose={add.close} items={(Object.keys(EFFECT_LABELS) as EffectOp[]).map((op) => ({
+      <Menu anchor={add.anchor} onClose={add.close} items={(Object.keys(EFFECT_LABELS) as EffectOp[]).filter((op) => op !== "mask").map((op) => ({
         label: EFFECT_LABELS[op], onClick: () => update((l) => { l.push(defaultEffect(op, named.striking, named["second striking"])); }),
       }))} />
     </div>

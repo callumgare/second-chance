@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import Konva from "konva";
 import { Group, Image as KImage, Layer as KLayer, Line, Rect, Shape, Stage, Transformer } from "react-konva";
 import type { Doc } from "../../api";
-import { findLayer } from "../../lib/doc";
+import { findLayer, placedLayer, setPlacedTransform } from "../../lib/doc";
 import { RENDER_INSET, requestIconRender, cachedIconRender, iconKey } from "../../render/iconRenders";
 import { loadImage, resources } from "../../render/resources";
 import { drawInBox, drawSketch, layerBox, pickLayer } from "../../render/sketch";
@@ -106,11 +106,12 @@ export function EditorCanvas() {
   const real = useRealRender(glass ? doc : null, appearance, S, transient);
 
   // ---------------------------------------------------------------- selection and handles
-  const selLayer = doc && sel?.kind === "layer" ? findLayer(doc, sel.id)?.layer ?? null : null;
+  // A mask's box is where it is on the canvas (a locked one's transform is relative to the layer it masks).
+  const selLayer = doc && sel?.kind === "layer" ? placedLayer(doc, sel.id) : null;
   const proxy = useRef<Konva.Rect>(null);
   // Several layers, or a group's: one box around their turned bounds, moved and scaled together.
   const multiIds = doc && (sel?.kind === "layers" || sel?.kind === "group")
-    ? selectedLayerIds(doc, sel).filter((id) => { const h = findLayer(doc, id); return h && !h.layer.hidden && !h.group.hidden; }) : [];
+    ? selectedLayerIds(doc, sel).filter((id) => { const h = findLayer(doc, id); return h && !h.parent && !h.layer.hidden && !h.group.hidden; }) : [];
   const union = (() => {
     if (!doc || !multiIds.length) return null;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -198,8 +199,10 @@ export function EditorCanvas() {
       return;
     }
     if (target === proxy.current) {
-      // On the selected layer's box: drag it, unless another layer's pixels are in front there.
-      if (!hit || (st.sel?.kind === "layer" && hit.id === st.sel.id)) return;
+      // On the selected layer's box: drag it, unless another layer's pixels are in front there. A mask's own pixels
+      // are never picked, so on a mask's box the layer it masks counts as it.
+      const own = st.sel?.kind === "layer" ? [st.sel.id, findLayer(st.doc, st.sel.id)?.parent?.id] : [];
+      if (!hit || own.includes(hit.id)) return;
       proxy.current.stopDrag();
     }
     if (target === mproxy.current) {
@@ -238,10 +241,7 @@ export function EditorCanvas() {
     }
     if (!keepGuides) setGuides(g);
     const width = (node.width() * node.scaleX()) / S;
-    st.edit((d) => {
-      const h = findLayer(d, id); if (!h) return;
-      h.layer.transform = { x: x / S, y: y / S, width, rotation: Math.round(node.rotation() * 100) / 100 };
-    }, { transient: true });
+    st.edit((d) => setPlacedTransform(d, id, { x: x / S, y: y / S, width, rotation: Math.round(node.rotation() * 100) / 100 }), { transient: true });
   };
 
   const startMulti = (node: Konva.Rect) => {
@@ -356,8 +356,7 @@ export function EditorCanvas() {
 
 /** The selected layer drawn faintly in full, so a part outside the icon (or masked away) can still be seen. */
 function drawGhost(ctx: CanvasRenderingContext2D, doc: Doc, id: string, S: number, media: Map<string, any>) {
-  const hit = findLayer(doc, id); if (!hit) return;
-  const l = hit.layer;
+  const l = placedLayer(doc, id); if (!l) return;
   const b = layerBox(doc.program, l, S, media);
   const got = l.content.kind === "image" ? resources.content(doc.program, l.content, Math.max(b.w, b.h), l.transform.width) : resources.shape(doc.program, l.content.shape, Math.max(b.w, b.h));
   if (!got) return;

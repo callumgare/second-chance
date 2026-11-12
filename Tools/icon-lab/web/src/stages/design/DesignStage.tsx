@@ -1,5 +1,6 @@
 // Stage 3, layout A ("Workbench"): media drawer, canvas, layers, inspector; pins under the canvas; the
 // suggestions row and "adjust all" along the bottom. The row expands into the gallery (layout B).
+import { allLayersAndMasks } from "../../lib/doc";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ResizeHandle } from "../../components/ResizeHandle";
 import { api } from "../../api";
@@ -192,7 +193,7 @@ function useShortcuts() {
       if (e.key === "h" && many) { toggleHiddenSelected(); return; }
       if (e.key === "Tab" && st.doc) {
         // Cycle the selection through the layers, front to back.
-        const all = st.doc.groups.flatMap((g) => g.layers);
+        const all = allLayersAndMasks(st.doc);
         if (!all.length) return;
         e.preventDefault();
         const i = layerId ? all.findIndex((l) => l.id === layerId) : -1;

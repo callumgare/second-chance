@@ -15,14 +15,108 @@ export function visualKey(d: Doc): string {
   return JSON.stringify(rest);
 }
 
-export function findLayer(d: Doc, id: string | null | undefined): { group: Group; layer: Layer; gi: number; li: number } | null {
+/** A layer by id, a mask layer too: then `parent` is the layer it masks (whose index `li` is) and `mi` its index
+ *  in the parent's masks. */
+export type LayerHit = { group: Group; layer: Layer; gi: number; li: number; parent?: Layer; mi?: number };
+export function findLayer(d: Doc, id: string | null | undefined): LayerHit | null {
   if (!id) return null;
   for (let gi = 0; gi < d.groups.length; gi++) {
     const g = d.groups[gi];
     const li = g.layers.findIndex((l) => l.id === id);
     if (li >= 0) return { group: g, layer: g.layers[li], gi, li };
   }
+  for (let gi = 0; gi < d.groups.length; gi++) {
+    const g = d.groups[gi];
+    for (let li = 0; li < g.layers.length; li++) {
+      const mi = g.layers[li].masks?.findIndex((m) => m.id === id) ?? -1;
+      if (mi >= 0) return { group: g, layer: g.layers[li].masks![mi], gi, li, parent: g.layers[li], mi };
+    }
+  }
   return null;
+}
+
+/** Every layer's id in the Layers panel's order: front first, each layer's masks after it. */
+export function layerIdsInOrder(d: Doc): string[] {
+  return d.groups.flatMap((g) => g.layers.flatMap((l) => [l.id, ...(l.masks ?? []).map((m) => m.id)]));
+}
+
+/** `r`, relative to `p` (a square `p.width` across, centred on it and turned with it), on the canvas. */
+export function composeTransform(p: Transform, r: Transform): Transform {
+  const th = (p.rotation * Math.PI) / 180, c = Math.cos(th), s = Math.sin(th);
+  const ox = (r.x - 0.5) * p.width, oy = (r.y - 0.5) * p.width;
+  return { x: p.x + ox * c - oy * s, y: p.y + ox * s + oy * c, width: p.width * r.width, rotation: p.rotation + r.rotation };
+}
+
+/** The inverse of `composeTransform`: a canvas transform `t` relative to `p`. */
+export function relativeTransform(p: Transform, t: Transform): Transform {
+  const th = (p.rotation * Math.PI) / 180, c = Math.cos(th), s = Math.sin(th);
+  const dx = t.x - p.x, dy = t.y - p.y, w = Math.max(1e-6, p.width);
+  return { x: 0.5 + (dx * c + dy * s) / w, y: 0.5 + (-dx * s + dy * c) / w, width: t.width / w, rotation: t.rotation - p.rotation };
+}
+
+/** A mask of `parent` with its place on the canvas (a locked mask's transform is relative to its parent's). */
+export function placed(parent: Layer, m: Layer): Layer {
+  return m.lock === "canvas" ? m : { ...m, transform: composeTransform(parent.transform, m.transform) };
+}
+
+/** The layer `id` with its place on the canvas, a mask's too. */
+export function placedLayer(d: Doc, id: string | null | undefined): Layer | null {
+  const h = findLayer(d, id);
+  return !h ? null : h.parent ? placed(h.parent, h.layer) : h.layer;
+}
+
+/** Sets where layer `id` is on the canvas (a locked mask's transform is kept relative to the layer it masks). */
+export function setPlacedTransform(d: Doc, id: string, t: Transform) {
+  const h = findLayer(d, id); if (!h) return;
+  h.layer.transform = h.parent && h.layer.lock !== "canvas" ? relativeTransform(h.parent.transform, t) : t;
+}
+
+/** Whether a layer can become a mask of `target`: not itself, not a mask's mask, and not a layer with masks of its own. */
+export function canMask(d: Doc, maskId: string, targetId: string): boolean {
+  if (maskId === targetId) return false;
+  const m = findLayer(d, maskId), t = findLayer(d, targetId);
+  if (!m || !t || t.parent || m.layer.masks?.length) return false;
+  return m.parent?.id !== targetId;
+}
+
+/** Makes layer `maskId` (a layer, or another's mask) a mask of `targetId`, staying where it is on the canvas until
+ *  locked to it. Locked by default. False if it can't (`canMask`). */
+export function makeMask(d: Doc, maskId: string, targetId: string): boolean {
+  if (!canMask(d, maskId, targetId)) return false;
+  const h = findLayer(d, maskId)!;
+  const onCanvas = h.parent ? placed(h.parent, h.layer) : h.layer;
+  if (h.parent) h.parent.masks!.splice(h.mi!, 1); else h.group.layers.splice(h.li, 1);
+  if (h.parent && !h.parent.masks!.length) delete h.parent.masks;
+  const target = findLayer(d, targetId)!.layer;
+  const m: Layer = { ...h.layer, transform: relativeTransform(target.transform, onCanvas.transform) };
+  delete m.lock; delete m.masks;
+  (target.masks ??= []).push(m);
+  return true;
+}
+
+/** Makes mask `id` a layer of its own again, just behind the layer it masked, where it was on the canvas. */
+export function releaseMask(d: Doc, id: string) {
+  const h = findLayer(d, id); if (!h?.parent) return;
+  const l: Layer = { ...placed(h.parent, h.layer) };
+  delete l.lock; delete l.invert;
+  h.parent.masks!.splice(h.mi!, 1);
+  if (!h.parent.masks!.length) delete h.parent.masks;
+  h.group.layers.splice(h.li + 1, 0, l);
+}
+
+/** Locks mask `id` to the layer it masks, or frees it to a place of its own, without moving it. */
+export function setMaskLock(d: Doc, id: string, locked: boolean) {
+  const h = findLayer(d, id); if (!h?.parent || locked === (h.layer.lock !== "canvas")) return;
+  const t = placed(h.parent, h.layer).transform;
+  if (locked) { delete h.layer.lock; h.layer.transform = relativeTransform(h.parent.transform, t); }
+  else { h.layer.lock = "canvas"; h.layer.transform = t; }
+}
+
+/** A copy of a layer with fresh ids, its masks' too. */
+export function withNewIds(l: Layer, id = uid()): Layer {
+  const c = clone(l); c.id = id;
+  if (c.masks) c.masks = c.masks.map((m) => ({ ...m, id: uid() }));
+  return c;
 }
 
 export function findGroup(d: Doc, id: string | null | undefined) {
@@ -30,6 +124,9 @@ export function findGroup(d: Doc, id: string | null | undefined) {
 }
 
 export function allLayers(d: Doc): Layer[] { return d.groups.flatMap((g) => g.layers); }
+
+/** Every layer and every mask layer. */
+export function allLayersAndMasks(d: Doc): Layer[] { return d.groups.flatMap((g) => g.layers.flatMap((l) => [l, ...(l.masks ?? [])])); }
 
 export const NATURAL: Transform = { x: 0.5, y: 0.5, width: 1, rotation: 0 };
 

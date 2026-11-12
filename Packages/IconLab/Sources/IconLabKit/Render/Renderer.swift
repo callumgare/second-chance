@@ -172,7 +172,7 @@ nonisolated public struct Renderer: Sendable {
         b.composite(onto: &canvas, rect: placed, rotation: t.rotation, opacity: opacity, pixel: pixel)
     }
 
-    /// One layer on an `n`×`n` canvas: content placed, masked, faded.
+    /// One layer on an `n`×`n` canvas: content placed, masked (by its old `mask` and its mask layers), faded.
     public func layer(_ l: Layer, program: String, size n: Int) async throws -> Bitmap {
         var canvas = Bitmap(width: n, height: n)
         let pw = max(1, Int((l.transform.width * Double(n)).rounded()))
@@ -183,6 +183,12 @@ nonisolated public struct Renderer: Sendable {
               on: &canvas, pixel: pixel, opacity: l.opacity)
         if let m = l.mask {
             let mb = try await mask(m, program: program, size: n)
+            canvas.multiplyAlpha(by: mb)
+        }
+        // mask layers: the layer shows where each is opaque (or, inverted, where it isn't)
+        for m in l.masks ?? [] where m.hidden != true {
+            var mb = try await layer(l.placed(m), program: program, size: n)
+            if m.invert == true { for i in stride(from: 3, to: mb.pixels.count, by: 4) { mb.pixels[i] = 255 - mb.pixels[i] } }
             canvas.multiplyAlpha(by: mb)
         }
         return canvas

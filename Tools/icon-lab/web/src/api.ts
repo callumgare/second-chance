@@ -49,6 +49,13 @@ export type Layer = {
   content: Content
   transform: Transform
   mask?: Mask | null
+  /** Layers whose pixels clip this one (it shows only where each is opaque), nested under it in the Layers panel. */
+  masks?: Layer[]
+  /** A mask layer's: "canvas" when its place is its own on the canvas; absent when it's locked to the layer it masks,
+   *  its transform then relative to that layer's (lib/doc's `placed`). */
+  lock?: "canvas"
+  /** A mask layer's: clip to where it is transparent instead. */
+  invert?: boolean
   [unknown: string]: unknown
 }
 

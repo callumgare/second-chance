@@ -57,7 +57,11 @@ A program goes through four stages, each a route of the page
    also added as a layer. Each picture is analysed (its kind, its subject,
    its parts), and you pick the ones worth using.
 3. **Design.** Suggestions from the picked pictures (treatments), and an
-   editor for layers, effects, masks and Liquid Glass. Designs worth keeping
+   editor for layers, effects, masks and Liquid Glass. A mask is a layer
+   dragged onto another in the Layers panel (or a layer's **Mask the layer
+   above / below**): nested under it, it shows the layer only where it has
+   pixels, moving with it unless unlocked
+   ([document.md](../Packages/IconLab/docs/document.md#mask-layers-2026-11-12)). Designs worth keeping
    are pinned. A pin never changes by editing: opening one edits a copy, and
    **Update pin** saves the copy back to it.
 4. **Review.** Every pinned design side by side, in each appearance and at the

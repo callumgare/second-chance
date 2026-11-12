@@ -9,7 +9,7 @@
 //   - angle: the disc's turn and a linear fade's angle; pattern and letter where a treatment uses them.
 import type { Doc, Layer, Media, Shape, Suggestion, SuggestionParams } from "../api";
 import { hexToRgb, isHex, rgbToHex, type RGB } from "../lib/colour";
-import { clone } from "../lib/doc";
+import { allLayersAndMasks, clone } from "../lib/doc";
 import { contentAspect } from "../render/sketch";
 
 // The engine's colour maths (Imaging/Colour.swift): shade in HLS, mix in RGB.
@@ -64,7 +64,7 @@ function eachColour(d: Doc, fn: (hex: string) => string) {
     for (const k of ["color", "from", "to", "a", "b", "frame", "bar", "bezel"]) if (typeof o[k] === "string") o[k] = fn(o[k] as string);
     if (s.type === "bands") s.colors = s.colors.map(fn);
   };
-  for (const g of d.groups) for (const l of g.layers) {
+  for (const l of allLayersAndMasks(d)) {
     if (l.content.kind === "shape") inShape(l.content.shape);
     else for (const e of l.content.effects) {
       const o = e as Record<string, unknown>;

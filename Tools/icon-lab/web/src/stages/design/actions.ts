@@ -1,6 +1,6 @@
 // Edits the editor offers, as operations on the design store's doc.
 import type { Doc, Layer, Media, Part, ShapeType } from "../../api";
-import { clone, findGroup, findLayer, MAX_GROUPS, newGroup, newImageLayer, newPartLayer, newShapeLayer, uid } from "../../lib/doc";
+import { findGroup, findLayer, layerIdsInOrder, makeMask, MAX_GROUPS, newGroup, newImageLayer, newPartLayer, newShapeLayer, placed, placedLayer, releaseMask, setMaskLock, setPlacedTransform, uid, withNewIds } from "../../lib/doc";
 import { useApp } from "../../state/app";
 import { layersSel, selectedLayerIds, useDesign } from "../../state/design";
 
@@ -72,8 +72,8 @@ export function addGroup() {
   d().select({ kind: "group", id: g.id });
 }
 
-/** The selected layers' ids, front first. */
-export const selIds = () => { const st = d(); const ids = selectedLayerIds(st.doc, st.sel); const all = st.doc?.groups.flatMap((g) => g.layers.map((l) => l.id)) ?? []; return all.filter((id) => ids.includes(id)); };
+/** The selected layers' ids, front first (a mask after the layer it masks). */
+export const selIds = () => { const st = d(); const ids = selectedLayerIds(st.doc, st.sel); const all = st.doc ? layerIdsInOrder(st.doc) : []; return all.filter((id) => ids.includes(id)); };
 
 let rangeAnchor: string | null = null;
 /** A click on a layer: plain selects it alone; ⌘ toggles it; ⇧ selects the range from the last clicked (in the
@@ -82,7 +82,7 @@ export function clickLayer(id: string, mods: { shiftKey?: boolean; metaKey?: boo
   const st = d(); const doc = st.doc; if (!doc) return;
   const cur = selIds();
   if (mods.shiftKey && where === "panel" && rangeAnchor) {
-    const all = doc.groups.flatMap((g) => g.layers.map((l) => l.id));
+    const all = layerIdsInOrder(doc);
     const a = all.indexOf(rangeAnchor), b = all.indexOf(id);
     if (a >= 0 && b >= 0) { st.select(layersSel(all.slice(Math.min(a, b), Math.max(a, b) + 1))); return; }
   }
@@ -95,19 +95,32 @@ export function clickLayer(id: string, mods: { shiftKey?: boolean; metaKey?: boo
 export function duplicateSelected() {
   const ids = selIds(); if (!ids.length) return;
   const copies = ids.map(() => uid());
-  d().edit((doc) => ids.forEach((id, i) => {
-    const hit = findLayer(doc, id); if (!hit) return;
-    const c = clone(hit.layer); c.id = copies[i]; c.name = hit.layer.name + " copy";
-    c.transform.x += 0.03; c.transform.y += 0.03;
-    hit.group.layers.splice(hit.li, 0, c);
-  }));
+  d().edit((doc) => ids.forEach((id, i) => duplicateIn(doc, id, copies[i])));
   d().select(layersSel(copies));
+}
+
+/** A copy of layer `id` (with its masks) just in front of it, a little down and to the right; a mask's copy masks
+ *  the same layer. */
+function duplicateIn(doc: Doc, id: string, copyId: string) {
+  const hit = findLayer(doc, id); if (!hit) return;
+  const c = withNewIds(hit.layer, copyId); c.name = hit.layer.name + " copy";
+  const t = (hit.parent ? placed(hit.parent, hit.layer) : hit.layer).transform;
+  if (hit.parent) { hit.parent.masks!.splice(hit.mi! + 1, 0, c); setPlacedTransform(doc, copyId, { ...t, x: t.x + 0.03, y: t.y + 0.03 }); }
+  else { c.transform.x += 0.03; c.transform.y += 0.03; hit.group.layers.splice(hit.li, 0, c); }
+}
+
+/** Removes layer `id`, or the mask `id` from the layer it masks. */
+function removeIn(doc: Doc, id: string) {
+  const h = findLayer(doc, id); if (!h) return;
+  if (!h.parent) { h.group.layers.splice(h.li, 1); return; }
+  h.parent.masks!.splice(h.mi!, 1);
+  if (!h.parent.masks!.length) delete h.parent.masks;
 }
 
 export function deleteSelected() {
   const ids = selIds(); if (!ids.length) return;
   if (ids.length === 1) { deleteLayer(ids[0]); return; }
-  d().edit((doc) => { for (const g of doc.groups) g.layers = g.layers.filter((l) => !ids.includes(l.id)); });
+  d().edit((doc) => { for (const id of ids) removeIn(doc, id); });
   d().select({ kind: "icon" });
 }
 
@@ -121,21 +134,38 @@ export function toggleHiddenSelected() {
 
 export function duplicateLayer(id: string) {
   const copyId = uid();
-  d().edit((doc) => {
-    const hit = findLayer(doc, id); if (!hit) return;
-    const c = clone(hit.layer); c.id = copyId; c.name = hit.layer.name + " copy";
-    c.transform.x += 0.03; c.transform.y += 0.03;
-    hit.group.layers.splice(hit.li, 0, c);
-  });
+  d().edit((doc) => duplicateIn(doc, id, copyId));
   d().select({ kind: "layer", id: copyId });
 }
 
 export function deleteLayer(id: string) {
   const doc = d().doc; if (!doc) return;
   const hit = findLayer(doc, id); if (!hit) return;
-  const next = hit.group.layers[hit.li + 1] ?? hit.group.layers[hit.li - 1];
-  d().edit((x) => { const h = findLayer(x, id); if (h) h.group.layers.splice(h.li, 1); });
+  const next = hit.parent ?? hit.group.layers[hit.li + 1] ?? hit.group.layers[hit.li - 1];
+  d().edit((x) => removeIn(x, id));
   d().select(next ? { kind: "layer", id: next.id } : { kind: "group", id: hit.group.id });
+}
+
+/** Makes layer `id` a mask of `targetId` (dragged onto it in the Layers panel, or from its menu) and selects it. */
+export function maskLayer(id: string, targetId: string) {
+  let ok = false;
+  d().edit((doc) => { ok = makeMask(doc, id, targetId); });
+  if (ok) d().select({ kind: "layer", id });
+}
+
+/** Makes mask `id` a layer of its own again, just behind the layer it masked. */
+export function unmaskLayer(id: string) {
+  d().edit((doc) => releaseMask(doc, id));
+  d().select({ kind: "layer", id });
+}
+
+export function lockMask(id: string, locked: boolean) { d().edit((doc) => setMaskLock(doc, id, locked)); }
+
+/** The layers just above and below `id` in the Layers panel (masks aside), across groups. */
+export function neighbours(doc: Doc, id: string): { above: Layer | null; below: Layer | null } {
+  const all = doc.groups.flatMap((g) => g.layers);
+  const i = all.findIndex((l) => l.id === id);
+  return { above: i > 0 ? all[i - 1] : null, below: i >= 0 ? all[i + 1] ?? null : null };
 }
 
 export function deleteGroup(id: string) {
@@ -151,17 +181,26 @@ export function moveGroup(id: string, by: number) {
   });
 }
 
-/** Moves a layer to `groupId` at `index` (front first). */
+/** Moves a layer to `groupId` at `index` (front first). A mask moved there is a layer of its own again. */
 export function moveLayer(doc: Doc, layerId: string, groupId: string, index: number) {
   const hit = findLayer(doc, layerId); const to = findGroup(doc, groupId);
   if (!hit || !to) return;
-  hit.group.layers.splice(hit.li, 1);
-  to.layers.splice(Math.max(0, Math.min(index, to.layers.length)), 0, hit.layer);
+  let layer = hit.layer;
+  if (hit.parent) {
+    layer = { ...placed(hit.parent, hit.layer) }; delete layer.lock; delete layer.invert;
+    removeIn(doc, layerId);
+  } else hit.group.layers.splice(hit.li, 1);
+  to.layers.splice(Math.max(0, Math.min(index, to.layers.length)), 0, layer);
 }
 
 export function nudge(dx: number, dy: number) {
   const ids = selIds(); if (!ids.length) return;
-  d().edit((doc) => ids.forEach((id) => { const h = findLayer(doc, id); if (h) { h.layer.transform.x += dx; h.layer.transform.y += dy; } }), { transient: true });
+  d().edit((doc) => ids.forEach((id) => {
+    // a mask locked to a layer that moves too moves with it
+    const h = findLayer(doc, id); if (!h || (h.parent && h.layer.lock !== "canvas" && ids.includes(h.parent.id))) return;
+    const t = placedLayer(doc, id)!.transform;
+    setPlacedTransform(doc, id, { ...t, x: t.x + dx, y: t.y + dy });
+  }), { transient: true });
   window.clearTimeout(nudgeTimer);
   nudgeTimer = window.setTimeout(() => d().commit(), 500);
 }

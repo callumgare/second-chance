@@ -1,6 +1,7 @@
 // Suggestions: generated documents, drawn as sketches and upgraded to real renders while on screen. The row
 // under the workbench expands into the gallery (layout B): every suggestion, grouped by the media it uses,
 // with "adjust all" at the side. Clicking one opens a copy of it in the editor.
+import { allLayersAndMasks } from "../../lib/doc";
 import { useMemo } from "react";
 import type { Media, Part, Suggestion } from "../../api";
 import { IconArt } from "../../components/IconArt";
@@ -115,7 +116,7 @@ export function RenderModeSeg({ which }: { which: "suggestions" | "canvas" }) {
  *  names roles, "subject" and "fill", rather than pictures.) */
 function usesOf(s: Suggestion): string[] {
   const out: string[] = [];
-  for (const g of s.doc.groups) for (const l of g.layers) {
+  for (const l of allLayersAndMasks(s.doc)) {
     if (l.content.kind === "image") out.push(l.content.asset.replace(/@(x4|px4)$/, ""));
     if (l.mask?.kind === "image") out.push(l.mask.asset);
   }

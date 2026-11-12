@@ -1,7 +1,7 @@
 // Copy, cut and paste of layers: kept here, and written to the system clipboard as JSON with a marker so a copy
 // survives a reload and passes between tabs. Anything on the clipboard without the marker is ignored.
 import type { Doc, Group, Layer } from "../../api";
-import { clone, findGroup, findLayer, MAX_GROUPS, newGroup, uid } from "../../lib/doc";
+import { clone, findGroup, MAX_GROUPS, newGroup, placedLayer, uid, withNewIds, findLayer } from "../../lib/doc";
 import { useApp } from "../../state/app";
 import { layersSel, useDesign } from "../../state/design";
 import { deleteGroup, deleteSelected, selIds } from "./actions";
@@ -22,7 +22,8 @@ function current(): Clip | null {
     const g = findGroup(doc, st.sel.id); if (!g) return null;
     return { mark: MARK, program: doc.program, doc: doc.id, group: clone(g), layers: clone(g.layers) };
   }
-  const layers = selIds().map((id) => findLayer(doc, id)?.layer).filter((l): l is Layer => !!l);
+  // a mask is copied as a layer of its own, where it is on the canvas
+  const layers = selIds().map((id) => { const l = placedLayer(doc, id); if (!l) return null; const { lock: _l, invert: _i, ...rest } = l; return rest as Layer; }).filter((l): l is Layer => !!l);
   return layers.length ? { mark: MARK, program: doc.program, doc: doc.id, group: null, layers: clone(layers) } : null;
 }
 
@@ -70,7 +71,7 @@ function paste(c: Clip) {
     layers = ok;
   }
   const off = c.doc === doc.id ? 0.02 : 0;
-  const fresh = layers.map((l) => { const x = clone(l); x.id = uid(); x.name = l.name + " copy"; x.transform = { ...x.transform, x: x.transform.x + off, y: x.transform.y + off }; return x; });
+  const fresh = layers.map((l) => { const x = withNewIds(l); x.name = l.name + " copy"; x.transform = { ...x.transform, x: x.transform.x + off, y: x.transform.y + off }; return x; });
   const ids = fresh.map((l) => l.id);
   const sel = st.sel;
   const asGroup = !!c.group && doc.groups.length < MAX_GROUPS;

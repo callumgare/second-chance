@@ -52,7 +52,11 @@ type Layer = {
   opacity: number            // 0…1
   content: Content
   transform: Transform       // where the content sits on the canvas
-  mask?: Mask | null         // clips the layer (applied in canvas space, after the transform)
+  mask?: Mask | null         // clips the layer (applied in canvas space, after the transform); documents made
+                             // before mask layers
+  masks?: Layer[]            // mask layers: the layer shows only where each has pixels (below)
+  lock?: "canvas"            // a mask layer's: placed on its own; absent, it's locked to the layer it masks
+  invert?: boolean           // a mask layer's: the layer shows only where it has none
 }
 
 type Role = "subject" | "logo" | "backdrop" | "pattern" | "frame" | "icon" | "disc" | "decoration"
@@ -132,7 +136,8 @@ type SuggestionParams = {
 
 - **In the browser (sketch, instant):** each layer's content is fetched as a PNG from the engine
   (`/api/render/content`), effects already applied, at the pixel width it will show at. The browser places it with
-  the transform (Konva), applies the mask (also a PNG from the engine) with `destination-in`, draws the fill as a
+  the transform (Konva), applies the masks (a mask layer's content as any layer's; the old kinds a PNG from the
+  engine) with `destination-in`, draws the fill as a
   plain gradient, and stacks groups back to front. Moving or rotating never needs the engine; scaling past the
   rendered size asks for a sharper copy.
 - **The real thing (Liquid Glass):** `/api/render/icon` writes the `.icon` (each layer flattened to a 1024 PNG in
@@ -149,6 +154,24 @@ type SuggestionParams = {
   the document it came from.
 - Unknown keys are kept when a document is read and written (Icon Composer 2 adds per-layer refraction, and later
   schema versions will add more).
+
+## Mask layers (2026-11-12)
+
+A layer's `masks` are layers like any other (an image or a shape, with its effects, opacity and transform), nested
+under the layer they mask in the editor: dragging a layer onto another in the Layers panel, or a layer's **Mask the
+layer above / below**, makes it one. The layer then shows only where every mask that isn't hidden has pixels (an
+inverted one: where it has none); a mask's colours never show, and a mask can't have masks of its own.
+
+- **Locked** (no `lock`): the mask moves, scales and turns with its layer. Its `transform` is relative to the
+  layer's: in a square the layer's width across, centred on the layer and turned with it, so `{ x: 0.5, y: 0.5,
+  width: 1, rotation: 0 }` is the layer's own width at its centre. The canvas transform is
+  `Transform.composed(with:)` (`composeTransform` in the page).
+- **Unlocked** (`lock: "canvas"`): its `transform` is canvas units, as a layer's, and it stays put as the layer moves.
+
+Locking, unlocking, making a layer a mask and releasing it again (**Stop masking**, or dragging it out between
+layers) keep it where it is on the canvas. The engine applies them in `Renderer.layer`, so the `.icon` holds the
+masked layer as one picture. Masks are no longer added as effects; the mask effects below still render, and edit,
+in documents (and suggestions) that have them.
 
 ## Masks are effects (2026-11-08)
 

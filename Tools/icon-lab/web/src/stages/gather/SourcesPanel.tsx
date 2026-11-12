@@ -2,6 +2,7 @@
 // (a spinner while its gather job runs), how many images it gave, or why it gave none (needs a key, link only,
 // nothing found, failed). Clicking one filters the grid to it; "Gather again" re-runs POST …/gather; each source's
 // ↻ clears it and gathers again, and its × clears it alone.
+import { allLayersAndMasks } from "../../lib/doc";
 import { useEffect, useMemo } from "react";
 import { api, type Job, type Media, type SourceInfo } from "../../api";
 import { useApp } from "../../state/app";
@@ -106,7 +107,7 @@ function losses(slug: string, r: Row, media: Media[]) {
   const design = useDesign.getState();
   const used = new Set<string>();
   if (design.slug === slug && design.doc) {
-    for (const g of design.doc.groups) for (const l of g.layers) {
+    for (const l of allLayersAndMasks(design.doc)) {
       if (l.content.kind === "image") {
         used.add(l.content.asset.split("/")[0].replace(/@(x4|px4)$/, ""));
         for (const e of l.content.effects) if (e.op === "mask" && e.mask.kind === "image") used.add(e.mask.asset.split("/")[0]);

@@ -24,6 +24,36 @@ import Testing
         #expect((l0["mask"] as? [String: Any])?["kind"] as? String == "ring")
     }
 
+    @Test func aLockedMaskMovesAndTurnsWithItsLayer() {
+        let parent = Transform(x: 0.5, y: 0.4, width: 0.6, rotation: 90)
+        // a quarter of the layer's width to its right, turned a quarter: below its centre on the canvas
+        let t = parent.composed(with: Transform(x: 0.75, y: 0.5, width: 0.5, rotation: 10))
+        #expect(abs(t.x - 0.5) < 1e-9 && abs(t.y - 0.55) < 1e-9)
+        #expect(abs(t.width - 0.3) < 1e-9 && t.rotation == 100)
+    }
+
+    @Test func maskLayersClipTheLayer() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("iconlab-masks-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let renderer = Renderer(assets: Assets(store: Store(root: root)))
+        let dot = Layer(name: "Dot", content: .shape(Shape("circle", ["radius": 0.5, "color": "#ffffff"])),
+                        transform: Transform(x: 0.25, y: 0.5, width: 0.5))   // the left half of the layer
+        var red = Layer(name: "Red", content: .shape(Shape("solid", ["color": "#ff0000"])),
+                        transform: Transform(x: 0.5, y: 0.5, width: 0.5), masks: [dot])
+        var b = try await renderer.layer(red, program: "p", size: 100)
+        #expect(b.alpha(37, 50) > 200)       // inside the dot, which sits on the layer's left half
+        #expect(b.alpha(62, 50) < 50)        // the layer's right half, outside it
+        #expect(b.alpha(10, 50) < 50)        // outside the layer itself
+        #expect(b.alpha(28, 40) < 50)        // past the dot's edge
+        red.masks?[0].invert = true
+        b = try await renderer.layer(red, program: "p", size: 100)
+        #expect(b.alpha(37, 50) < 50 && b.alpha(62, 50) > 200)
+        red.masks?[0].invert = nil
+        red.masks?[0].lock = "canvas"        // its own place on the canvas: a dot twice the size, on the canvas's left half
+        b = try await renderer.layer(red, program: "p", size: 100)
+        #expect(b.alpha(28, 40) > 200 && b.alpha(62, 50) < 50)
+    }
+
     @Test func colourHexAndShade() throws {
         let c = try #require(RGB(hex: "#3c7f8f"))
         #expect(c.hex == "#3c7f8f")

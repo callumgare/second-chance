@@ -71,10 +71,26 @@ nonisolated public struct Layer: Codable, Sendable, Hashable {
     public var content: Content
     public var transform: Transform
     public var mask: Mask?
+    /// Layers whose pixels clip this one (each is shown only where it is opaque), nested under it in the editor.
+    public var masks: [Layer]?
+    /// A mask layer's: "canvas" when its place is its own on the canvas; absent ("layer") when it's locked to the
+    /// layer it masks, its `transform` then relative to that layer's (`Layer.placed(_:)`).
+    public var lock: String?
+    /// A mask layer's: clip to where it is transparent instead.
+    public var invert: Bool?
     public init(id: String = UUID().uuidString.lowercased(), name: String, role: String? = nil, opacity: Double = 1,
-                content: Content, transform: Transform = .full, mask: Mask? = nil) {
+                content: Content, transform: Transform = .full, mask: Mask? = nil, masks: [Layer]? = nil) {
         self.id = id; self.name = name; self.role = role; self.opacity = opacity
-        self.content = content; self.transform = transform; self.mask = mask
+        self.content = content; self.transform = transform; self.mask = mask; self.masks = masks
+    }
+
+    /// One of this layer's masks with its place on the canvas: a locked mask's transform is relative to this layer's,
+    /// in a square the layer's width across, centred on it and turned with it.
+    public func placed(_ m: Layer) -> Layer {
+        var out = m
+        if m.lock != "canvas" { out.transform = transform.composed(with: m.transform) }
+        out.lock = "canvas"
+        return out
     }
 }
 
@@ -84,6 +100,14 @@ nonisolated public struct Transform: Codable, Sendable, Hashable {
         self.x = x; self.y = y; self.width = width; self.rotation = rotation
     }
     public static let full = Transform(x: 0.5, y: 0.5, width: 1)
+
+    /// `r`, given relative to this transform (a square this width across, centred here and turned with it), on the canvas.
+    public func composed(with r: Transform) -> Transform {
+        let th = rotation * .pi / 180
+        let ox = (r.x - 0.5) * width, oy = (r.y - 0.5) * width
+        return Transform(x: x + ox * cos(th) - oy * sin(th), y: y + ox * sin(th) + oy * cos(th),
+                         width: width * r.width, rotation: rotation + r.rotation)
+    }
 }
 
 nonisolated public enum Content: Codable, Sendable, Hashable {

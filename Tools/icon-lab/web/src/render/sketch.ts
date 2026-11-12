@@ -1,8 +1,9 @@
 // The browser's quick sketch of a document (document.md, "How it renders"): the fill as a gradient, groups
-// back to front, each layer's content placed by its transform and clipped by its mask, and the glass only
+// back to front, each layer's content placed by its transform and clipped by its masks, and the glass only
 // hinted at (a top highlight and a drop shadow). ictool's render is the real thing.
 import type { Appearance, Doc, Layer, Mask, Media } from "../api";
 import { hexToRgb, shade } from "../lib/colour";
+import { placed } from "../lib/doc";
 import { alphaAt, contentWhat, resources, splitMasks, type Img } from "./resources";
 
 export type SketchOptions = {
@@ -130,7 +131,8 @@ export function drawSketch(ctx: CanvasRenderingContext2D, doc: Doc, size: number
       const got = layerImage(program, layer, Math.max(box.w, box.h) * pr);
       if (!got) continue;
       const masks = canvasMasks(layer);
-      const masked = masks.length > 0;
+      const maskLayers = (layer.masks ?? []).filter((m) => !m.hidden);
+      const masked = masks.length > 0 || maskLayers.length > 0;
       const target = masked ? scratch(1, px) : gctx;
       if (masked) target.scale(pr, pr);
       target.save();
@@ -146,6 +148,27 @@ export function drawSketch(ctx: CanvasRenderingContext2D, doc: Doc, size: number
           if (!img) continue;
           target.globalCompositeOperation = mk.invert ? "destination-out" : "destination-in";
           target.drawImage(img, 0, 0, size, size);
+        }
+        // Mask layers: each drawn where it sits, the layer kept where it's opaque (or, inverted, where it isn't). One
+        // not loaded yet hides the layer rather than showing it unmasked for a moment.
+        for (const m of maskLayers) {
+          const ml = placed(layer, m);
+          const mctx = scratch(2, px);
+          mctx.scale(pr, pr);
+          const mb = layerBox(program, ml, size, opts.media);
+          const mg = layerImage(program, ml, Math.max(mb.w, mb.h) * pr);
+          if (mg) {
+            mctx.globalAlpha = m.opacity;
+            mctx.imageSmoothingEnabled = !(m.content.kind === "image" && m.content.smoothing === "pixel");
+            mctx.translate(mb.cx, mb.cy);
+            mctx.rotate(mb.rot);
+            drawInBox(mctx, mg.img, mg.box, mb.w, mb.h);
+          }
+          target.save();
+          target.setTransform(1, 0, 0, 1, 0, 0);
+          target.globalCompositeOperation = m.invert ? "destination-out" : "destination-in";
+          target.drawImage(mctx.canvas, 0, 0);
+          target.restore();
         }
         target.globalCompositeOperation = "source-over";
         gctx.save();
@@ -232,6 +255,12 @@ export function sketchRequests(doc: Doc, size: number, media?: Map<string, Media
       if (l.content.kind === "image") reqs.push({ kind: "content", program: doc.program, what: contentWhat(l.content, l.transform.width, l.transform), px });
       else reqs.push({ kind: "shape", program: doc.program, what: l.content.shape, px });
       for (const mk of canvasMasks(l)) reqs.push({ kind: "mask", program: doc.program, what: mk.mask, px: size });
+      for (const m of l.masks ?? []) {
+        if (m.hidden) continue;
+        const ml = placed(l, m), mb = layerBox(doc.program, ml, size, media);
+        if (ml.content.kind === "image") reqs.push({ kind: "content", program: doc.program, what: contentWhat(ml.content, ml.transform.width, ml.transform), px: Math.max(mb.w, mb.h) });
+        else reqs.push({ kind: "shape", program: doc.program, what: ml.content.shape, px: Math.max(mb.w, mb.h) });
+      }
     }
   }
   return reqs;
@@ -239,27 +268,33 @@ export function sketchRequests(doc: Doc, size: number, media?: Map<string, Media
 
 /** The front-most visible layer under a point (canvas units 0…1), by its pixels. */
 export function pickLayer(doc: Doc, u: number, v: number, media?: Map<string, Media>): Layer | null {
-  const size = 1000;
   for (const g of doc.groups) {
     if (g.hidden) continue;
     for (const l of g.layers) {
       if (l.hidden) continue;
-      const box = layerBox(doc.program, l, size, media);
-      const dx = u * size - box.cx, dy = v * size - box.cy;
-      const c = Math.cos(-box.rot), s = Math.sin(-box.rot);
-      const lx = dx * c - dy * s, ly = dx * s + dy * c;
-      const fu = lx / box.w + 0.5, fv = ly / box.h + 0.5;
-      if (fu < 0 || fu > 1 || fv < 0 || fv > 1) continue;
-      const got = layerImage(doc.program, l, 0);
-      if (got) {
-        const [x0, y0, x1, y1] = got.box;
-        if (alphaAt(got.img, (fu - x0) / (x1 - x0), (fv - y0) / (y1 - y0)) < 40) continue;
-      }
+      const a = alphaUnder(doc.program, l, u, v, media);
+      if (a == null || a < 40) continue;
       if (canvasMasks(l).some((mk) => { const m = resources.mask(doc.program, mk.mask, 0)?.img; return m ? (alphaAt(m, u, v) < 40) !== mk.invert : false; })) continue;
+      if ((l.masks ?? []).some((m) => !m.hidden && ((alphaUnder(doc.program, placed(l, m), u, v, media) ?? 0) < 40) !== !!m.invert)) continue;
       return l;
     }
   }
   return null;
+}
+
+/** A layer's alpha at a point (canvas units 0…1): null outside its box, 255 where its pixels haven't arrived. */
+function alphaUnder(program: string, l: Layer, u: number, v: number, media?: Map<string, Media>): number | null {
+  const size = 1000;
+  const box = layerBox(program, l, size, media);
+  const dx = u * size - box.cx, dy = v * size - box.cy;
+  const c = Math.cos(-box.rot), s = Math.sin(-box.rot);
+  const lx = dx * c - dy * s, ly = dx * s + dy * c;
+  const fu = lx / box.w + 0.5, fv = ly / box.h + 0.5;
+  if (fu < 0 || fu > 1 || fv < 0 || fv > 1) return null;
+  const got = layerImage(program, l, 0);
+  if (!got) return 255;
+  const [x0, y0, x1, y1] = got.box;
+  return alphaAt(got.img, (fu - x0) / (x1 - x0), (fv - y0) / (y1 - y0));
 }
 
 /** Draws a sketch onto a fresh canvas element. */

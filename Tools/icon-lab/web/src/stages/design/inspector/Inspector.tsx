@@ -1,11 +1,11 @@
-// The inspector shows what's selected: a layer (placement, opacity, content, effects, mask), a group (its
+// The inspector shows what's selected: a layer (placement, opacity, content, effects, masks) or a mask, a group (its
 // glass) or the icon (its fill).
-import type { Doc, Group, Layer, Media, Role } from "../../../api";
-import { findGroup, findLayer } from "../../../lib/doc";
+import type { Doc, Group, Layer, Media, Role, Transform } from "../../../api";
+import { findGroup, findLayer, placedLayer, setPlacedTransform } from "../../../lib/doc";
 import { useApp } from "../../../state/app";
 import { useDesign } from "../../../state/design";
 import { ColourField, NumberField, Seg, Slider, Toggle } from "../../../components/controls";
-import { deleteSelected, editLive, selIds, toggleHiddenSelected } from "../actions";
+import { deleteSelected, editLive, lockMask, selIds, toggleHiddenSelected, unmaskLayer } from "../actions";
 import { ColourRow, EffectsEditor, MaskEditor, ShapeEditor, type Update } from "./parts";
 import { LayerThumb } from "../LayersPanel";
 import { UpscaleSection } from "./Upscale";
@@ -63,7 +63,7 @@ export function Inspector() {
   }
   return (
     <section className="panel inspector">
-      {hit ? <LayerInspector doc={doc} layer={hit.layer} group={hit.group} onSub={setSub} />
+      {hit ? <LayerInspector doc={doc} layer={hit.layer} group={hit.group} parent={hit.parent} onSub={setSub} />
         : sel?.kind === "layers" ? <SelectionSummary doc={doc} />
         : group ? <><SelectionSummary doc={doc} group /><GroupInspector group={group} /></>
         : <IconInspector doc={doc} />}
@@ -95,12 +95,18 @@ function SelectionSummary({ doc, group }: { doc: Doc; group?: boolean }) {
 
 const ROLES: Role[] = ["subject", "logo", "backdrop", "pattern", "frame", "icon", "disc", "decoration"];
 
-function LayerInspector({ doc, layer, group, onSub }: { doc: Doc; layer: Layer; group: Group; onSub(s: Sub): void }) {
+function LayerInspector({ doc, layer, group, parent, onSub }: { doc: Doc; layer: Layer; group: Group; parent?: Layer; onSub(s: Sub): void }) {
   const mediaMap = useApp((s) => s.media);
   const edit = editor();
   const upd: Update<Layer> = (fn, live) => edit((d) => { const h = findLayer(d, layer.id); if (h) { const r = fn(h.layer); if (r) Object.assign(h.layer, r); } }, live);
-  const t = layer.transform;
-  const setT = (k: keyof typeof t, v: number, live = false) => upd((l) => { l.transform[k] = v; }, live);
+  // Placement is where the layer is on the canvas: a locked mask's own transform is relative to the layer it masks.
+  const t = placedLayer(doc, layer.id)?.transform ?? layer.transform;
+  const place = (fn: (t: Transform) => void, live = false) => edit((d) => {
+    const cur = placedLayer(d, layer.id); if (!cur) return;
+    const nt = { ...cur.transform }; fn(nt); setPlacedTransform(d, layer.id, nt);
+  }, live);
+  const setT = (k: keyof Transform, v: number, live = false) => place((x) => { x[k] = v; }, live);
+  const locked = !!parent && layer.lock !== "canvas";
   const c = layer.content;
   // An old document's layer.mask shows as a canvas-locked mask effect; the first edit moves it there for good.
   const shownEffects = c.kind === "image" ? (layer.mask ? [...c.effects, { op: "mask" as const, mask: layer.mask, lock: "canvas" as const }] : c.effects) : [];
@@ -112,7 +118,9 @@ function LayerInspector({ doc, layer, group, onSub }: { doc: Doc; layer: Layer; 
         <div className="col" style={{ gap: 2, minWidth: 0, flex: 1 }}>
           <b className="wraps">{layer.name}</b>
           <span className="faint wraps" style={{ fontSize: 11 }}>
-            in <a href="#" onClick={(e) => { e.preventDefault(); useDesign.getState().select({ kind: "group", id: group.id }); }}>{group.name}</a>
+            {parent
+              ? <>masking <a href="#" onClick={(e) => { e.preventDefault(); useDesign.getState().select({ kind: "layer", id: parent.id }); }}>{parent.name}</a></>
+              : <>in <a href="#" onClick={(e) => { e.preventDefault(); useDesign.getState().select({ kind: "group", id: group.id }); }}>{group.name}</a></>}
             {m && <> · {m.kind.replace("-", " ")}, {m.source}</>}
           </span>
         </div>
@@ -122,9 +130,20 @@ function LayerInspector({ doc, layer, group, onSub }: { doc: Doc; layer: Layer; 
         </select>
       </div>
 
-      <div className="sec">Placement <span className="faint" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>pt of 1024</span></div>
+      {parent && <>
+        <div className="sec">Mask</div>
+        <p className="faint note">“{parent.name}” shows only where this has pixels{layer.invert ? " (inverted: only where it has none)" : ""}. Its own colours don't show.</p>
+        <Toggle label={`Locked to “${parent.name}”: moves and scales with it`} checked={locked} onChange={(v) => lockMask(layer.id, v)} />
+        <Toggle label="Invert (keep what's outside it)" checked={!!layer.invert} onChange={(v) => upd((l) => { l.invert = v || undefined; })} />
+        <div className="row" style={{ gap: 4, marginTop: 6 }}>
+          <button className="btn small" onClick={() => place((x) => Object.assign(x, placedLayer(doc, parent.id)!.transform))} title={`Put it exactly over “${parent.name}”`}>Match the layer</button>
+          <button className="btn small" onClick={() => unmaskLayer(layer.id)} title="Make it a layer of its own again, just behind the one it masked">Stop masking</button>
+        </div>
+      </>}
+
+      <div className="sec">Placement <span className="faint" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>pt of 1024{locked ? ", on the canvas" : ""}</span></div>
       <XYPad label="Layer position" x={t.x} y={t.y} xRange={[-0.25, 1.25]} yRange={[-0.25, 1.25]} centre={[0.5, 0.5]} frame={[0, 0, 1, 1]} step={1 / 1024}
-        onChange={(x, y, live) => upd((l) => { l.transform.x = x; l.transform.y = y; }, live)} />
+        onChange={(x, y, live) => place((p) => { p.x = x; p.y = y; }, live)} />
       <div className="fields">
         {([["width", "Width"]] as const).map(([k, label]) => (
           <label key={k}>
@@ -134,10 +153,10 @@ function LayerInspector({ doc, layer, group, onSub }: { doc: Doc; layer: Layer; 
         <label><NumberField className="text" value={t.rotation} step={1} onChange={(v) => setT("rotation", v)} />Angle°</label>
       </div>
       <div className="row" style={{ flexWrap: "wrap", gap: 4, marginTop: 6 }}>
-        <button className="btn small" onClick={() => upd((l) => { l.transform.x = 0.5; l.transform.y = 0.5; })}>Centre</button>
-        <button className="btn small" onClick={() => upd((l) => { l.transform = { x: 0.5, y: 0.5, width: 1, rotation: 0 }; })}>Fill canvas</button>
-        <button className="btn small" onClick={() => upd((l) => { l.transform.rotation = 0; })} disabled={!t.rotation}>Straighten</button>
-        {m?.analysis.flatSides.includes("bottom") && <button className="btn small" title="Its picture's bottom edge is cut straight: sit it on the icon's bottom edge" onClick={() => upd((l) => { const aspect = (m.analysis.subjectBox ? m.analysis.subjectBox[2] * m.width / (m.analysis.subjectBox[3] * m.height) : m.width / m.height); l.transform.y = 1 - l.transform.width / aspect / 2; l.transform.rotation = 0; })}>Sit on bottom edge</button>}
+        <button className="btn small" onClick={() => place((p) => { p.x = 0.5; p.y = 0.5; })}>Centre</button>
+        <button className="btn small" onClick={() => place((p) => Object.assign(p, { x: 0.5, y: 0.5, width: 1, rotation: 0 }))}>Fill canvas</button>
+        <button className="btn small" onClick={() => place((p) => { p.rotation = 0; })} disabled={!t.rotation}>Straighten</button>
+        {m?.analysis.flatSides.includes("bottom") && <button className="btn small" title="Its picture's bottom edge is cut straight: sit it on the icon's bottom edge" onClick={() => place((p) => { const aspect = (m.analysis.subjectBox ? m.analysis.subjectBox[2] * m.width / (m.analysis.subjectBox[3] * m.height) : m.width / m.height); p.y = 1 - p.width / aspect / 2; p.rotation = 0; })}>Sit on bottom edge</button>}
       </div>
       <Slider label="Opacity" value={layer.opacity} min={0} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => upd((l) => { l.opacity = v; }, true)} onCommit={commit} />
 
@@ -161,7 +180,15 @@ function LayerInspector({ doc, layer, group, onSub }: { doc: Doc; layer: Layer; 
         <ShapeEditor shape={c.shape} update={(fn, live) => upd((l) => { if (l.content.kind === "shape") { const r = fn(l.content.shape); if (r) l.content.shape = r; } }, live)} />
       </>}
 
-      {c.kind === "shape" && <>
+      {!parent && !!layer.masks?.length && <>
+        <div className="sec">Masks</div>
+        <p className="faint note">It shows only where {layer.masks.length === 1 ? "its mask has" : "all its masks have"} pixels. To add one, drag a layer onto it in the Layers panel.</p>
+        <div className="col" style={{ gap: 2 }}>
+          {layer.masks.map((x) => <a key={x.id} href="#" onClick={(e) => { e.preventDefault(); useDesign.getState().select({ kind: "layer", id: x.id }); }}>{x.name}{x.hidden ? " (off)" : ""}</a>)}
+        </div>
+      </>}
+
+      {c.kind === "shape" && layer.mask && <>
         <div className="sec">Mask</div>
       <MaskEditor onChooseImage={() => onSub("mask")} mask={layer.mask} layerTransform={t}
         update={(fn, live) => upd((l) => { const r = fn(l.mask ?? null); if (r !== undefined) l.mask = r; }, live)} />
