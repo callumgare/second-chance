@@ -281,7 +281,7 @@ export type ScanLine =
 export type RoleKey = "subject" | "fill" | "disc" | "logo" | "icon"
 
 /** A program opened from a search result before, with what it holds. */
-export type OpenedProgram = { slug: string; title: string; media: number; picked: number; pins: number; thumb?: string }
+export type OpenedProgram = { slug: string; title: string; media: number; picked: number; pins: number; thumb?: string; bundleId?: string }
 
 export type Program = {
   slug: string; title: string; year?: number

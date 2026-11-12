@@ -167,7 +167,9 @@ function PinnedIcons({ slug }: { slug: string }) {
 }
 
 async function combine(programs: OpenedProgram[]) {
-  const [into, ...rest] = programs;
+  // Second Chance's own program keeps the rest (its slug is its bundle's), as when results are merged
+  const into = programs.find((p) => p.bundleId) ?? programs[0];
+  const rest = programs.filter((p) => p.slug !== into.slug);
   try {
     await api.absorb(into.slug, rest.map((p) => p.slug));
     useApp.getState().say(`Combined into “${into.title}”`);
@@ -186,10 +188,10 @@ function OpenedNote({ programs }: { programs: OpenedProgram[] }) {
       {p.pins
         ? <><PinnedIcons slug={p.slug} /><b>★ {p.pins === 1 ? "1 icon design pinned" : `${p.pins} icon designs pinned`}</b> · {pictures} · <span className="go">Continue designing →</span></>
         : <><b>Opened before</b> · {pictures} · <span className="go">Carry on →</span></>}
-      {programs.length > 1 && <span className="faint"> · also opened {programs.length - 1 === 1 ? "once more" : `${programs.length - 1} more times`} as {programs.slice(1).map((o) => o.slug).join(", ")}{" "}
+      {programs.length > 1 && <span className="several"> Opened as {programs.length} separate programs ({programs.map((o) => `${o.slug}: ${o.pins ? `${o.pins} pinned, ` : ""}${o.media} pictures`).join("; ")}).{" "}
         <span className="linkish" role="button" tabIndex={0} title="Move their pictures, designs and pins into one program"
           onClick={(e) => { e.stopPropagation(); void combine(programs); }}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); void combine(programs); } }}>Combine them</span></span>}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); void combine(programs); } }}>Combine them into one</span></span>}
     </span>
   );
 }

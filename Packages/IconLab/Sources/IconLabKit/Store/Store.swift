@@ -157,7 +157,7 @@ public actor Store {
     // MARK: Merging programs
 
     /// Moves everything one program holds into another, then removes it: its pictures (a picture both have is kept
-    /// once, the target's record winning), their masks, its documents (each now naming the target), its pins after
+    /// once, the target's record winning but picked if either was), their masks, its documents (each now naming the target), its pins after
     /// the target's, its scans and saved icons (a name both have stays the target's). For two search results the
     /// person merged that had each been opened as a program.
     public func absorb(_ source: String, into target: String) throws {
@@ -176,7 +176,11 @@ public actor Store {
         }
         var records = media(target)
         let have = Set(records.map(\.id))
-        records += media(source).filter { !have.contains($0.id) }
+        let theirs = media(source)
+        // a picture both have stays picked if either had picked it
+        let pickedThere = Set(theirs.filter(\.picked).map(\.id))
+        for i in records.indices where pickedThere.contains(records[i].id) { records[i].picked = true }
+        records += theirs.filter { !have.contains($0.id) }
         try saveMedia(target, records)
         // documents name their program
         for d in docs(source) {

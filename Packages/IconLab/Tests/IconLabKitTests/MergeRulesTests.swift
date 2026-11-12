@@ -63,7 +63,10 @@ import Testing
         try await store.saveProgram(.init(slug: "b", title: "Webmaster", ids: ["lutris": "webmaster"], platforms: nil, updated: nil))
         let png = root.appendingPathComponent("p.png")
         try Bitmap(width: 4, height: 4, fill: (200, 10, 10, 255)).writePNG(to: png)
-        _ = try await store.addMedia("b", from: png, name: "box.png", source: "Your files")
+        var picked = try await store.addMedia("b", from: png, name: "box.png", source: "Your files")
+        picked.picked = true
+        try await store.upsertMedia("b", picked)
+        _ = try await store.addMedia("a", from: png, name: "box.png", source: "Your files")   // the same picture, unpicked
         try await store.saveDoc("b", id: "d1", json: Data(#"{"id":"d1","program":"b","name":"Lifted"}"#.utf8))
         var st = Store.State(); st.pins = ["d1"]
         try await store.saveState("b", st)
@@ -73,6 +76,7 @@ import Testing
         #expect(await store.program("b") == nil)
         #expect(await store.media("a").count == 1)
         let moved = try #require(await store.media("a").first)
+        #expect(moved.picked)
         #expect(FileManager.default.fileExists(atPath: store.mediaFile("a", moved.file).path))
         #expect(await store.state("a").pins == ["d1"])
         let doc = try #require(await store.doc("a", "d1"))

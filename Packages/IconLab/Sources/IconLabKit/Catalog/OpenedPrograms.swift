@@ -13,6 +13,8 @@ nonisolated public struct OpenedProgram: Codable, Sendable, Equatable {
     public var pins: Int
     /// The subject image's thumbnail, as the program list shows it.
     public var thumb: String?
+    /// Second Chance's bundle, when it's the host's own program (which keeps the rest when they're combined).
+    public var bundleId: String?
 }
 
 /// Search results and the programs opened from them: a program is a result's when they share ids (the catalogue
@@ -31,7 +33,8 @@ extension Catalog {
             let subject = Treatments.defaultRoles(media)["subject"]
             out.append(Opened(info: p, link: OpenedProgram(
                 slug: p.slug, title: p.title, media: media.count, picked: media.filter(\.picked).count,
-                pins: await lab.store.state(p.slug).pins.count, thumb: subject.map { "/api/programs/\(p.slug)/media/\($0)/thumb" })))
+                pins: await lab.store.state(p.slug).pins.count, thumb: subject.map { "/api/programs/\(p.slug)/media/\($0)/thumb" },
+                bundleId: p.bundleId)))
         }
         return out
     }

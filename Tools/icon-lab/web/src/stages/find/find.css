@@ -70,3 +70,4 @@
 .opened-note.designs b { color: var(--pin) }
 .opened-note .go { color: var(--accent) }
 .pinned-icons { display: inline-flex; gap: 4px; vertical-align: middle; margin-right: 8px }
+.opened-note .several { display: block; margin-top: 3px; color: var(--warn) }
