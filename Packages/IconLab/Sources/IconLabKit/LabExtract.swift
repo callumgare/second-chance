@@ -43,12 +43,15 @@ nonisolated extension Lab {
             }
             let summary = try await withTaskCancellationHandler { try await crawl.value } onCancel: { crawl.cancel() }
             await progress(0.92, "Adding the images")
-            // a picture chosen on its own is wanted whatever the extractor thinks of it
+            // a picture chosen on its own is wanted whatever the extractor thinks of it, as is every layer of an Icon
+            // Composer icon (a dark silhouette scores as hardly art, and is just what a design is made of)
             let chosenImage = FileKinds.identify(URL(fileURLWithPath: path), isDir: false).0 == "image" && !Lab.isDirectory(path)
-            let added = try await self.importExtracted(slug, from: out, scanRoot: name, keepAll: chosenImage)
-            let pictures = added == 1 ? "1 picture" : "\(added) pictures"
+            let iconDocument = (path as NSString).pathExtension.lowercased() == "icon"
+            let result = try await self.importExtracted(slug, from: out, scanRoot: name, keepAll: chosenImage || iconDocument)
+            let pictures = result.added == 1 ? "1 picture" : "\(result.added) pictures"
             if summary.stoppedEarly { throw ScanStopped(kept: pictures) }
-            await progress(1, "\(pictures) added")
+            await progress(1, result.leftOut == 0 ? "\(pictures) added"
+                : "\(pictures) added, \(result.leftOut) left out as unlikely to be art (choose a picture on its own to add it anyway)")
         }
         return String(scan)
     }
@@ -90,12 +93,12 @@ nonisolated extension Lab {
     }
 
     /// Reads `records.jsonl` and adds each image (the best of each family) as media from "Your files". `keepAll`
-    /// keeps every image, however the extractor ranked it (a picture the person chose on its own). Returns how many
-    /// pictures it added.
+    /// keeps every image, however the extractor ranked it (a picture the person chose on its own, an Icon Composer
+    /// icon's layers). Returns how many pictures it added, and how many it left out as unlikely to be art.
     @discardableResult
-    func importExtracted(_ slug: String, from dir: URL, scanRoot: String, keepAll: Bool = false) async throws -> Int {
+    func importExtracted(_ slug: String, from dir: URL, scanRoot: String, keepAll: Bool = false) async throws -> (added: Int, leftOut: Int) {
         let recordsFile = dir.appendingPathComponent("records.jsonl")
-        guard let text = try? String(contentsOf: recordsFile, encoding: .utf8) else { return 0 }
+        guard let text = try? String(contentsOf: recordsFile, encoding: .utf8) else { return (0, 0) }
         var records: [[String: Any]] = []
         for line in text.split(separator: "\n") {
             if let d = line.data(using: .utf8), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { records.append(o) }
@@ -122,7 +125,7 @@ nonisolated extension Lab {
             guard let frames = movies[k], !frames.isEmpty else { continue }
             try await importMovie(slug, dir: dir, movie: k, frames: frames)
         }
-        var added = movieOrder.count
+        var added = movieOrder.count, leftOut = 0
         let movieShas = Set(movies.values.flatMap { $0 }.compactMap { $0["sha256"] as? String })
         for r in reps where !movieShas.contains((r["sha256"] as? String) ?? "") {
             guard let sha = r["sha256"] as? String else { continue }
@@ -130,14 +133,14 @@ nonisolated extension Lab {
             let score = (r["score"] as? Double) ?? 0
             let isIcon = !roles.isDisjoint(with: iconRoles)
             // runtime files (a system's, an engine's) never come in, icon or not
-            if roles.contains("runtime-library") && !keepAll { continue }
-            if !roles.isDisjoint(with: skipRoles) && !isIcon && !keepAll { continue }
-            if score < 15 && !isIcon && !keepAll { continue }
+            if roles.contains("runtime-library") && !keepAll { leftOut += 1; continue }
+            if !roles.isDisjoint(with: skipRoles) && !isIcon && !keepAll { leftOut += 1; continue }
+            if score < 15 && !isIcon && !keepAll { leftOut += 1; continue }
             if added >= 150 { break }   // the rest stay in the scan's folder
             let file = (r["file"] as? String).map { dir.appendingPathComponent($0) } ?? dir.appendingPathComponent("\(sha).png")
             guard FileManager.default.fileExists(atPath: file.path) else { continue }
             let w = (r["width"] as? Int) ?? 0, h = (r["height"] as? Int) ?? 0
-            if !keepAll, max(w, h) < 16 || Double(max(w, h)) / Double(max(1, min(w, h))) > 8 { continue }
+            if !keepAll, max(w, h) < 16 || Double(max(w, h)) / Double(max(1, min(w, h))) > 8 { leftOut += 1; continue }
             let provenance = Lab.provenanceString(r)
             let parts = provenance.components(separatedBy: " › ")
             let shortName = parts.count >= 2 ? parts[parts.count - 2] : (parts.last ?? sha)
@@ -157,7 +160,7 @@ nonisolated extension Lab {
             await analyse(slug, rec.id)
             added += 1
         }
-        return added
+        return (added, leftOut)
     }
 
     /// One picture for a video: its best-ranked frame, with every frame as a part (in time order).

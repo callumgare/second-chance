@@ -1,4 +1,6 @@
+import CoreGraphics
 import Foundation
+import ImageIO
 import Testing
 @testable import IconLabAPI
 @testable import IconLabKit
@@ -170,6 +172,38 @@ nonisolated enum Xcode {
         #expect(Lab.allowingAssets("allow-paths: [\"assets/\"]\n").1 == false)
         #expect(Lab.allowingAssets("allow-paths:\n  - \"mac/\"\n").2 != nil)
         #expect(KnownProgram.slug(forBundle: "nancy-drew/old-clock") == "nancy-drew--old-clock")
+    }
+
+    /// An Icon Composer icon's layers are often one-colour silhouettes, which the extractor ranks as hardly art: a
+    /// chosen `.icon` brings them all in anyway.
+    @Test func anIconsLayersAllComeIn() async throws {
+        let icon = root.appendingPathComponent("drawn.icon")
+        try FileManager.default.createDirectory(at: icon.appendingPathComponent("Assets"), withIntermediateDirectories: true)
+        try Data(#"{"groups":[{"layers":[{"image-name":"Shape.png","name":"Shape"}]}]}"#.utf8).write(to: icon.appendingPathComponent("icon.json"))
+        // a black disc on nothing: one colour, nearly black
+        let ctx = try #require(CGContext(data: nil, width: 512, height: 512, bitsPerComponent: 8, bytesPerRow: 0,
+                                         space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                                         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        ctx.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
+        ctx.fillEllipse(in: CGRect(x: 40, y: 40, width: 432, height: 432))
+        let png = try #require(ctx.makeImage())
+        let dest = try #require(CGImageDestinationCreateWithURL(icon.appendingPathComponent("Assets/Shape.png") as CFURL, "public.png" as CFString, 1, nil))
+        CGImageDestinationAddImage(dest, png, nil)
+        #expect(CGImageDestinationFinalize(dest))
+
+        let lab = api.lab
+        let slug = try await lab.openKnown("freeware/plain").slug
+        let scan = try await lab.extract(slug, path: icon.path)
+        var job: Jobs.Job?
+        let deadline = Date().addingTimeInterval(120)
+        while Date() < deadline {
+            job = await lab.jobs.all().first { $0.scan == scan && ($0.state == "done" || $0.state == "failed") }
+            if job != nil { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(job?.state == "done")
+        #expect(job?.detail == "1 picture added")
+        #expect(await lab.store.media(slug).filter { $0.source == "Your files" }.count == 1)
     }
 
     @Test func aQueuedJobCanBeCancelled() async throws {
