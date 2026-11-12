@@ -20,8 +20,16 @@
 .saved-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; align-items: center }
 
 /* Columns are dragged by their heads into the order saving follows. */
-.cmpt th.colh[draggable] { cursor: grab }
+/* Columns are dragged by their heads, or any of their icons, into the order saving follows; a grip bar on each
+   head says so, with where it stands. */
+.cmpt th.colh[draggable], .cmpt td[draggable] { cursor: grab }
+.cmpt th.colh[draggable]:active, .cmpt td[draggable]:active { cursor: grabbing }
 .cmpt th.colh button { cursor: default }
-.cmpt th.dragging { opacity: .45 }
-.cmpt th[data-drop="before"] { box-shadow: inset 3px 0 0 var(--accent) }
-.cmpt th[data-drop="after"] { box-shadow: inset -3px 0 0 var(--accent) }
+.cmpt .colgrip { display: flex; align-items: center; justify-content: center; gap: 6px; margin: -2px -4px 6px; padding: 2px 6px;
+  border-radius: 6px; font-size: 11px; font-weight: 500; color: var(--muted); background: var(--sunk) }
+.cmpt .colgrip .grip { font-size: 13px; letter-spacing: -1px }
+.cmpt th.colh:hover .colgrip { color: var(--fg); background: color-mix(in srgb, var(--accent) 14%, var(--sunk)) }
+.cmpt th.colh:hover .colgrip .grip { color: var(--accent) }
+.cmpt th.dragging, .cmpt td.dragging { opacity: .45 }
+.cmpt th[data-drop="before"], .cmpt td[data-drop="before"] { box-shadow: inset 3px 0 0 var(--accent) }
+.cmpt th[data-drop="after"], .cmpt td[data-drop="after"] { box-shadow: inset -3px 0 0 var(--accent) }

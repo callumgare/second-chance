@@ -29,6 +29,7 @@ export function ReviewStage({ slug }: { slug: string }) {
   const [toBundle, setToBundle] = useState<{ saved?: SavedToBundle; lines?: { lines: string[]; change: string }; error?: string } | null>(null);
   const pinned = pins.map((id) => docs[id]).filter(Boolean);
   const kept = pinned.filter((d) => keep[d.id] !== false);
+  const firstKept = kept[0]?.id;
   // Columns are in the pins' order, which Design's strip shows too and saving follows (the first is the app's icon).
   const r = useReorder("pins", (from, to) => void useDesign.getState().movePin(pins.indexOf(pinned[from].id), pins.indexOf(pinned[to].id)), true);
 
@@ -80,6 +81,7 @@ export function ReviewStage({ slug }: { slug: string }) {
                 const on = keep[d.id] !== false;
                 return (
                   <th key={d.id} className={"colh" + (r.dragging === i ? " dragging" : "")} {...r.handle(i)} {...r.row(i)} title="Drag to reorder: saving follows this order, the first is the app's icon">
+                    <div className="colgrip" aria-hidden><span className="grip">⠿</span>{d.id === firstKept ? `${i + 1} · the app's icon` : `${i + 1}`}<span className="grip">⠿</span></div>
                     <div className="wraps" title={d.name}>{d.name}</div>
                     <div className="row" style={{ justifyContent: "center", gap: 4, marginTop: 4 }}>
                       <button className={"btn small" + (on ? " on" : "")} aria-pressed={on} onClick={() => void useDesign.getState().setKeep(d.id, !on)}>{on ? "✓ Keep" : "Keep"}</button>
@@ -92,10 +94,11 @@ export function ReviewStage({ slug }: { slug: string }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.label}>
-                <th>{r.label}{r.hint && <div className="faint" style={{ fontWeight: 400 }}>{r.hint}</div>}</th>
-                {pinned.map((d) => <td key={d.id} className={keep[d.id] === false ? "dropped" : ""}>{r.cell(d)}</td>)}
+            {rows.map((row) => (
+              <tr key={row.label}>
+                <th>{row.label}{row.hint && <div className="faint" style={{ fontWeight: 400 }}>{row.hint}</div>}</th>
+                {pinned.map((d, i) => <td key={d.id} className={(keep[d.id] === false ? "dropped" : "") + (r.dragging === i ? " dragging" : "")}
+                  {...r.handle(i)} {...r.row(i)} title="Drag to reorder">{row.cell(d)}</td>)}
               </tr>
             ))}
           </tbody>
