@@ -14,8 +14,9 @@ export type SketchOptions = {
   /** Clip to the icon shape. */
   clip?: boolean
   hiddenLayer?: string | null
-  /** The design's own colours, for the eyedropper: the layers (with their effects) over a plain fill, without what
-   * Icon Composer adds (the fill's gradient, the appearance's changes, specular, translucency, shadows, the rim).
+  /** The design's own colours, for the eyedropper: the layers (with their effects) over the fill (its gradient
+   * too, as the canvas shows it), without the glass Icon Composer adds (the appearance's changes, specular,
+   * translucency, shadows, the rim).
    * Tinted and clear are Icon Composer's, so they draw as light. */
   flat?: boolean
 }
@@ -109,7 +110,7 @@ export function drawSketch(ctx: CanvasRenderingContext2D, doc: Doc, size: number
   const appearance: Appearance = flat && opts.appearance !== "dark" ? "light" : opts.appearance;
   const fc = fillColour(doc, appearance);
   if (fc) {
-    if (!flat && (doc.fill.kind === "gradient" || appearance === "tinted" || appearance === "clear")) {
+    if (doc.fill.kind === "gradient" || appearance === "tinted" || appearance === "clear") {
       const g = ctx.createLinearGradient(0, 0, 0, size);
       g.addColorStop(0, shade(fc, 1.16));
       g.addColorStop(0.55, fc);
