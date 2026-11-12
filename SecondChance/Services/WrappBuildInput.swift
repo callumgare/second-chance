@@ -276,8 +276,20 @@ class WrappBuildInput {
 
     /// The extensions a Her Interactive download comes as: a Windows
     /// installer, a Mac disk image, or the installer app inside that image
-    /// once it's opened.
-    static let herDownloadExtensions = ["exe", "dmg", "app"]
+    /// once it's opened. A sparse bundle is a disk image made on a Mac (of
+    /// a disc, with Disk Utility).
+    nonisolated static let herDownloadExtensions = ["exe", "dmg", "app", "sparsebundle"]
+
+    /// Whether `url`, which exists, is a Her download by its name and kind:
+    /// an app is a folder, and so is a sparse bundle (whatever its name),
+    /// the others are files.
+    nonisolated static func isHerDownload(_ url: URL, isDirectory: Bool) -> Bool {
+        let fileExtension = url.pathExtension.lowercased()
+        guard herDownloadExtensions.contains(fileExtension) else { return false }
+        if fileExtension == "app" { return isDirectory }
+        if isDirectory { return ISOMounter.isMacDiskImage(url) && ISOMounter.isDiskImageBundle(url) }
+        return fileExtension != "sparsebundle"
+    }
 
     /// A game downloaded from Her Interactive: its Windows installer (.exe),
     /// its Mac disk image (.dmg), or the installer app in the opened image.
@@ -287,10 +299,7 @@ class WrappBuildInput {
             let url = URL(fileURLWithPath: path)
             var isDirectory: ObjCBool = false
             let fileExists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
-            let fileExtension = url.pathExtension.lowercased()
-            // An app is a folder; the others are files.
-            guard fileExists, Self.herDownloadExtensions.contains(fileExtension),
-                  isDirectory.boolValue == (fileExtension == "app") else {
+            guard fileExists, Self.isHerDownload(url, isDirectory: isDirectory.boolValue) else {
                 throw WrappBuildError.invalidPath("Her download path must be an existing .exe, .dmg or .app: \(path)")
             }
             return url

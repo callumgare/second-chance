@@ -8,7 +8,8 @@
 //
 //  A Windows installer is unpacked into the layout a disc has and installed
 //  as one is; a Mac download is a Cider (Wine) app with the installed
-//  Windows game inside, which is lifted straight out. Both then go through
+//  Windows game inside, which is lifted straight out, unless the download is
+//  the game's Windows and Mac disc, which builds as its disc does. All then go through
 //  the same shared tail as the other sources, so they sign and publish the
 //  same events. docs/her-download.md has the details of both formats.
 //
@@ -71,7 +72,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     private func build(fromDownload download: URL, input: WrappBuildInput) async throws -> URL {
         logger.notice("Her Interactive download: \(download.path)")
         switch download.pathExtension.lowercased() {
-        case "dmg":
+        case "dmg", "sparsebundle":
             return try await build(fromMacDownload: download, input: input)
         case "app":
             // The installer app inside an opened Mac download: its volume is
@@ -119,15 +120,19 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             await publishFailure(error)
             throw error
         }
-        return try await buildThroughRunner(gameInfo: gameInfo, edition: "her-windows", installer: installer, package: nil, input: input)
+        return try await buildThroughRunner(gameInfo: gameInfo, edition: "her-windows", inputs: GivenInputs(["installer": installer]),
+                                            package: nil, input: input)
     }
 
     /// The edition's plan carried out by the runner, each stage in a tree of
     /// its own in a working folder this builder owns, the template laid in
-    /// at the end; then configure, sign, save, launch. `installer` is the
-    /// edition's input: the Windows installer, or the Mac download's volume.
-    private func buildThroughRunner(gameInfo: GameInfo, edition: String, installer: URL, package: CiderPackage?,
-                                    input: WrappBuildInput) async throws -> URL {
+    /// at the end; then configure, sign, save, launch. `inputs` are the
+    /// edition's: the Windows installer or the Mac download's volume as
+    /// `installer`, or for a download that is a disc, its discs.
+    /// `installerName` is the program to install a disc with when it has
+    /// no installer by name.
+    private func buildThroughRunner(gameInfo: GameInfo, edition: String, inputs: any InputProvider, package: CiderPackage?,
+                                    installerName: String? = nil, everyDiscOnOne: Bool = false, input: WrappBuildInput) async throws -> URL {
         let folder = helper.createBuildFolder()
         logger.notice("Working folder: \(folder.path)")
         await bus.publishWrappBuild(.wrappStarted(path: folder))
@@ -141,9 +146,9 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             try await publishEngineRoute(for: gameInfo)
             let executor = HerDownloadExecutor(builder: self, gameInfo: gameInfo, package: package, input: input)
             let installers = InstallerExecutor(runner: installerRunner, gameInfo: gameInfo, source: .herDownload,
-                                               installerName: nil, input: input)
+                                               installerName: installerName, input: input, everyDiscOnOne: everyDiscOnOne)
             let (configuration, emitter) = AppRunner.configuration(
-                bus: bus, input: input, game: gameInfo, inputs: GivenInputs(["installer": installer]),
+                bus: bus, input: input, game: gameInfo, inputs: inputs,
                 downloader: DownloadWrappBuilder.standardDownloader(), helper: helper,
                 executors: ["her-download": executor, "installer": installers])
             let wrappPath: URL
@@ -226,15 +231,22 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
 
     // MARK: - Mac download
 
-    /// `image` is the download's `.dmg`, or the volume it's already mounted
-    /// at.
+    /// `image` is the download's `.dmg` (or a sparse bundle of one), or the
+    /// volume it's already mounted at. Its game is in the Cider app it
+    /// installs, or beside its installer when the image is the game's disc
+    /// (`CiderPackage.GameSource`).
     private func build(fromMacDownload image: URL, input: WrappBuildInput) async throws -> URL {
         // ── Mount, recognise and detect ONCE ───────────────────────────
-        let package: CiderPackage
+        // The Cider installer, unless the image is only a Windows disc.
+        let package: CiderPackage?
+        let source: CiderPackage.GameSource
+        let volume: URL
         let gameInfo: GameInfo
+        // For an image that is the game's disc, the program to install it
+        // with when it has no installer by name.
+        var installerName: String?
         do {
-            let volume: URL
-            if image.pathExtension.lowercased() == "dmg" {
+            if ISOMounter.isMacDiskImage(image) {
                 // Second Chance isn't sandboxed, so the volume needs no grant.
                 volume = try await isoMounter.mount(image)
                 await bus.publishWrappBuild(.isoMounted(volume))
@@ -245,18 +257,30 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
             do {
                 package = try CiderPackage(volume: volume)
-            } catch let onDiscs as CiderPackage.GameOnDiscs {
-                logger.critical("\(image.lastPathComponent) is a disc's Mac installer: \(onDiscs)")
-                throw WrappBuildError.macInstallerFromDiscs
             } catch let notCider as CiderPackage.NotCider {
-                logger.critical("\(image.lastPathComponent) isn't a Cider installer: \(notCider)")
-                throw WrappBuildError.unsupportedMacDownload(
-                    reason: "it isn't one of the Mac downloads made with Cider (\(notCider))")
+                // A hybrid disc's image whose Mac side macOS can't mount
+                // shows only its Windows side: still the game's disc.
+                let lookup = (try? GameDetector.installerLookup(in: volume)) ?? GameDetector.InstallerLookup.none
+                guard case .recognised = lookup else {
+                    logger.critical("\(image.lastPathComponent) isn't a Cider installer: \(notCider)")
+                    throw WrappBuildError.unsupportedMacDownload(
+                        reason: "it isn't one of the Mac downloads made with Cider (\(notCider))")
+                }
+                logger.notice("\(image.lastPathComponent) isn't a Cider installer (\(notCider)), but has a Windows installer: it's the game's disc")
+                package = nil
             }
-            let gameSlug = gameDetector.detectGame(fromCiderPackage: package)
+            source = package?.game ?? .disc(missingDiscs: [])
+            var gameSlug = package.map(gameDetector.detectGame(fromCiderPackage:)) ?? GameInfo.unknownGame.id
+            if case .disc = source, gameSlug == GameInfo.unknownGame.id {
+                // A disc says more of itself than its Mac installer does.
+                gameSlug = try await gameDetector.detectGame(fromDisk: volume)
+            }
             gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
             logger.notice("Detected game: \(gameInfo.title)")
             try await checkRecognised(gameInfo, input: input)
+            if case .disc = source {
+                installerName = try await discInstaller(on: volume, gameInfo: gameInfo, input: input)
+            }
             await bus.publishWrappBuild(.gameDetected(gameInfo))
             try await input.onGameDetected(gameInfo)
         } catch {
@@ -265,19 +289,103 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             throw error
         }
 
-        // ── Build ──────────────────────────────────────────────────────
+        switch source {
+        case .payload:
+            guard let package else { throw WrappBuildError.internalError("A Mac download's game is in a Cider app it hasn't") }
+            // ── Build ──────────────────────────────────────────────────
+            do {
+                try await helper.ensureRoomToBuild(from: image, copies: 3)
+            } catch {
+                await isoMounter.unmountAll()
+                await publishFailure(error)
+                throw error
+            }
+            // Her Interactive's patches are Windows updaters that look for the
+            // game their own installer registered; a Cider build never ran one,
+            // and it is a later build than they patch anyway, so the her-mac
+            // stage has none.
+            return try await buildThroughRunner(gameInfo: gameInfo, edition: "her-mac", inputs: GivenInputs(["installer": package.volume]),
+                                                package: package, input: input)
+        case .disc(let missingDiscs):
+            return try await build(fromDisc: volume, missingDiscs: missingDiscs, discCount: package?.discCount ?? 1, gameInfo: gameInfo,
+                                   installerName: installerName, input: input)
+        }
+    }
+
+    // MARK: - Mac download that is a disc
+
+    /// The program on a disc's image to install the game with: nil when it
+    /// has an installer by name, or the one the person chose when it
+    /// hasn't. Refuses an image with no Windows installer at all, and a
+    /// game that isn't installed under Wine.
+    private func discInstaller(on volume: URL, gameInfo: GameInfo, input: WrappBuildInput) async throws -> String? {
+        guard gameInfo.composition.launcher == .wine else {
+            logger.critical("\(gameInfo.id) is on its Mac download's disc, and doesn't run under Wine")
+            throw WrappBuildError.unsupportedMacDownload(reason: "its game is on the disc beside the installer, and isn't one Wine installs")
+        }
+        switch try GameDetector.installerLookup(in: volume) {
+        case .recognised(let name):
+            logger.notice("The Mac download is the game's disc; installing it with its Windows installer, \(name)")
+            return nil
+        case .none:
+            logger.critical("The Mac download's game isn't in its Cider app, and there's no Windows installer beside it")
+            throw WrappBuildError.unsupportedMacDownload(reason: "its game isn't in its Cider app, and it has no Windows installer")
+        case .unrecognised(let programs):
+            switch try await input.askAboutUnidentifiedInstaller(programs: programs) {
+            case .tryProgram(let program):
+                return program
+            case .chooseAnother:
+                throw ChooseAnotherDownload()
+            }
+        }
+    }
+
+    /// A Mac download whose game is on the image beside the installer: the
+    /// game's Windows and Mac disc, so it builds as the disc does, from the
+    /// bundle's disc edition with the image as disc 1, installed with the
+    /// Windows installer on it, Her's patches and all. An image holding
+    /// every disc's files (`missingDiscs` empty) is the only disc; else the
+    /// person is asked for disc 2 as for a disc build.
+    private func build(fromDisc volume: URL, missingDiscs: [String], discCount: Int, gameInfo: GameInfo, installerName: String?,
+                       input: WrappBuildInput) async throws -> URL {
+        let edition: String
         do {
-            try await helper.ensureRoomToBuild(from: image, copies: 3)
+            let discs = missingDiscs.isEmpty ? 1 : max(gameInfo.diskCount, 2)
+            // Each disc copied into the app, and the game installed from them.
+            try await helper.ensureRoomToBuild(from: volume, copies: 2 * discs)
+            edition = try await Blocking.run { try ShippedBundles.edition(ofGame: gameInfo.id, source: .disk) }
         } catch {
             await isoMounter.unmountAll()
             await publishFailure(error)
             throw error
         }
-        // Her Interactive's patches are Windows updaters that look for the
-        // game their own installer registered; a Cider build never ran one,
-        // and it is a later build than they patch anyway, so the her-mac
-        // stage has none.
-        return try await buildThroughRunner(gameInfo: gameInfo, edition: "her-mac", installer: package.volume, package: package, input: input)
+        let without = missingDiscs.isEmpty ? "" : " (without \(missingDiscs.joined(separator: ", ")))"
+        logger.notice("Building \(gameInfo.id)'s \(edition) edition from the Mac download, which is its disc\(without)")
+        let inputs = DiscInputs(disc1: volume, diskCount: missingDiscs.isEmpty ? 1 : gameInfo.diskCount) { [self] in
+            try await self.resolveDisc2(of: gameInfo, disc1: volume, asked: !missingDiscs.isEmpty, input: input)
+        }
+        return try await buildThroughRunner(gameInfo: gameInfo, edition: edition, inputs: inputs, package: nil,
+                                            installerName: installerName, everyDiscOnOne: missingDiscs.isEmpty && discCount > 1, input: input)
+    }
+
+    /// Disc 2, asked for (and mounted if it's an image) when `asked`, as a
+    /// disc build does; `disksResolved` is published either way.
+    private func resolveDisc2(of gameInfo: GameInfo, disc1: URL, asked: Bool, input: WrappBuildInput) async throws -> URL? {
+        try Task.checkCancellation()
+        var disc2: URL?
+        if asked, let chosen = try await input.getDisk2Path(gameInfo: gameInfo, disk1: disc1) {
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: chosen.path, isDirectory: &isDirectory), isDirectory.boolValue,
+               !ISOMounter.isMacDiskImage(chosen) {
+                disc2 = chosen
+            } else {
+                let mounted = try await isoMounter.mount(chosen)
+                await bus.publishWrappBuild(.isoMounted(mounted))
+                disc2 = mounted
+            }
+        }
+        await bus.publishWrappBuild(.disksResolved(disk1: disc1, disk2: disc2))
+        return disc2
     }
 
     /// `HER-DOWNLOAD.INSTALL` for a Mac download: the Windows game taken out

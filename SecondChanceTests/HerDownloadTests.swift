@@ -124,16 +124,84 @@ struct HerDownloadTests {
         }
     }
 
-    @Test("A disc's Mac installer, whose game is in the discs' cabinets, is refused")
-    func refusesDiscInstaller() throws {
+    @Test("A download whose Cider app holds the game takes it from the payload")
+    func gameInPayload() throws {
         defer { try? FileManager.default.removeItem(at: base) }
         let volume = try fakeCiderVolume()
+        try writeInstallSettings([
+            "InstallGame": "Nancy Drew - Trail of the Twister",
+            // Trail of the Twister's download's: the payload, and the manual beside the app.
+            "InstallFiles": ["source:{0}-$INSTALLVOLUME/installer/INSTALLDATA.tgz", "target:/", "flags:FLAGS_UNZIP",
+                             "source:{0}-$INSTALLVOLUME/installer/Manual.pdf", "target:/output.folder/", "flags:FLAGS_SET_PERMISSION"],
+        ], on: volume)
+        #expect(try CiderPackage(volume: volume).game == .payload)
+    }
+
+    /// Shadow at the Water's Edge's dual-platform discs' Mac installer,
+    /// which unpacks the Windows installer's cabinets into the Cider app.
+    private func waterEdgeSettings() -> [String: Any] {
+        ["InstallGame": "Nancy Drew - Shadow at the Water's Edge",
+         "CABMapping": "$INSTALLVOLUME/installer/NancyDrew.plist",
+         "DISK_0": ["Nancy Drew - Shadow at the Water's Edge Disk 1", "$INSTALLVOLUME/SAW1.cab"],
+         "DISK_1": ["Nancy Drew - Shadow at the Water's Edge Disk 2", "$INSTALLVOLUME/SAW18.cab"],
+         "InstallFiles": ["source:{0}-$INSTALLVOLUME/installer/INSTALLDATA.tgz", "target:/", "flags:FLAGS_UNZIP",
+                          "source:{0}-$INSTALLVOLUME/SAW1.cab", "target:/output.app/Contents/Resources/transgaming/", "flags:FLAGS_UNZIP",
+                          "source:{1}-$INSTALLVOLUME/SAW18.cab", "target:/output.app/Contents/Resources/transgaming/", "flags:FLAGS_UNZIP"]]
+    }
+
+    @Test("An image holding both discs' cabinets is the game's only disc")
+    func wholeGameOnTheImage() throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let volume = try fakeCiderVolume()
+        try writeInstallSettings(waterEdgeSettings(), on: volume)
+        for cabinet in ["SAW1.cab", "SAW18.cab"] { try Data().write(to: volume.appendingPathComponent(cabinet)) }
+        let package = try CiderPackage(volume: volume)
+        #expect(package.game == .disc(missingDiscs: []))
+        #expect(package.discCount == 2)
+    }
+
+    @Test("A first disc's Mac installer is missing the disc whose cabinet isn't on it")
+    func firstDiscOfTwo() throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let volume = try fakeCiderVolume()
+        try writeInstallSettings(waterEdgeSettings(), on: volume)
+        try Data().write(to: volume.appendingPathComponent("SAW1.cab"))
+        #expect(try CiderPackage(volume: volume).game == .disc(missingDiscs: ["Nancy Drew - Shadow at the Water's Edge Disk 2"]))
+    }
+
+    @Test("An image whose installer copies the game's folder into the Cider app is the game's disc")
+    func gameFolderOnTheImage() throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let volume = try fakeCiderVolume()
+        // The Silent Spy's disc's: no CABMapping, its Files/Game copied in.
+        try writeInstallSettings([
+            "InstallGame": "Nancy Drew - The Silent Spy",
+            "InstallFiles": ["source:$INSTALLVOLUME/installer/INSTALLDATA.tgz", "target:/", "flags:FLAGS_UNZIP",
+                             "source:$INSTALLVOLUME/Files/Game/",
+                             "target:/output.app/Contents/Resources/transgaming/c_drive/Program Files/Nancy Drew/The Silent Spy/",
+                             "flags:FLAGS_SET_PERMISSION"],
+        ], on: volume)
+        #expect(try CiderPackage(volume: volume).game == .disc(missingDiscs: []))
+    }
+
+    @Test("An image holding every disc installs from disk-combined, links to disk-1's files")
+    func everyDiscOnOneIsCombined() throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        try makeBase()
+        let installers = base.appendingPathComponent("nancy-drew-installer")
+        let disc = installers.appendingPathComponent("disk-1")
+        try FileManager.default.createDirectory(at: disc, withIntermediateDirectories: true)
+        for name in ["Setup.msi", "SAW1.cab", "SAW18.cab", ".DS_Store"] { try Data().write(to: disc.appendingPathComponent(name)) }
+        try InstallerExecutor.combine(discOne: installers)
+        let combined = installers.appendingPathComponent("disk-combined")
+        let links = try FileManager.default.contentsOfDirectory(atPath: combined.path).sorted()
+        #expect(links == ["SAW1.cab", "SAW18.cab", "Setup.msi"])
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: combined.appendingPathComponent("Setup.msi").path) == "../disk-1/Setup.msi")
+    }
+
+    private func writeInstallSettings(_ settings: [String: Any], on volume: URL) throws {
         let plist = volume.appendingPathComponent("Nancy Drew - Trail of the Twister Installer.app/Contents/Resources/tgInstall.plist")
-        try (["InstallGame": "Nancy Drew - Trail of the Twister",
-              "CABMapping": "$INSTALLVOLUME/installer/NancyDrew.plist"] as NSDictionary).write(to: plist)
-        #expect(throws: CiderPackage.GameOnDiscs.self) {
-            try CiderPackage(volume: volume)
-        }
+        try (settings as NSDictionary).write(to: plist)
     }
 
     @Test("Takes only the game out of a Cider app, into Program Files (x86)")
@@ -210,6 +278,32 @@ struct HerDownloadTests {
         let input = WrappBuildInput(environment: ["HER_INSTALLER_PATH": app.path], viewModel: nil)
         // A folder's file URL ends in a slash: compare paths.
         #expect(try await input.getHerInstallerPath().path == app.path)
+    }
+
+    @Test("HER_INSTALLER_PATH takes a sparse bundle, even one named .dmg", arguments: ["dmg", "sparsebundle"])
+    @MainActor
+    func acceptsSparseBundle(fileExtension: String) async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        try makeBase()
+        let bundle = base.appendingPathComponent("installer.\(fileExtension)")
+        try FileManager.default.createDirectory(at: bundle.appendingPathComponent("bands"), withIntermediateDirectories: true)
+        try (["diskimage-bundle-type": "com.apple.diskimage.sparsebundle", "band-size": 8_388_608] as NSDictionary)
+            .write(to: bundle.appendingPathComponent("Info.plist"))
+        let input = WrappBuildInput(environment: ["HER_INSTALLER_PATH": bundle.path], viewModel: nil)
+        #expect(try await input.getHerInstallerPath().path == bundle.path)
+    }
+
+    @Test("HER_INSTALLER_PATH refuses a plain folder named .dmg")
+    @MainActor
+    func refusesFolderNamedDMG() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        try makeBase()
+        let folder = base.appendingPathComponent("installer.dmg")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let input = WrappBuildInput(environment: ["HER_INSTALLER_PATH": folder.path], viewModel: nil)
+        await #expect(throws: WrappBuildError.self) {
+            try await input.getHerInstallerPath()
+        }
     }
 
     @Test("HER_INSTALLER_PATH refuses a file named like an app")

@@ -29,13 +29,19 @@ nonisolated final class InstallerExecutor: ModuleExecutor, @unchecked Sendable {
     /// only one that ran said where the game's program is.
     var installed: Bool { ran.withLock { $0 } }
     private let ran = Mutex(false)
+    /// Whether disc 1 holds every disc's files (a Her Mac download that is
+    /// an image of both discs): it is installed from `disk-combined`, as a
+    /// two-disc game is, not from its CD drive.
+    let everyDiscOnOne: Bool
 
-    init(runner: GameInstallerRunner, gameInfo: GameInfo, source: WrappSource, installerName: String?, input: WrappBuildInput) {
+    init(runner: GameInstallerRunner, gameInfo: GameInfo, source: WrappSource, installerName: String?, input: WrappBuildInput,
+         everyDiscOnOne: Bool = false) {
         self.runner = runner
         self.gameInfo = gameInfo
         self.source = source
         self.installerName = installerName
         self.input = input
+        self.everyDiscOnOne = everyDiscOnOne
     }
 
     func run(_ step: PlannedStep, in context: any StepContext) async throws {
@@ -51,6 +57,9 @@ nonisolated final class InstallerExecutor: ModuleExecutor, @unchecked Sendable {
             guard let file = context.file(answerFile) else { throw StepFailure.recipe("\(step.origin): the plan has no file \(answerFile)") }
             try Self.installAnswerFile(file, into: WrappLayout(app: tree).installers)
         }
+        if everyDiscOnOne {
+            try Self.combine(discOne: WrappLayout(app: tree).installers)
+        }
         let automation = step.option("automation").flatMap(context.file)
         let creates = try GameInstallerRunner.expectedProgram(of: step)
         let input = input, gameInfo = gameInfo, source = source, installerName = installerName, runner = runner
@@ -59,6 +68,26 @@ nonisolated final class InstallerExecutor: ModuleExecutor, @unchecked Sendable {
             unattended: await input.isUnattended, chooseGameProgram: { try await input.chooseGameProgram(among: $0) },
             automation: automation, creates: creates, stepContext: context)
         ran.withLock { $0 = true }
+    }
+
+    /// `disk-combined` beside `disk-1` in `installers`, links to each of its
+    /// files, as `WINE.KEEP-DISCS` makes one for two discs. An installer
+    /// run from the kept disc's CD drive (D:) checks that drive's label
+    /// against each later disc's: Windows Installer's media table names
+    /// Water's Edge's second disc "SAW Disk 2", and with only one drive to
+    /// look at, a silent install fails (1612, "Failed to ready media").
+    /// Run from C:, a fixed drive, no label is checked, so an image holding
+    /// every disc installs as the two discs combined do.
+    nonisolated static func combine(discOne installers: URL) throws {
+        let files = FileManager.default
+        let disc = installers.appendingPathComponent("disk-1")
+        let combined = installers.appendingPathComponent("disk-combined")
+        guard files.fileExists(atPath: disc.path), !files.fileExists(atPath: combined.path) else { return }
+        try files.createDirectory(at: combined, withIntermediateDirectories: true)
+        // .DS_Store left out: codesign fails on a link to one.
+        for item in try files.contentsOfDirectory(atPath: disc.path) where item != ".DS_Store" {
+            try files.createSymbolicLink(atPath: combined.appendingPathComponent(item).path, withDestinationPath: "../disk-1/\(item)")
+        }
     }
 
     /// Put the plan's answer file (`bundle:assets/disc.iss`) where the

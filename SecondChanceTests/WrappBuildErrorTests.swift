@@ -44,7 +44,6 @@ struct WrappBuildErrorTests {
         .installIncomplete(reason: "InstallShield wrote no setup.ilg uninstall log"),
         .steamInstallFailed(reason: "state 0x602"),
         .unsupportedMacDownload(reason: "tar exited 1"),
-        .macInstallerFromDiscs,
         .templateDamaged("WrappTemplate.app not found"),
         .saveFailed(destination: "/Volumes/Games/Nancy Drew - X.app", reason: "NSCocoaErrorDomain 513"),
         .stepFailed("Wrappfile:19: the Mac's automation failed: automation failed at line 7"),

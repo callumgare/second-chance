@@ -70,7 +70,12 @@ struct HerDownloadInstallIntegrationTests {
             // A fixture that couldn't be read would expect no patches, and pass a
             // build that applied none it should have.
             outcome.expect(!GamePatchCatalogTests.editionPatches.isEmpty, "TestFixtures/edition-patches.json couldn't be read from \(TestPaths.repoRoot.path)")
-            let expectedPatches = download.isMacDownload ? [] : GamePatchCatalogTests.editionPatches[game.id]?["her-download"] ?? []
+            // A Mac download that is the game's disc builds as the disc does
+            // (docs/her-download.md#mac-downloads-that-are-the-games-disc):
+            // its discs resolved, the disc's patches, the disc kept.
+            let builtAsDisc = download.isMacDownload && recorder.disksResolved != nil
+            let expectedPatches = builtAsDisc ? GamePatchCatalogTests.editionPatches[game.id]?["disc"] ?? []
+                : download.isMacDownload ? [] : GamePatchCatalogTests.editionPatches[game.id]?["her-download"] ?? []
             outcome.expect(recorder.appliedPatches == expectedPatches,
                            "Applied patches \(recorder.appliedPatches) but expected \(expectedPatches)")
 
@@ -79,9 +84,10 @@ struct HerDownloadInstallIntegrationTests {
                 outcome.expect(FileManager.default.fileExists(atPath: exe.path), "The wrapp's game exe isn't in it: \(exe.path)")
             }
 
-            // Neither the unpacked installer nor the rest of the Cider app ships.
+            // Neither the unpacked installer nor the rest of the Cider app
+            // ships; a disc does, for a game that checks for it.
             let sharedSupport = wrapp.appendingPathComponent("Contents/SharedSupport")
-            for leftover in ["prefix/drive_c/nancy-drew-installer", "cider-staging"] {
+            for leftover in (builtAsDisc ? [] : ["prefix/drive_c/nancy-drew-installer"]) + ["cider-staging"] {
                 outcome.expect(!FileManager.default.fileExists(atPath: sharedSupport.appendingPathComponent(leftover).path),
                                "\(leftover) shipped in the wrapp")
             }

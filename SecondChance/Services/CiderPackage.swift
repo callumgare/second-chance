@@ -26,6 +26,10 @@ private nonisolated let tarLogger = Logger(label: "au.gare.callum.second-chance.
 /// graphics and input DLLs (`ddraw.dll`, `d3d9.dll`, …) are empty
 /// placeholders, as Cider's real ones are Mac libraries in its `Frameworks`.
 ///
+/// Some images hold the game beside the installer rather than in its
+/// payload (`GameSource.disc`): they are the game's Windows and Mac disc,
+/// and are built from the Windows installer on them as a disc is.
+///
 /// The image's layout ([docs/her-download.md](../../docs/her-download.md)):
 ///
 /// ```
@@ -48,17 +52,29 @@ nonisolated struct CiderPackage {
         let description: String
     }
 
-    /// Thrown by `init(volume:)` for the Mac installer from a game's discs.
-    /// A dual-platform disc's Mac installer (Shadow at the Water's Edge's)
-    /// is the same TransGaming installer as a download's, but its
-    /// `INSTALLDATA.tgz` is only Cider's shell, about 19 MB: the game is in
-    /// the disc's spanned cabinets (`SAW1.cab`…, `DISK_0` and `DISK_1` in
-    /// `tgInstall.plist`), unpacked into the app as `CABMapping`'s plist
-    /// says. Taken as a download, the wrapp would have the game's program
-    /// and none of its files (`binkw32.dll`, its videos), and the game would
-    /// quit at once.
-    struct GameOnDiscs: Error, CustomStringConvertible {
-        var description: String { "its game is in the discs' cabinets, not in its INSTALLDATA.tgz" }
+    /// Where the installer gets the game from.
+    let game: GameSource
+    /// How many discs the game's installer names (`DISK_<n>`): none for a
+    /// download, one or more for a disc.
+    let discCount: Int
+
+    /// Where a Cider installer gets the game from, which its
+    /// `tgInstall.plist` says: what its `InstallFiles` copy into the Cider
+    /// app besides the payload, and its `CABMapping`.
+    enum GameSource: Equatable {
+        /// From `INSTALLDATA.tgz`: its Cider app holds the game, installed
+        /// (Trail of the Twister's download).
+        case payload
+        /// From the image itself, which is the game's Windows and Mac disc.
+        /// Its `INSTALLDATA.tgz` is only Cider's shell (and the game's
+        /// program rebuilt for Cider): the Windows release's files lie
+        /// beside the installer, which copies them into the Cider app (The
+        /// Silent Spy's `Files/Game`) or unpacks them from the Windows
+        /// installer's cabinets as `CABMapping`'s plist says (Shadow at the
+        /// Water's Edge's `SAW1.cab`…). `missingDiscs` names the game's
+        /// other discs (`DISK_1`…) whose files aren't on this one: none for
+        /// an image of the whole game, or a one-disc game's disc.
+        case disc(missingDiscs: [String])
     }
 
     /// Recognise a mounted image as a Cider installer.
@@ -86,7 +102,42 @@ nonisolated struct CiderPackage {
         let settings = NSDictionary(contentsOf: installPlist) as? [String: Any] ?? [:]
         gameName = settings["InstallGame"] as? String
         bundleIdentifier = settings["ForbiddenGameID"] as? String
-        if settings["CABMapping"] != nil { throw GameOnDiscs() }
+        game = Self.gameSource(installSettings: settings, volume: volume)
+        discCount = Self.discs(installSettings: settings).count
+    }
+
+    /// Where the game comes from, by `tgInstall.plist`'s settings. It is on
+    /// the image when the installer unpacks cabinets into the Cider app
+    /// (`CABMapping`), or copies anything from the image into the app's
+    /// Windows files (`target:/output.app/Contents/Resources/transgaming…`):
+    /// a download's payload goes into the app as a whole (`target:/`). The
+    /// game's discs are `DISK_<n>`, each the disc's name and a file on it
+    /// (`$INSTALLVOLUME/SAW18.cab`); a disc whose file isn't on this volume
+    /// is missing from it.
+    /// The game's discs, `DISK_0`, `DISK_1`…, in order: each its name and
+    /// a file on it. None for a download.
+    nonisolated static func discs(installSettings settings: [String: Any]) -> [[String]] {
+        settings.keys
+            .compactMap { key -> (number: Int, disc: [String])? in
+                guard key.hasPrefix("DISK_"), let number = Int(key.dropFirst("DISK_".count)),
+                      let disc = settings[key] as? [String] else { return nil }
+                return (number, disc)
+            }
+            .sorted { $0.number < $1.number }
+            .map(\.disc)
+    }
+
+    nonisolated static func gameSource(installSettings settings: [String: Any], volume: URL) -> GameSource {
+        let intoApp = "target:/output.app/Contents/Resources/transgaming"
+        let files = settings["InstallFiles"] as? [String] ?? []
+        guard settings["CABMapping"] != nil || files.contains(where: { $0.hasPrefix(intoApp) }) else { return .payload }
+
+        let missing = discs(installSettings: settings).filter { disc in
+            guard disc.count > 1 else { return false }
+            let file = disc[1].replacingOccurrences(of: "$INSTALLVOLUME/", with: "")
+            return !FileManager.default.fileExists(atPath: volume.appendingPathComponent(file).path)
+        }
+        return .disc(missingDiscs: missing.map { $0.first ?? "" })
     }
 
     /// The Cider app's paths for the files a wrapp takes from it.

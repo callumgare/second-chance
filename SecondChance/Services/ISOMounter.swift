@@ -109,6 +109,21 @@ class ISOMounter {
         return root.appendingPathComponent("\(UUID().uuidString.prefix(8)).shadow")
     }
 
+    /// Whether `url` is a Mac disk image, mounted without hdiutil's checksum
+    /// pass and never taken for a CD image: a `.dmg`, or a sparse bundle
+    /// or image, whose bundle is a folder of bands (and may be named
+    /// `.dmg` too).
+    nonisolated static func isMacDiskImage(_ url: URL) -> Bool {
+        ["dmg", "sparsebundle", "sparseimage"].contains(url.pathExtension.lowercased())
+    }
+
+    /// Whether `url` is a folder that is a disk image: a sparse bundle,
+    /// whatever its name, by the `Info.plist` hdiutil keeps in it.
+    nonisolated static func isDiskImageBundle(_ url: URL) -> Bool {
+        let info = NSDictionary(contentsOf: url.appendingPathComponent("Info.plist")) as? [String: Any]
+        return (info?["diskimage-bundle-type"] as? String) != nil
+    }
+
     /// Whether the volume at `url` is a mounted disk image (an ISO or DMG)
     /// rather than a real disc: Disk Arbitration names a disk image's device
     /// model "Disk Image".
@@ -140,7 +155,7 @@ class ISOMounter {
         }
 
         logger.notice("Mounting ISO: \(isoPath.lastPathComponent)")
-        let isDMG = isoPath.pathExtension.lowercased() == "dmg"
+        let isDMG = Self.isMacDiskImage(isoPath)
         let shadow = try newShadow()
         // stdin is empty: a DMG with a licence agreement asks for it there,
         // and is answered no rather than waited on. Her Interactive's have none.
@@ -154,7 +169,8 @@ class ISOMounter {
             // file that was never one; the image itself can tell them apart.
             let diagnosis = isDMG ? (.wontOpen, Self.describeSize(of: isoPath)) : Self.diagnoseImage(at: isoPath)
             try? FileManager.default.removeItem(at: shadow)
-            if diagnosis.problem == .wontOpen, !isDMG, let hybrid = await mountISOSide(of: isoPath) {
+            // A Mac download can be a hybrid disc's image too, named .dmg.
+            if diagnosis.problem == .wontOpen, let hybrid = await mountISOSide(of: isoPath) {
                 logger.notice("hdiutil couldn't mount \(isoPath.lastPathComponent) (\(errorOutput)); mounted its ISO 9660 side instead")
                 return hybrid
             }

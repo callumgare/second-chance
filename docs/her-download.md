@@ -5,13 +5,14 @@ and some as a Mac download too. It is the only place some of them can still be
 bought (Stay Tuned for Danger isn't on Steam). Second Chance builds a wrapp
 from either: `HerDownloadWrappBuilder`, the **Her Interactive Download** source.
 
-The two arrive as quite different files, and the builder takes a separate path
-for each:
+The two arrive as quite different files, and the Mac one in two kinds. The
+builder takes a separate path for each:
 
 | Download | File | What is in it | How the wrapp gets the game |
 | --- | --- | --- | --- |
 | Windows | `.exe` | An InstallShield launcher with a disc's `Disk1` inside | Unpack it, then install as from a disc |
 | Mac | `.dmg` | TransGaming's Cider installer; its payload is the installed Windows game inside a Cider app | Take the game's folder out of the Cider app |
+| Mac, `-iso-` | `.dmg` | The game's Windows and Mac disc: a Cider installer whose payload is only Cider, beside the Windows release and its installer | Build the disc edition from it, as from the disc ([below](#mac-downloads-that-are-the-games-disc)) |
 
 ## Windows downloads
 
@@ -100,14 +101,9 @@ download, and the build reads it from there without mounting anything.
 `HER_INSTALLER_PATH` takes either too. An installer app copied out of its
 volume has no `installer/` beside it, and fails as not being Cider.
 
-A dual-platform disc's Mac installer (Shadow at the Water's Edge has one) is
-the same TransGaming installer, but it isn't a download: its `INSTALLDATA.tgz`
-is only Cider's shell, and the game is in the disc's spanned cabinets
-(`SAW1.cab`…), which its `tgInstall.plist` names under `DISK_0`, `DISK_1` and
-`CABMapping`. Taken as a download it would give a wrapp with the game's
-program and none of its files, so an installer with a `CABMapping` is refused
-(`CiderPackage.GameOnDiscs`), and the person is told to use the discs, which
-build through the Windows installer beside it.
+That is a download whose Cider app holds the game. Some Mac downloads' don't:
+they are the game's disc, and build as one
+([below](#mac-downloads-that-are-the-games-disc)).
 
 Cider's 32-bit runtime no longer starts on macOS, but the game inside is the
 Windows release. So `CiderPackage` extracts only the app's `Info.plist`, its
@@ -149,20 +145,89 @@ Windows updaters that look for the game their own installer registered, and a
 Cider build never ran one. It is also a later build than they patch: Twister's
 is from 2015, and its only patch, from 2010, fixes a GeForce 2/4 MX problem.
 
+### Mac downloads that are the game's disc
+
+From Shadow at the Water's Edge (2010) on, Her's discs are dual-platform: a
+hybrid disc whose Mac side holds the same TransGaming installer and whose
+Windows side holds the Windows installer and the game. Her's later Mac
+downloads are images of such a disc, named `cider-Nancy<code>-iso-<n>.dmg`
+(The Silent Spy, Labyrinth of Lies, The Captive Curse and Sea of Darkness
+were seen in failure reports). Mounted, one holds the Windows disc's files
+beside the installer: a `Setup.exe` (an autorun launcher, "Autorun2
+Application") and `Setup.msi` at the top, and the game either loose
+(The Silent Spy's `Files/Game/Spy.exe`) or in the installer's cabinets
+(Water's Edge's `SAW1.cab`…, spanned across both discs). Its
+`INSTALLDATA.tgz` is only Cider, with the game's program rebuilt for Cider
+and no data (19 MB for Water's Edge, 22 MB for The Silent Spy). Taking the
+game out of it, as from a download, fails: `tar` finds no `Program Files`
+(The Silent Spy's payload has none), or the wrapp has the program and none
+of its files.
+
+`tgInstall.plist` says which kind an installer is. Its `InstallFiles` is the
+installer's list of what it copies where, as `source:`, `target:` and
+`flags:` entries. A download's copies only its payload into the app as a whole
+(`target:/`) and its manual beside it. A disc's also copies the Windows files
+on the image into the app's Windows drive (`target:/output.app/Contents/Resources/transgaming/…`):
+The Silent Spy's copies `$INSTALLVOLUME/Files/Game/` to `c_drive/Program
+Files/Nancy Drew/The Silent Spy/`, and Water's Edge's unpacks its
+cabinets there, each file to the path `CABMapping`'s plist
+(`installer/NancyDrew.plist`) gives it. So `CiderPackage.game` is
+`.disc` when there is a `CABMapping` or such a copy, and `.payload`
+otherwise. Its discs are `DISK_<n>`, each a disc's name and a file on it
+(`$INSTALLVOLUME/SAW18.cab` for Water's Edge's disc 2); a disc whose file
+isn't on the image is missing from it.
+
+A disc's image builds as the disc does, not by Cider's list: the Windows
+installer installs the runtimes the game needs with it (`mfc90.dll`, which
+the Silent Spy's and Sea of Darkness's loose files lack), and some games
+check for their disc. The builder recognises the game (from the Cider
+installer's names, else as a disc is recognised), finds its Windows
+installer (`GameDetector.installerLookup`, refusing an image with none),
+and builds the bundle's disc edition, with the image as disc 1
+(`DiscInputs`), through `InstallerExecutor`: the disc kept in the wrapp,
+the game installed from it, and the disc's patches applied, as the image
+is the disc's build. The wrapp records the disc edition (`cd`) and the
+Her download source. An image holding every disc's files is the only disc,
+kept as D:, but installed from `disk-combined`, links to its files
+(`InstallerExecutor.everyDiscOnOne`), as two discs are: run from the CD
+drive, Windows Installer checks the drive's label against each later
+disc's in its media table ("SAW Disk 2"), and a silent install fails
+(`1612`, "Failed to ready media"); from C:, a fixed drive, it checks none.
+One missing a disc (the first disc of a two-disc game) asks for the next
+disc as a disc build does (`WrappBuildInput.getDisk2Path`, `DISK_2_PATH`
+headless), so a dual-platform disc's Mac installer, picked as a Mac
+download, builds too.
+
+A hybrid disc's image whose Mac side won't mount (macOS can no longer mount
+HFS) shows only its Windows side, with no Cider installer. One with a
+Windows installer by name is taken for the game's disc all the same; any
+other image that isn't Cider is refused.
+
+Only one sample of this kind has been built: Water's Edge's two discs'
+files copied into one Mac disk image (a sparse bundle), Mac installer and
+all. How closely Her's own `-iso-` images match it isn't known, as we have
+none; The Silent Spy's disc, which a failure report's file list matches, is
+laid out as above. A sparse bundle (a folder of bands, named `.dmg` or
+`.sparsebundle`) mounts as a `.dmg` does, and `HER_INSTALLER_PATH` and the
+installers store take one.
+
 ### Downloads that aren't Cider
 
 Some later games' Mac downloads may not be Cider builds. Her Interactive
-also made native Mac versions, for example. A DMG without the layout above
-fails the build with `WrappBuildError.unsupportedMacDownload`, whose message
-says to download the Windows version instead. Which games' Mac downloads are
-Cider, and whether the others could be used, isn't known yet. Answering that
-needs a sample of one.
+also made native Mac versions, for example. A DMG without the layout above,
+and without a Windows installer, fails the build with
+`WrappBuildError.unsupportedMacDownload`, whose message says to download
+the Windows version instead. Which games' Mac downloads are Cider, and
+whether the others could be used, isn't known yet. Answering that needs a
+sample of one.
 
 ## Testing
 
 - **Unit tests:** `HerDownloadTests` cover detection from an installer's
   embedded names, recognising and extracting a Cider package (built in the
-  test with `tar`), the path mapping, and `HER_INSTALLER_PATH`.
+  test with `tar`), telling a download from a disc by its `tgInstall.plist`
+  and the discs on the image, the path mapping, and `HER_INSTALLER_PATH`
+  (sparse bundles included).
 - **Integration tests:** `HerDownloadInstallIntegrationTests` builds and
   launches every download in the
   [installers store](testing.md#the-installers-store), each Her edition's

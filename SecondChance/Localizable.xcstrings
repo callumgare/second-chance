@@ -1133,9 +1133,6 @@
     "This is a program that's already installed, not what installs it. Second Chance needs to install it itself: choose its disc, or the installer you downloaded, instead." : {
 
     },
-    "This is the Mac installer from the game's discs, and the game itself is on the discs. Choose the discs instead." : {
-
-    },
     "This is the free first part of %@." : {
 
     },
