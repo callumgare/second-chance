@@ -1,6 +1,7 @@
 // The gather stage's sources: every place images come from (your files first), with what each is doing now
 // (a spinner while its gather job runs), how many images it gave, or why it gave none (needs a key, link only,
-// nothing found, failed). Clicking one filters the grid to it; "Gather again" re-runs POST …/gather.
+// nothing found, failed). Clicking one filters the grid to it; "Gather again" re-runs POST …/gather; each source's
+// ↻ clears it and gathers again, and its × clears it alone.
 import { useEffect, useMemo } from "react";
 import { api, type Job, type Media, type SourceInfo } from "../../api";
 import { useApp } from "../../state/app";
@@ -59,7 +60,8 @@ export function SourcesPanel({ slug, media, selected, onSelect, collapsed, onTog
         <div className="srclist">
           <SourceRow r={{ key: "all", name: "All sources", filter: "all", state: "done", count: media.length }} on={selected === "all"} onSelect={onSelect} />
           {main.map((r) => <SourceRow key={r.key} r={r} on={selected === r.filter} onSelect={onSelect}
-            onRegather={r.key.startsWith("x-") ? undefined : () => regather(slug, r, media)} />)}
+            onRegather={r.key.startsWith("x-") ? undefined : () => regather(slug, r, media)}
+            onClear={r.key.startsWith("x-") || r.count === 0 ? undefined : () => clear(slug, r, media)} />)}
           {unusable.length > 0 && <div className="srcsec">Not searched</div>}
           {unusable.map((r) => <SourceRow key={r.key} r={r} on={false} onSelect={() => {}} />)}
         </div>
@@ -68,7 +70,7 @@ export function SourcesPanel({ slug, media, selected, onSelect, collapsed, onTog
   );
 }
 
-function SourceRow({ r, on, onSelect, onRegather }: { r: Row; on: boolean; onSelect(s: string): void; onRegather?(): void }) {
+function SourceRow({ r, on, onSelect, onRegather, onClear }: { r: Row; on: boolean; onSelect(s: string): void; onRegather?(): void; onClear?(): void }) {
   const clickable = r.count > 0 || r.key === "all";
   const status = r.state === "running" ? "" : r.state === "queued" ? "waiting" : r.state === "failed" ? "failed"
     : r.state === "needsKey" ? "needs a key" : r.state === "linkOnly" ? "link only" : r.state === "disabled" ? "off"
@@ -86,16 +88,18 @@ function SourceRow({ r, on, onSelect, onRegather }: { r: Row; on: boolean; onSel
       </span>
       <span className="n">{r.state === "needsKey" || r.state === "linkOnly" || r.state === "disabled" ? "–" : r.count}</span>
     </button>
-    {onRegather && r.state !== "running" && r.state !== "queued" && (
-      <button className="src-regather" onClick={onRegather} aria-label={`Clear and gather again from ${r.name}`} title="Clear and gather again">↻</button>
+    {r.state !== "running" && r.state !== "queued" && (onRegather || onClear) && (
+      <span className="src-acts">
+        {onClear && <button className="src-regather" onClick={onClear} aria-label={`Clear the pictures from ${r.name}`} title="Clear its pictures">×</button>}
+        {onRegather && <button className="src-regather" onClick={onRegather} aria-label={`Clear and gather again from ${r.name}`} title="Clear and gather again">↻</button>}
+      </span>
     )}
     </div>
   );
 }
 
-/** Clears a source's pictures and gathers from it again, asking first when that would lose picks or pictures the
- *  open design uses. */
-async function regather(slug: string, r: Row, media: Media[]) {
+/** What clearing a source would lose: its pictures, the picks among them, and those the open design uses. */
+function losses(slug: string, r: Row, media: Media[]) {
   const files = r.key === "yours";
   const mine = files ? media.filter((m) => m.source === YOUR_FILES) : media.filter((m) => m.remote?.source === r.key || m.source === r.name);
   const picks = mine.filter((m) => m.picked || m.parts?.some((p) => p.picked)).length;
@@ -111,6 +115,30 @@ async function regather(slug: string, r: Row, media: Media[]) {
     }
   }
   const inDesign = mine.filter((m) => used.has(m.id)).length;
+  return { files, mine, picks, inDesign };
+}
+
+/** Clears a source's pictures without gathering again, asking first when that would lose picks or pictures the open
+ *  design uses. */
+async function clear(slug: string, r: Row, media: Media[]) {
+  const { files, mine, picks, inDesign } = losses(slug, r, media);
+  if (picks || inDesign) {
+    const lines = [`Clear the ${mine.length} pictures from ${r.name}?`];
+    if (picks) lines.push(`Your picks from it (${picks}) will be lost.`);
+    if (inDesign) lines.push(`The design you're working on uses ${inDesign === 1 ? "one of them" : `${inDesign} of them`}.`);
+    if (files) lines.push("They come back only by adding them again.");
+    if (!window.confirm(lines.join(" "))) return;
+  }
+  try {
+    const { removed } = await api.clearSources(slug, [files ? "files" : r.key]);
+    useApp.getState().say(`Cleared ${removed} ${removed === 1 ? "picture" : "pictures"} from ${r.name}`);
+  } catch (e) { useApp.getState().say(`Couldn't clear ${r.name}: ${(e as Error).message}`, "error"); }
+}
+
+/** Clears a source's pictures and gathers from it again, asking first when that would lose picks or pictures the
+ *  open design uses. */
+async function regather(slug: string, r: Row, media: Media[]) {
+  const { files, mine, picks, inDesign } = losses(slug, r, media);
   // Your files are scanned again from the paths scanned before; pictures added before those were remembered don't come back.
   let scans: { path: string }[] = [];
   if (files) {
@@ -119,12 +147,14 @@ async function regather(slug: string, r: Row, media: Media[]) {
   const names = [...new Set(scans.map((s) => s.path.replace(/\/+$/, "").split("/").pop() || s.path))];
   const nameList = names.length <= 3 ? names.join(", ") : `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
   if (files && !scans.length) {
-    const lines = [`Clear the ${mine.length} pictures from your files? They were added before Icon Lab remembered where from, so they won't come back by themselves — add them again with Add from files.`];
+    const lines = [`Clear the ${mine.length} pictures from your files? Icon Lab doesn't know where they were added from, so they won't come back by themselves — add them again with Add from files.`];
     if (picks) lines.push(`Your picks from them (${picks}) will be lost.`);
     if (inDesign) lines.push(`The design you're working on uses ${inDesign === 1 ? "one of them" : `${inDesign} of them`}.`);
     if (!window.confirm(lines.join(" "))) return;
   } else if (files || picks || inDesign) {
     const lines = [files ? `Clear the ${mine.length} pictures from your files and scan ${nameList} again?` : `Clear the ${mine.length} pictures from ${r.name} and gather again?`];
+    const dropped = files ? mine.filter((m) => m.deep?.byHand === true).length : 0;
+    if (dropped) lines.push(`The ${dropped === 1 ? "picture" : `${dropped} pictures`} you dropped in won't come back by themselves.`);
     if (picks) lines.push(`Your picks from it (${picks}) will be lost.`);
     if (inDesign) lines.push(`The design you're working on uses ${inDesign === 1 ? "one of them" : `${inDesign} of them`}.`);
     if (!window.confirm(lines.join(" "))) return;

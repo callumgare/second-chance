@@ -18,6 +18,7 @@ nonisolated public struct SourcePolicy: Sendable {
     public var media = false           // it has pictures to gather
 
     public static let table: [String: SourcePolicy] = [
+        "secondchance": .init(priority: -1),   // the host's own program: its title leads
         "wikidata": .init(priority: 0, media: true),
         "wikipedia": .init(priority: 1, media: true),
         "launchbox": .init(priority: 2, perPlatform: true, media: true),
@@ -254,7 +255,8 @@ nonisolated public enum Merger {
         let key = ids["wikidata"].map { "wikidata:\(IDSpace.split($0)[0])" } ?? "\(lead.source):\(lead.sourceId)"
         return ProgramResult(key: key, title: lead.title, year: year, platforms: platforms, developer: hits.compactMap(\.developer).first,
                              publisher: hits.compactMap(\.publisher).first, kind: kind(hits), thumb: thumb, ids: ids, links: links,
-                             hits: hits, mergeReasons: c.reasons, score: 0)
+                             hits: hits, mergeReasons: c.reasons.filter { !$0.isEmpty }, score: 0, mergedByYou: nil,
+                             bundleId: hits.first { $0.source == "secondchance" }?.sourceId)
     }
 
     static let thumbPriority = ["launchbox", "igdb", "steamgriddb", "screenscraper", "pcgamingwiki", "lutris", "gog", "wikipedia", "wikidata", "steam", "myabandonware"]

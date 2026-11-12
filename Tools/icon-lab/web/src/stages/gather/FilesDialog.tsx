@@ -1,10 +1,26 @@
-// "Add from files": our own path browser (real paths, nothing uploaded) over GET /api/fs, then the scan:
-// POST …/extract, with the unpacking drawn as a tree as it streams in. The wrapps the host has built (GET /api/wrapps)
-// are listed above the browser, each a one-click scan.
+// "Add from files" in a browser (`sc icon-lab serve`): our own path browser (real paths, nothing uploaded) over
+// GET /api/fs, then the scan: POST …/extract, which closes the dialog; its progress shows in its job in the activity
+// panel. The wrapps the host has built (GET /api/wrapps) are listed above the browser, each a one-click scan. In
+// Second Chance's window, macOS's open panel stands in for all of this (startScans).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type FSEntry, type FSListing, type Wrapp } from "../../api";
 import { useScans } from "../../state/scans";
-import { ScanView } from "./ScanTree";
+import { useApp } from "../../state/app";
+
+/** Starts a scan of each path; each opens its tree in the activity panel. The scans started. */
+export async function startScans(slug: string, paths: string[]): Promise<string[]> {
+  const started: string[] = [];
+  for (const path of paths) {
+    try {
+      const r = await api.extract(slug, path);
+      useScans.getState().start(r.scan, slug, path);
+      started.push(r.scan);
+    } catch (e) {
+      useApp.getState().say(`Couldn't scan ${path.split("/").pop()}: ${(e as Error).message}`, "error");
+    }
+  }
+  return started;
+}
 
 const TYPE_LABELS: Record<string, string> = {
   wrapp: "Game app", app: "Mac app", "disc-image": "Disc image", installer: "Installer", archive: "Archive", program: "Program", image: "Image", folder: "Folder", other: "",
@@ -18,7 +34,7 @@ const recall = () => { try { return localStorage.getItem(LAST) ?? undefined; } c
 
 const fmtSize = (n?: number) => n == null ? "" : n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${Math.round(n / 1024)} KB` : n < 1024 ** 3 ? `${(n / 1024 ** 2).toFixed(n < 10 * 1024 ** 2 ? 1 : 0)} MB` : `${(n / 1024 ** 3).toFixed(1)} GB`;
 
-export function FilesDialog({ slug, scan: initialScan, onClose, onShowImages }: { slug: string; scan: string | null; onClose(): void; onShowImages(): void }) {
+export function FilesDialog({ slug, onClose, onStarted }: { slug: string; onClose(): void; onStarted(scan: string): void }) {
   const [cols, setCols] = useState<FSListing[]>([]);
   const [places, setPlaces] = useState<FSEntry[]>([]);
   const [sel, setSel] = useState<FSEntry | null>(null);
@@ -29,7 +45,6 @@ export function FilesDialog({ slug, scan: initialScan, onClose, onShowImages }: 
   const [error, setError] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
-  const [scan, setScan] = useState<string | null>(initialScan);
   const [wrapps, setWrapps] = useState<Wrapp[]>([]);
   useEffect(() => { api.wrapps().then(setWrapps).catch(() => setWrapps([])); }, []);
   const colsRef = useRef<HTMLDivElement>(null);
@@ -54,7 +69,7 @@ export function FilesDialog({ slug, scan: initialScan, onClose, onShowImages }: 
     }
   }, [hidden]);
 
-  useEffect(() => { if (!scan) void open(cols[cols.length - 1]?.path ?? recall()); }, [hidden]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void open(cols[cols.length - 1]?.path ?? recall()); }, [hidden]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape" && !(e.target as HTMLElement).closest("input")) onClose(); };
@@ -66,7 +81,7 @@ export function FilesDialog({ slug, scan: initialScan, onClose, onShowImages }: 
     try {
       const r = await api.extract(slug, path);
       useScans.getState().start(r.scan, slug, path);
-      setScan(r.scan);
+      onStarted(r.scan);
     } catch (e) {
       setScanError((e as Error).message);
     } finally { setStarting(false); }
@@ -74,16 +89,6 @@ export function FilesDialog({ slug, scan: initialScan, onClose, onShowImages }: 
 
   const target = sel ?? (cols.length ? { name: cols[cols.length - 1].path.split("/").pop() || "/", path: cols[cols.length - 1].path, dir: true, type: "folder" as const } : null);
   const shownEntries = (l: FSListing) => l.entries.filter((e) => !recognised || e.dir || e.type !== "other");
-
-  if (scan) {
-    return (
-      <div className="scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-        <div className="dlg wide" role="dialog" aria-label="Finding images in your files">
-          <ScanView scanId={scan} onClose={onClose} onShowImages={onShowImages} onAnother={() => { setScan(null); void open(cols[cols.length - 1]?.path ?? recall()); }} />
-        </div>
-      </div>
-    );
-  }
 
   const lastCol = cols[cols.length - 1];
   return (

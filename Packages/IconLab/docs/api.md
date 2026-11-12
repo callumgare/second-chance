@@ -140,7 +140,9 @@ type ProgramResult = {
   links: Record<string, string>      // source id → page (link-only sites too: MobyGames, Macintosh Garden, Discmaster…)
   hits: ProgramHit[]                 // what it was merged from
   mergeReasons: string[]             // "“Myst” 1993 (LaunchBox) — same Wikidata item (Q6497116)", "… — title, year and developer match"
-  score: number }                    // 0…100
+  score: number                      // 0…100
+  mergedByYou?: boolean              // the person merged it (see Merging results): it can be unmerged
+  bundleId?: string }                // one of its hits is the host's program with this bundle id
 
 type ProgramHit = { source: string; sourceId: string; title: string; alternateTitles: string[]; year?: number
   platforms: string[]; developer?: string; publisher?: string; kind?: string; thumb?: string; url?: string
@@ -152,7 +154,28 @@ Id namespaces in `ids`: `wikidata`, `wikipedia` (page title), `launchbox`, `theg
 `macintoshrepository`, `macintoshgarden`, `myabandonware`, `winworld`, `mobygames`, `mobygames-slug`, `gamefaqs`,
 `winehq`, `abandonia`, `oldgamesru`, `abandonwarefrance`, `commonscat`.
 
-`POST /api/programs` `{ result: ProgramResult }` → `ProgramSummary` (201). Makes the program: its slug from the title
+The host's own programs (`GET /api/known-programs`) take part in every search as hits of the source `secondchance`
+(id: the bundle id; ids: those its program already has), those whose titles share a word with the query, so the
+automatic merge matches each with the catalogues' entries; a result holding one has `bundleId`, and the snapshot's
+sources list "Second Chance" first.
+
+### Merging results
+
+When the automatic merge misses (or joins what isn't one program), the person says so, and it's remembered in
+`merges.json` in the data folder, applied to every search after the automatic merge. A hit is named by its key,
+`<source>:<sourceId>` (`secondchance:tivola/webmaster` for a host's program).
+
+`GET /api/merges` → `{ groups: string[][]; apart: string[] }`: sets of hits that are one program, and hits kept out of
+the automatic merge.
+
+`POST /api/merges` with one of `{ merge: string[] }` (these hits are one program; a group already holding one of them
+joins it), `{ separate: string }` (take this hit out of its program: out of any group, and kept apart from the
+automatic merge) or `{ unmerge: string[] }` (forget the groups holding these hits and let them merge by themselves
+again) → the rules. Every live search is sent again with the change. A merged result gathers from every entry it
+holds, as its `ids` are all of theirs.
+
+`POST /api/programs` `{ result: ProgramResult }` → `ProgramSummary` (201). A result with `bundleId` opens that host's
+program instead (as `POST /api/known-programs/open`), adding the result's ids to its `program.json`. Makes the program: its slug from the title
 (with the year when the slug is taken by another program; the same program again reuses its folder), and
 `program.json` with its title, year, ids and platforms. Recent programs are `GET /api/programs`.
 
@@ -167,6 +190,9 @@ The source id `"files"` is "Your files": gathering it again scans every path sca
 as `extract` does; with `clear`, its pictures and the old scans are removed first. Its scan jobs carry `source: "files"`.
 `GET /api/programs/:slug/scans` → `{ scan, path, at }[]`, newest first: what has been scanned (scans from before
 paths were recorded aren't listed, so "Your files" from them can be cleared but not scanned again).
+
+`POST /api/programs/:slug/clear` `{ sources: string[] }` → `{ removed }` — removes every picture those sources found
+(`"files"`: Your files, whose scans are forgotten too), without gathering again, and sends `media-removed`.
 
 Queues a job per ready media source (group `"gather"`, titled "Gather · LaunchBox" and so on). Each finds the
 program's pictures there (by the ids in `program.json`, else by its title), downloads a small copy of each new one (the
@@ -209,7 +235,12 @@ type Event =
   | SearchEvent                                       // a search's progress (see Search)
 
 type Job = { id: string; program?: string; title: string; state: "queued" | "running" | "done" | "failed"
-  progress: number /* 0…1 */; eta?: number /* seconds */; detail?: string; group?: string }
+  progress: number /* 0…1 */; eta?: number /* seconds */; detail?: string; group?: string
+  source?: string /* a gather job's source */; scan?: string /* a scan job's scan id (its `scan` events) */
+  started?: string; finished?: string }
+
+A cancelled job ends `failed` with a detail starting `"cancelled"`; what it had already added is kept (a scan says
+how many pictures it kept: `"cancelled · kept 12 pictures"`).
 ```
 
 `GET /api/jobs` → `Job[]` (for a page that connects late).
@@ -253,11 +284,16 @@ type FSEntry = { name: string; path: string; dir: boolean; size?: number
 ```
 
 `POST /api/programs/:slug/extract` `{ path }` → `{ scan }` — finds every image in a wrapp, installer, disc image or
-folder with WrappKit's `ProgramImages`, in the engine's process (a job, group "scan"; cancelling the job stops the
-crawl). Its progress streams as events `{ type: "scan", program, scan, event }`, where `event` is one of the
+folder with WrappKit's `ProgramImages`, in the engine's process (a job, group "scan", carrying `scan`; cancelling the
+job stops the crawl, and the pictures it had found are still added). A path that is a picture itself is always
+added, however the extractor ranks it; otherwise images it ranks low are left out. Its progress streams as events `{ type: "scan", program, scan, event }`, where `event` is one of the
 extraction's JSON lines, as `icon-extract` writes them (`node`, `image`, `skip`, `progress`, `done` — see the repo's
 docs/program-images.md) — enough to draw the unpacking tree live. The images it finds arrive as `media` events
 (source "Your files", with `provenance`).
+
+`POST /api/programs/:slug/media/upload?name=<file name>` with the picture's bytes as the body → `Media` (201) — a
+picture dropped in from the computer: added as "Your files" (`provenance` "Added by you › …", `deep.byHand: true`),
+picked, with suitability 5, and analysed. 500 when it isn't a picture.
 
 ## The host's programs
 
@@ -274,6 +310,8 @@ programs the host has bundles for (`id` is the bundle id, `freeware/skifree`; `s
 
 `POST /api/known-programs/open` `{ id }` → `{ slug }`, 201 when the program was made, 200 when it was there. Its
 `program.json` records the bundle as `bundleId`, which `GET /api/programs` and `GET /api/programs/:slug` give too.
+A program made here is found in the catalogues first (a job, group `"match"`: a search for its title, keeping the ids
+of the result its hit merged into), then gathered.
 
 `GET /api/wrapps` → `{ name, path, bundleIdentifier?, modified? }[]`, newest first: the apps in the host's built-apps
 folder, which "Add from files" offers to scan with one click.

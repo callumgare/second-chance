@@ -1,56 +1,31 @@
-// A scan's unpacking, drawn as a tree as icon-extract's lines arrive: each container opened, what it was
+// A scan's unpacking, drawn as a tree in its job in the activity panel as icon-extract's lines arrive: each container opened, what it was
 // found to be, the images in it, and what was skipped and why.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useScans, type Scan, type ScanNode } from "../../state/scans";
-import { useJobs } from "../../state/jobs";
-import { fmtEta } from "./ActivityDock";
+import type { Job } from "../../api";
 
 const MAX_CHILDREN = 120;
 const KIND_WORDS: Record<string, string> = { volume: "volume", resource: "resource", fork: "resource fork", overlay: "appended data", carved: "found by signature", frame: "video frame", entry: "" };
 
-export function ScanView({ scanId, onClose, onShowImages, onAnother }: { scanId: string; onClose(): void; onShowImages(): void; onAnother(): void }) {
+/** A scan's tree, inside its job in the activity panel: what was opened, the images found in each, what was skipped,
+ *  and how it ended. Follows the newest line while scrolled to the bottom. */
+export function ScanTreeBody({ scanId, job }: { scanId: string; job?: Job }) {
   const sc = useScans((s) => s.scans[scanId]);
-  const jobs = useJobs((s) => s.jobs);
-  // The scan's job (group "scan") says when it failed, and when its images have been added.
-  const job = useMemo(() => [...jobs.values()].reverse().find((j) => j.group === "scan" && (!sc?.path || j.title.includes(sc.path.split("/").pop() ?? "\u0000"))), [jobs, sc?.path]);
   const box = useRef<HTMLDivElement>(null);
   const [follow, setFollow] = useState(true);
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => { const t = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(t); }, []);
   useEffect(() => { if (follow && box.current) box.current.scrollTop = box.current.scrollHeight; });
-
   const counts = useMemo(() => (sc ? countImages(sc) : new Map<number, { all: number; fresh: number }>()), [sc]);
-  const name = sc?.path?.split("/").pop() ?? "your files";
   const failed = job?.state === "failed" || !!sc?.error;
-  const finished = !!sc?.done && (!job || job.state === "done");
   const p = sc?.progress;
-  const fraction = finished ? 1 : sc?.done ? 0.95 : p ? Math.min(0.95, p.nodes / Math.max(1, p.nodes + p.queued)) : 0.02;
-  const elapsed = sc ? (now - sc.started) / 1000 : 0;
-  const eta = fraction > 0.05 && !finished ? (elapsed / fraction) * (1 - fraction) : undefined;
-
   return (
-    <>
-      <header>
-        <h2>{finished ? `Found images in ${name}` : failed ? `The scan of ${name} stopped` : `Finding images in ${name}`}</h2>
-        <div className="row">
-          <div className="bar" style={{ flex: 1 }}><i style={{ width: `${Math.round(fraction * 100)}%`, background: failed ? "var(--bad)" : undefined }} /></div>
-          <span className="muted">{finished ? `done in ${sc?.done?.seconds ?? Math.round(elapsed)} s` : failed ? "failed" : `${Math.round(fraction * 100)}%${eta ? ` · about ${fmtEta(eta)} left` : ""}`}</span>
-        </div>
-      </header>
-      <div className="tree" ref={box} onScroll={(e) => { const el = e.currentTarget; setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 30); }}>
-        {!sc || !sc.roots.length ? <div className="faint">{failed ? "" : "Starting…"}</div> : sc.roots.map((r, i) => <NodeLines key={r} sc={sc} id={r} prefix="" last={i === sc.roots.length - 1} root counts={counts} />)}
-        {sc && sc.looseSkips.length > 0 && <Skipped skips={sc.looseSkips} prefix="" />}
-        {(sc?.error || job?.state === "failed") && <div className="tl"><span className="warn">! {sc?.error ?? job?.detail ?? "The scan failed."}</span></div>}
-        {sc?.done && <div className="tl summary">{sc.done.images} images in {sc.done.families} families kept from {sc.done.nodes} items · {sc.done.skipped} skipped{job && job.state !== "done" && !failed ? " · adding them…" : ""}</div>}
-        {!sc?.done && p && <div className="tl summary">{p.images} images so far · {p.nodes} items opened · {p.queued} still to open</div>}
-      </div>
-      <footer>
-        <span className="muted" style={{ marginRight: "auto" }}>{finished ? "The images are in “From your files”." : "You can close this; the scan carries on in the activity panel."}</span>
-        <button className="btn" onClick={onAnother}>Scan something else</button>
-        <button className="btn" onClick={onClose}>Close</button>
-        <button className="btn primary" onClick={onShowImages} disabled={!finished && !p?.images}>Show images</button>
-      </footer>
-    </>
+    <div className="tree scan-tree" ref={box} onScroll={(e) => { const el = e.currentTarget; setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 30); }}>
+      {!sc || !sc.roots.length ? <div className="faint">{failed ? "" : job && job.state !== "running" && job.state !== "queued" ? "This scan's details are from before the page opened." : "Starting…"}</div>
+        : sc.roots.map((r, i) => <NodeLines key={r} sc={sc} id={r} prefix="" last={i === sc.roots.length - 1} root counts={counts} />)}
+      {sc && sc.looseSkips.length > 0 && <Skipped skips={sc.looseSkips} prefix="" />}
+      {(sc?.error || job?.state === "failed") && <div className="tl"><span className="warn">! {sc?.error ?? job?.detail ?? "The scan failed."}</span></div>}
+      {sc?.done && <div className="tl summary">{sc.done.images} images in {sc.done.families} families found in {sc.done.nodes} items · {sc.done.skipped} skipped{job && job.state !== "done" && !failed ? " · adding them…" : job?.detail ? ` · ${job.detail}` : ""}</div>}
+      {!sc?.done && p && <div className="tl summary">{p.images} images so far · {p.nodes} items opened · {p.queued} still to open</div>}
+    </div>
   );
 }
 

@@ -83,6 +83,21 @@ nonisolated extension IconLabAPI {
             return try json(["scan": scan])
         }
 
+        // A picture dropped in from the Finder: the file's bytes as the body, its name in `?name=`.
+        router.post("/api/programs/:slug/media/upload") { c in
+            let slug = try c.param("slug")
+            guard !c.request.body.isEmpty else { throw APIError(400, "no picture in the body") }
+            let rec = try await lab.addOwnPicture(slug, name: c.request.query("name") ?? "picture.png", data: c.request.body)
+            return try json(lab.dto(slug, rec), status: 201)
+        }
+
+        router.post("/api/programs/:slug/clear") { c in
+            let b = try decode(ClearBody.self, c.request)
+            var removed = 0
+            for s in b.sources { removed += try await lab.clearSource(try c.param("slug"), s) }
+            return try json(["removed": removed])
+        }
+
         router.get("/api/fs") { c in
             let hidden = c.request.query("hidden") == "1"
             return try json(lab.listFiles(c.request.query("path"), showHidden: hidden))
@@ -98,3 +113,4 @@ nonisolated struct PreviewOut: Encodable { var url: String; var box: [Double] }
 nonisolated struct UpscaleBody: Decodable { var program: String; var asset: String; var mode: String? }
 nonisolated struct UpscaleOut: Encodable { var asset: String; var url: String; var width: Int; var height: Int }
 nonisolated struct ExtractBody: Decodable { var path: String }
+nonisolated struct ClearBody: Decodable { var sources: [String] }

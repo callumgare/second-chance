@@ -10,8 +10,8 @@ import { loadImage, resources } from "../../render/resources";
 import { drawInBox, drawSketch, layerBox, pickLayer } from "../../render/sketch";
 import { useApp } from "../../state/app";
 import { selectedLayerIds, useDesign } from "../../state/design";
-import { addPartLayer, addShapeLayer, clickLayer } from "./actions";
-import { PART_DRAG, SHAPE_DRAG } from "./AddSection";
+import { clickLayer, insertLayers } from "./actions";
+import { designDrag, layersFromDrop } from "../../lib/drop";
 import { SmallPreviews } from "./SmallPreviews";
 import { panBy, useZoom, zoomBy, zoomFit, zoomForProgram, zoomStep } from "../../state/zoom";
 
@@ -269,17 +269,13 @@ export function EditorCanvas() {
     applyMulti(node, 1);
   };
 
+  // A tile from the Add section, or pictures from the computer (added to Gather first): placed where dropped.
   const onDrop = (e: React.DragEvent) => {
-    const shape = e.dataTransfer.getData(SHAPE_DRAG);
-    if (shape) { e.preventDefault(); addShapeLayer(shape as never); return; }
-    const key = e.dataTransfer.getData(PART_DRAG);
-    const [mid, pid] = key.split("/");
-    const m = mid ? useApp.getState().media.get(mid) : null;
-    const p = m?.parts?.find((x) => x.id === pid);
-    if (!m || !p) return;
+    if (!designDrag(e.dataTransfer) || !doc) return;
     e.preventDefault();
     const r = wrap.current!.getBoundingClientRect();
-    addPartLayer(m, p, { x: (e.clientX - r.left - ox) / S, y: (e.clientY - r.top - oy) / S }, true);
+    const at = { x: (e.clientX - r.left - ox) / S, y: (e.clientY - r.top - oy) / S };
+    void layersFromDrop(doc.program, e.dataTransfer, at).then((layers) => insertLayers(layers));
   };
 
   if (!doc) return <div ref={wrap} className={"stage backdrop-" + backdrop}><div className="empty" style={{ color: "#fff" }}><span className="spin" /> Loading the design…</div></div>;
@@ -287,7 +283,7 @@ export function EditorCanvas() {
   const showReal = glass && real.img && !transient;
 
   return (
-    <div ref={wrap} className={"stage backdrop-" + backdrop} onDragOver={(e) => { if ((e.dataTransfer.types.includes(PART_DRAG) || e.dataTransfer.types.includes(SHAPE_DRAG))) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }} onDrop={onDrop}>
+    <div ref={wrap} className={"stage backdrop-" + backdrop} onDragOver={(e) => { if (designDrag(e.dataTransfer)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }} onDrop={onDrop}>
       <Stage width={box.w} height={box.h} onMouseDown={onDown}>
         <KLayer ref={layerRef}>
           <Group x={ox} y={oy}>

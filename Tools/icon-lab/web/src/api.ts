@@ -212,6 +212,8 @@ export type RemoteMedia = {
 }
 
 export type DeepFindings = {
+  /** Added by hand (dropped in from the computer): top of the scale, and not found again by a scan. */
+  byHand?: boolean
   aesthetics?: number; utility?: boolean
   faces?: number; faceBoxes?: number[][]
   rectangle?: number[][]
@@ -241,7 +243,15 @@ export type ProgramResult = {
   key: string; title: string; year?: number; platforms: string[]; developer?: string; publisher?: string
   kind?: string; thumb?: string; ids: Record<string, string>; links: Record<string, string>
   hits: ProgramHit[]; mergeReasons: string[]; score: number
+  /** The person merged it: it can be unmerged. */
+  mergedByYou?: boolean
+  /** One of its hits is the host's program with this bundle id (source "secondchance"). */
+  bundleId?: string
 }
+
+/** The person's merges (`GET /api/merges`): hit keys (`<source>:<id>`) that are one program, and hits kept apart. */
+export type MergeRules = { groups: string[][]; apart: string[] };
+export const hitKey = (h: ProgramHit) => `${h.source}:${h.sourceId}`;
 
 export type ModelStatus = { name: string; purpose: string; size: number; licence: string; source: string
   state: "absent" | "downloading" | "compiling" | "ready" | "failed"; progress?: number; error?: string }
@@ -290,6 +300,8 @@ export type DocsState = { docs: Doc[]; pins: string[]; current: string | null }
 export type Job = {
   id: string; program?: string; title: string; state: "queued" | "running" | "done" | "failed"
   progress: number; eta?: number; detail?: string; group?: string; source?: string
+  /** A scan job's scan: its `scan` events are this id's. */
+  scan?: string
   started?: string; finished?: string
 }
 
@@ -423,6 +435,10 @@ export const api = {
   searchSnapshot: (id: string) => id.startsWith("mock-search-")
     ? mockSearch().then((m) => m.snapshot(id))
     : req<SearchSnapshot>("GET", `/api/search/${enc(id)}`),
+  /** Merges these hits into one program, separates one, or undoes the merges holding them. The live searches are
+   *  sent again with the change. */
+  changeMerges: (change: { merge: string[] } | { separate: string } | { unmerge: string[] }) =>
+    req<MergeRules>("POST", "/api/merges", change),
   createProgram: (result: ProgramResult) => req<ProgramSummary>("POST", "/api/programs", { result }),
   /** `sources`: only these; `clear`: first remove every picture they found before. */
   gather: (slug: string, opts: { brave?: boolean; sources?: string[]; clear?: boolean } = {}) => req<{ jobs?: string[] }>("POST", `/api/programs/${enc(slug)}/gather`, opts),
@@ -464,6 +480,22 @@ export const api = {
   fs: (path?: string, hidden = false) => req<FSListing>("GET", `/api/fs?${new URLSearchParams({ ...(path ? { path } : {}), ...(hidden ? { hidden: "1" } : {}) })}`),
   scans: (slug: string) => req<{ scan: string; path: string; at?: string }[]>("GET", `/api/programs/${enc(slug)}/scans`),
   extract: (slug: string, path: string) => req<{ scan: string }>("POST", `/api/programs/${enc(slug)}/extract`, { path }),
+  /** Adds a picture dropped in from the computer (its bytes): a Your files picture, picked, at the top of the scale. */
+  uploadPicture: async (slug: string, file: File): Promise<Media> => {
+    if (transport.kind === "mock") throw new ApiError(501, "Dropping pictures in needs the engine");
+    const res = await fetch(`/api/programs/${enc(slug)}/media/upload?${new URLSearchParams({ name: file.name })}`, {
+      method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      let message = text.trim();
+      try { const j = JSON.parse(text); message = j?.error?.message ?? j?.error ?? j?.message ?? message; } catch { /* not JSON */ }
+      throw new ApiError(res.status, String(message || `upload: ${res.status}`));
+    }
+    return (await res.json()) as Media;
+  },
+  /** Removes every picture these sources found ("files" for Your files), without gathering again. */
+  clearSources: (slug: string, sources: string[]) => req<{ removed: number }>("POST", `/api/programs/${enc(slug)}/clear`, { sources }),
   cancelJob: (id: string) => req<{ cancelled: boolean }>("POST", `/api/jobs/${enc(id)}/cancel`),
 
   // the host's programs and wrapps (none under the mock, or in a host that has none)

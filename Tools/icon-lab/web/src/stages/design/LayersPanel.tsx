@@ -1,5 +1,6 @@
 // The layers: up to four groups, front first, each with its layers. Select, hide, rename, duplicate, delete;
-// drag to reorder or move a layer to another group.
+// drag to reorder or move a layer to another group. Tiles from the Add section and pictures from the computer can be
+// dropped on a group, before the layer they're dropped on.
 import { useEffect, useRef, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, KeyboardSensor, useDroppable, useSensor, useSensors, closestCenter, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -12,7 +13,8 @@ import { Menu, usePopup } from "../../components/Popup";
 import { AddSection } from "./AddSection";
 import { ResizeHandle } from "../../components/ResizeHandle";
 import { copySelection, cutSelection, pasteFrom } from "./clipboard";
-import { addGroup, clickLayer, deleteGroup, deleteLayer, deleteSelected, duplicateLayer, duplicateSelected, editLayer, moveGroup, moveLayer, selIds } from "./actions";
+import { designDrag, layersFromDrop } from "../../lib/drop";
+import { addGroup, insertLayers, clickLayer, deleteGroup, deleteLayer, deleteSelected, duplicateLayer, duplicateSelected, editLayer, moveGroup, moveLayer, selIds } from "./actions";
 
 export function LayersPanel() {
   const doc = useDesign((s) => s.doc);
@@ -87,8 +89,20 @@ function GroupRows({ g, index, count, program, selected }: { g: Group; index: nu
   const { setNodeRef, isOver } = useDroppable({ id: "group:" + g.id });
   const on = selected?.kind === "group" && selected.id === g.id;
   const st = useDesign.getState;
+  const [fileOver, setFileOver] = useState(false);
+  // Dropped on a layer: before it; on the group's row: at the front; anywhere else in the group: at the back.
+  const onDrop = (e: React.DragEvent) => {
+    setFileOver(false);
+    if (!designDrag(e.dataTransfer)) return;
+    e.preventDefault();
+    const row = (e.target as HTMLElement).closest("[data-layer-index]") as HTMLElement | null;
+    const index = row ? Number(row.dataset.layerIndex) : (e.target as HTMLElement).closest(".lr.g") ? 0 : g.layers.length;
+    void layersFromDrop(program, e.dataTransfer).then((layers) => insertLayers(layers, { group: g.id, index }));
+  };
   return (
-    <div ref={setNodeRef} className={"lgroup" + (isOver ? " over" : "")}>
+    <div ref={setNodeRef} className={"lgroup" + (isOver || fileOver ? " over" : "")}
+      onDragOver={(e) => { if (designDrag(e.dataTransfer)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setFileOver(true); } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFileOver(false); }} onDrop={onDrop}>
       <div className={"lr g" + (on ? " on" : "")} onClick={() => st().select({ kind: "group", id: g.id })} role="treeitem" aria-expanded={open}>
         <button className="icon-btn" onClick={(e) => { e.stopPropagation(); setOpen(!open); }} aria-label={open ? "Collapse" : "Expand"}>{open ? "▾" : "▸"}</button>
         <Rename value={g.name} onChange={(name) => st().edit((d) => { const x = d.groups.find((y) => y.id === g.id); if (x) x.name = name; })} />
@@ -108,7 +122,7 @@ function GroupRows({ g, index, count, program, selected }: { g: Group; index: nu
       </div>
       {open && (
         <SortableContext items={g.layers.map((l) => l.id)} strategy={verticalListSortingStrategy}>
-          {g.layers.map((l) => <LayerRow key={l.id} l={l} program={program} on={(selected?.kind === "layer" && selected.id === l.id) || (selected?.kind === "layers" && selected.ids.includes(l.id))} inGroup={on} />)}
+          {g.layers.map((l, i) => <LayerRow key={l.id} index={i} l={l} program={program} on={(selected?.kind === "layer" && selected.id === l.id) || (selected?.kind === "layers" && selected.ids.includes(l.id))} inGroup={on} />)}
           {!g.layers.length && <div className="lr in faint empty-group">Empty: drag a layer here</div>}
         </SortableContext>
       )}
@@ -116,7 +130,7 @@ function GroupRows({ g, index, count, program, selected }: { g: Group; index: nu
   );
 }
 
-function LayerRow({ l, program, on, inGroup }: { l: Layer; program: string; on: boolean; inGroup?: boolean }) {
+function LayerRow({ l, index, program, on, inGroup }: { l: Layer; index: number; program: string; on: boolean; inGroup?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: l.id });
   const menu = usePopup();
   const ref = useRef<HTMLDivElement | null>(null);
@@ -125,7 +139,7 @@ function LayerRow({ l, program, on, inGroup }: { l: Layer; program: string; on: 
   return (
     <div ref={(el) => { setNodeRef(el); ref.current = el; }} className={"lr in" + (on ? " on" : "") + (inGroup ? " ingroup" : "") + (l.hidden ? " hidden" : "")}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.35 : undefined }}
-      onClick={(e) => clickLayer(l.id, e, "panel")} {...attributes} {...listeners} role="treeitem" aria-selected={on}>
+      onClick={(e) => clickLayer(l.id, e, "panel")} {...attributes} {...listeners} role="treeitem" aria-selected={on} data-layer-index={index}>
       <button className={"icon-btn" + (l.hidden ? " off" : "")} onClick={(e) => { e.stopPropagation(); editLayer(l.id, (x) => { x.hidden = !x.hidden || undefined; }); }} onPointerDown={(e) => e.stopPropagation()} aria-label={l.hidden ? "Show layer" : "Hide layer"}>{l.hidden ? "◌" : "●"}</button>
       <LayerThumb program={program} layer={l} />
       <span className="lname">

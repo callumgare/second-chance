@@ -6,7 +6,9 @@ records where each was found, folds duplicates and sizes of the same art togethe
 them by how likely each is to be the program's own icon. `icon-extract` is its command-line
 tool. Icon Lab, which designs a Mac icon for an old program, calls the library in its own
 process (`ProgramImageExtractor.extract`, whose crawl stops when its task is cancelled, or
-when `ExtractionOptions.isCancelled` says so) and reads the same records and events.
+when `ExtractionOptions.isCancelled` says so; with `keepWhatWasFoundWhenCancelled` it still
+ranks and writes what it found before stopping, and its summary says `stoppedEarly`) and
+reads the same records and events.
 
 It builds on `WindowsFormats` (PE and NE resources, icon groups, `.ico`, shortcuts,
 `autorun.inf`, MSI streams) and `ClassicMacFormats` (resource forks, MacBinary, AppleSingle

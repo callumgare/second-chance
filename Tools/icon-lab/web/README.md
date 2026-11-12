@@ -53,10 +53,15 @@ Routes are hashes: `#/` (choose a program), `#/p/<slug>/find|gather|design|revie
 ## Stages 1 and 2
 
 - `src/stages/find/`: the search (streams `search` snapshots from the event socket, polling as a fallback), kind
-  chips, "why merged", recents and the sources panel. `src/state/search.ts` holds the snapshots.
-- `src/stages/gather/`: the grouped, virtualised grid with filters and folded duplicates (`GatherStage`), cards,
-  the inspector with its overlays, the docked activity panel, the path browser and live scan tree (`FilesDialog`,
-  `ScanTree`, with `src/state/scans.ts` building the tree from icon-extract's lines), and the wait before designing.
+  chips, "why merged" with Separate and Unmerge, "Merge results…" (`POST /api/merges`), recents and the sources
+  panel. `src/state/search.ts` holds the snapshots.
+- `src/stages/gather/`: the virtualised grid, every picture in one list by the chosen sort, with filters and folded
+  duplicates (`GatherStage`), cards (🔍 opens the Lightbox), the inspector with its overlays, the docked activity
+  panel (resizable; Cancel on every job; a scan's tree in its job: `ScanTree`, with `src/state/scans.ts` building
+  it from icon-extract's lines), the path browser for a browser host (`FilesDialog`; the app shows its open panel,
+  `host.ts`'s `chooseFiles`), and the wait before designing.
+- `src/lib/drop.ts`: pictures dropped from the computer (uploaded as Your files) and the Add section's tiles, onto
+  the grid, the canvas or the layers. The tiles are `div`s: WebKit never starts a drag from a `button`.
 - Under `?mock`, `src/mock/search.ts` stands in for the catalogues and `mock-data/scan-sample.jsonl` (a real
   icon-extract run) is replayed when you scan a `.app`.
 - The status bar's "Models" opens the on-device models' states (`GET /api/models`, `model` events), with Download

@@ -14,9 +14,12 @@ export type HostMessage =
   | { type: "copy"; text: string };
 
 type AppBridge = { postMessage(m: HostMessage): void };
+/** A question the page awaits the app's answer to (`iconLabAsk`, a WKScriptMessageHandlerWithReply). */
+export type HostQuestion = { type: "chooseFiles" };
+type AskBridge = { postMessage(m: HostQuestion): Promise<unknown> };
 declare global {
   interface Window {
-    webkit?: { messageHandlers?: { iconLab?: AppBridge } };
+    webkit?: { messageHandlers?: { iconLab?: AppBridge; iconLabAsk?: AskBridge } };
     /** What the app calls: `event` with each engine event (a JSON string or the object itself). */
     iconLabHost?: { event(e: string | object): void };
   }
@@ -71,6 +74,17 @@ window.iconLabHost = {
     appListeners.forEach((l) => l(v));
   },
 };
+
+/** Whether the host has its own file chooser (macOS's open panel in the app). */
+export const hasNativeChooser = (): boolean => !!window.webkit?.messageHandlers?.iconLabAsk;
+
+/** Asks the app to show its open panel; the paths chosen (none when cancelled). Only when `hasNativeChooser()`. */
+export async function chooseFiles(): Promise<string[]> {
+  const ask = window.webkit?.messageHandlers?.iconLabAsk;
+  if (!ask) return [];
+  const r = await ask.postMessage({ type: "chooseFiles" });
+  return Array.isArray(r) ? r.filter((p): p is string => typeof p === "string") : [];
+}
 
 /** Opens a link outside the page: the person's browser in the app, a new tab in dev. */
 export function openLink(url: string) {

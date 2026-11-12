@@ -30,6 +30,30 @@ nonisolated extension IconLabAPI {
             return try json(s, status: 201)
         }
 
+        router.post("/api/known-programs/open") { c in
+            let id = try decode(KnownBody.self, c.request).id
+            let (slug, created) = try await lab.openKnown(id)
+            if created { await catalog.matchThenGather(slug, bundle: id) }
+            return try json(["slug": slug], status: created ? 201 : 200)
+        }
+
+        router.get("/api/merges") { _ in try json(await catalog.mergeRules()) }
+
+        router.post("/api/merges") { c in
+            let b = try decode(MergeBody.self, c.request)
+            let change: Catalog.MergeChange
+            if let keys = b.merge, keys.count > 1 {
+                change = .merge(keys)
+            } else if let key = b.separate {
+                change = .separate(key)
+            } else if let keys = b.unmerge, !keys.isEmpty {
+                change = .unmerge(keys)
+            } else {
+                throw APIError(400, "merge (two or more hits), separate (a hit) or unmerge (hits)")
+            }
+            return try json(try await catalog.changeMerges(change))
+        }
+
         router.post("/api/programs/:slug/gather") { c in
             let slug = try c.param("slug")
             let b = (try? decode(GatherBody.self, c.request)) ?? GatherBody()
@@ -41,4 +65,5 @@ nonisolated extension IconLabAPI {
 nonisolated struct RefreshBody: Decodable { var force: Bool? }
 nonisolated struct SearchBody: Decodable { var q: String }
 nonisolated struct CreateBody: Decodable { var result: ProgramResult }
+nonisolated struct MergeBody: Decodable { var merge: [String]?; var separate: String?; var unmerge: [String]? }
 nonisolated struct GatherBody: Decodable { var brave: Bool?; var sources: [String]?; var clear: Bool? }

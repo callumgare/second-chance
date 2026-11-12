@@ -23,14 +23,19 @@ export type Scan = {
 
 type ScansState = {
   scans: Record<string, Scan>
+  /** Scans whose tree is open in the activity panel (one just started opens itself). */
+  open: Record<string, boolean>
+  setOpen(id: string, open: boolean): void
   start(id: string, program: string, path: string): void
   fail(id: string, error: string): void
 }
 
 export const useScans = create<ScansState>((set) => ({
   scans: {},
+  open: {},
+  setOpen(id, open) { set((s) => ({ open: { ...s.open, [id]: open } })); },
   start(id, program, path) {
-    set((s) => ({ scans: { ...s.scans, [id]: { ...(s.scans[id] ?? blank(id, program)), path } } }));
+    set((s) => ({ scans: { ...s.scans, [id]: { ...(s.scans[id] ?? blank(id, program)), path } }, open: { ...s.open, [id]: true } }));
   },
   fail(id, error) {
     set((s) => (s.scans[id] ? { scans: { ...s.scans, [id]: { ...s.scans[id], error } } } : s));

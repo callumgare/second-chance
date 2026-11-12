@@ -60,6 +60,10 @@ nonisolated public struct ProgramResult: Codable, Sendable {
     public var hits: [ProgramHit]
     public var mergeReasons: [String]       // "same Wikidata item", "title + year + publisher match", …
     public var score: Double                // 0…100
+    /// The person merged it (MergeRules): it can be unmerged.
+    public var mergedByYou: Bool?
+    /// One of its hits is the host's program with this bundle id: choosing it opens that program.
+    public var bundleId: String?
 }
 
 /// What stage 2 knows about the chosen program, for media sources to look it up by.

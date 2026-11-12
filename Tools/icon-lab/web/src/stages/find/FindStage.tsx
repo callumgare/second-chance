@@ -1,8 +1,10 @@
 // Stage 1: find the program. One search box over every catalogue; results stream in as each source answers,
-// merged into one row per program and re-ranked as they come. Recent programs sit below; the sources panel
-// says what each source is doing.
+// merged into one row per program and re-ranked as they come. Second Chance's own programs take part in the search,
+// so each merges with its catalogue entries. When the automatic merge misses, "Merge results" joins several rows into
+// one program, and a merged row's hits can be separated or its merge undone; merges are remembered. Recent programs
+// sit below; the sources panel says what each source is doing.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type KnownProgram, type ProgramResult, type ProgramSummary, type SearchSnapshot, type SourceInfo } from "../../api";
+import { api, hitKey, type KnownProgram, type ProgramResult, type ProgramSummary, type SearchSnapshot, type SourceInfo } from "../../api";
 import { go, type Route } from "../../lib/router";
 import { useApp } from "../../state/app";
 import { useSearch } from "../../state/search";
@@ -21,6 +23,9 @@ export function FindStage({ route }: { route: Route }) {
   const [showWeak, setShowWeak] = useState(false);
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
+  // Merging: rows chosen to become one program (by result key), while "Merge results" is on.
+  const [merging, setMerging] = useState(false);
+  const [toMerge, setToMerge] = useState<Set<string>>(new Set());
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => { void useSearch.getState().loadSources(); void useApp.getState().loadPrograms(); }, []);
@@ -45,6 +50,18 @@ export function FindStage({ route }: { route: Route }) {
     return m;
   }, [sources, snap]);
   useEffect(() => setActive(0), [current, kind]);
+  useEffect(() => { if (!merging) setToMerge(new Set()); }, [merging]);
+
+  const change = async (c: Parameters<typeof api.changeMerges>[0], done: string) => {
+    try { await api.changeMerges(c); useApp.getState().say(done); }
+    catch (e) { useApp.getState().say("Couldn't change the merge: " + (e as Error).message, "error"); }
+  };
+  const mergeChosen = async () => {
+    const rows = all.filter((r) => toMerge.has(r.key));
+    if (rows.length < 2) return;
+    await change({ merge: rows.flatMap((r) => r.hits.map(hitKey)) }, `Merged ${rows.length} results into one program`);
+    setMerging(false);
+  };
 
   const choose = async (r: ProgramResult) => {
     setBusy(r.key);
@@ -90,15 +107,28 @@ export function FindStage({ route }: { route: Route }) {
               Sorted by match{weakHidden > 0 && !showWeak && <> · {weakHidden} weaker {weakHidden === 1 ? "match" : "matches"} hidden <button className="linkish" onClick={() => setShowWeak(true)}>show</button></>}
               {showWeak && weakHidden > 0 && <> · <button className="linkish" onClick={() => setShowWeak(false)}>hide weaker</button></>}
             </span>
+            <button className={"btn small" + (merging ? " on" : "")} onClick={() => setMerging(!merging)}
+              title="Join results that are the same program, when the automatic merge missed it">{merging ? "Done merging" : "Merge results…"}</button>
           </div>
         )}
 
         <div className="scroll results-scroll">
-          <KnownPrograms filter={text} />
+          {!text.trim() && <KnownPrograms filter={text} />}
+          {merging && (
+            <div className="mergebar">
+              <span>{toMerge.size < 2 ? "Choose the results that are the same program." : `${toMerge.size} results chosen.`} A merged program gathers from all of them.</span>
+              <button className="btn small primary" disabled={toMerge.size < 2} onClick={() => void mergeChosen()}>Merge {toMerge.size > 1 ? toMerge.size : ""}</button>
+              <button className="btn small" onClick={() => setMerging(false)}>Cancel</button>
+            </div>
+          )}
           {error && <div className="notice bad">Search failed: {error}</div>}
           {text.trim() && (
             <div className="results" role="listbox" aria-label="Results">
-              {shown.map((r, i) => <ResultRow key={r.key} r={r} active={i === active} busy={busy === r.key} names={names} onChoose={() => void choose(r)} onHover={() => setActive(i)} />)}
+              {shown.map((r, i) => <ResultRow key={r.key} r={r} active={i === active} busy={busy === r.key} names={names} onHover={() => setActive(i)}
+                onChoose={() => void choose(r)} merging={merging} chosen={toMerge.has(r.key)}
+                onToggle={() => setToMerge((s) => { const n = new Set(s); if (n.has(r.key)) n.delete(r.key); else n.add(r.key); return n; })}
+                onSeparate={(key, name) => void change({ separate: key }, `Separated ${name}`)}
+                onUnmerge={() => void change({ unmerge: r.hits.map(hitKey) }, `Unmerged “${r.title}”`)} />)}
               {snap && !shown.length && (snap.done ? <div className="empty">Nothing found for “{snap.q}”. Try fewer words, or another spelling.</div> : <div className="empty"><span className="spin" /> Waiting for the sources…</div>)}
               {!snap && !error && <div className="empty"><span className="spin" /> Searching…</div>}
             </div>
@@ -119,7 +149,10 @@ export function FindStage({ route }: { route: Route }) {
   );
 }
 
-function ResultRow({ r, active, busy, names, onChoose, onHover }: { r: ProgramResult; active: boolean; busy: boolean; names: Map<string, string>; onChoose(): void; onHover(): void }) {
+function ResultRow({ r, active, busy, names, onChoose, onHover, merging, chosen, onToggle, onSeparate, onUnmerge }: {
+  r: ProgramResult; active: boolean; busy: boolean; names: Map<string, string>; onChoose(): void; onHover(): void
+  merging: boolean; chosen: boolean; onToggle(): void; onSeparate(key: string, name: string): void; onUnmerge(): void
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [broken, setBroken] = useState(false);
   useEffect(() => { if (active) ref.current?.scrollIntoView({ block: "nearest" }); }, [active]);
@@ -127,12 +160,15 @@ function ResultRow({ r, active, busy, names, onChoose, onHover }: { r: ProgramRe
   const thumb = r.thumb ?? r.hits.find((h) => h.thumb)?.thumb;
   const linkOnly = Object.entries(r.links ?? {}).filter(([id]) => !srcs.includes(id));
   return (
-    <div ref={ref} className={"res" + (active ? " top" : "")} role="option" aria-selected={active} onMouseEnter={onHover}>
-      <button className="res-main" onClick={onChoose} disabled={busy}>
+    <div ref={ref} className={"res" + (active && !merging ? " top" : "") + (chosen ? " chosen" : "") + (r.bundleId ? " ours" : "")} role="option" aria-selected={merging ? chosen : active} onMouseEnter={onHover}>
+      <button className="res-main" onClick={merging ? onToggle : onChoose} disabled={busy} aria-pressed={merging ? chosen : undefined}>
+        {merging && <span className={"mergebox" + (chosen ? " on" : "")} aria-hidden>{chosen ? "✓" : ""}</span>}
         {thumb && !broken ? <img className="th" src={thumb} alt="" loading="lazy" onError={() => setBroken(true)} /> : <KindIcon kind={r.kind} />}
         <span className="res-body">
           <h3>{r.title} {r.year && <span className="yr">{r.year}</span>}
             {r.kind && r.kind !== "game" && <span className={"tag" + (r.kind === "remake" ? " warn" : "")}>{r.kind}</span>}
+            {r.bundleId && <span className="tag ours" title={`Second Chance's program ${r.bundleId}: choosing it opens that program`}>Second Chance</span>}
+            {r.mergedByYou && <span className="tag" title="You merged these results">merged by you</span>}
           </h3>
           <span className="meta">
             {[r.developer, r.publisher && r.publisher !== r.developer ? r.publisher : null].filter(Boolean).join(" · ") || <span className="faint">maker unknown</span>}
@@ -147,8 +183,13 @@ function ResultRow({ r, active, busy, names, onChoose, onHover }: { r: ProgramRe
         <details className="merge">
           <summary>{r.hits.length > 1 ? `Why these ${r.hits.length} were merged` : "More"}</summary>
           {r.mergeReasons.map((m, i) => <div key={i}>· {m}</div>)}
+          {r.mergedByYou && <div><button className="btn small" onClick={onUnmerge} title="Undo your merge: these go back to however they merge by themselves">Unmerge</button></div>}
           {r.hits.length > 1 && <div className="hits">{r.hits.map((h, i) => (
-            <div key={i}><span className="tag">{names.get(h.source) ?? h.source}</span> {h.title}{h.year ? ` (${h.year})` : ""}{h.platforms?.length ? ` · ${h.platforms.join(", ")}` : ""}{h.url && <> · <a href={h.url} target="_blank" rel="noreferrer">page ↗</a></>}</div>
+            <div key={i} className="hit">
+              <span className="tag">{names.get(h.source) ?? h.source}</span> {h.title}{h.year ? ` (${h.year})` : ""}{h.platforms?.length ? ` · ${h.platforms.join(", ")}` : ""}{h.url && <> · <a href={h.url} target="_blank" rel="noreferrer">page ↗</a></>}
+              <button className="linkish sep" onClick={() => onSeparate(hitKey(h), `${names.get(h.source) ?? h.source}'s “${h.title}”`)}
+                title="It isn't this program: show it as a result of its own">Separate</button>
+            </div>
           ))}</div>}
           {linkOnly.length > 0 && <div>Also at: {linkOnly.map(([id, url], i) => <span key={id}>{i > 0 && ", "}<a href={url} target="_blank" rel="noreferrer">{names.get(id) ?? id} ↗</a></span>)}</div>}
         </details>
@@ -186,7 +227,7 @@ function KnownPrograms({ filter }: { filter: string }) {
     setBusy(k.id);
     try {
       const { slug } = await api.openKnown(k.id);
-      if (!k.opened) api.gather(slug).catch((e: unknown) => useApp.getState().say("Couldn't start gathering images: " + (e as Error).message, "error"));
+      // opened the first time, the engine finds it in the catalogues and then gathers from them
       void useApp.getState().loadPrograms();
       go(slug, k.opened ? "design" : "gather");
     } catch (e) {

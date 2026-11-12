@@ -1,6 +1,6 @@
 // The bottom of the Layers panel: what can be added as a layer. Picked parts; every part of every picture
 // (adding one doesn't pick it: picking stays a choice made in Gather); shapes and text drawn with the program's
-// colours. Drag onto the canvas, or click to add to the selected group.
+// colours. Drag onto the canvas or the layers, or click to add to the selected group.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Media, Part, ShapeType } from "../../api";
 import { defaultShape, SHAPE_LABELS } from "../../lib/doc";
@@ -11,8 +11,19 @@ import { useApp } from "../../state/app";
 import { kindLabel } from "../gather/MediaCard";
 import { addPartLayer, addShapeLayer } from "./actions";
 
-export const PART_DRAG = "application/x-iconlab-part";
-export const SHAPE_DRAG = "application/x-iconlab-shape";
+import { PART_DRAG, SHAPE_DRAG } from "../../lib/drop";
+export { PART_DRAG, SHAPE_DRAG };
+
+/** A tile that can be dragged: a div, as WebKit (Safari, and Second Chance's window) never starts a drag from a
+ *  button, `draggable` or not. Enter and Space add it, as a click does. */
+function Tile({ title, onDrag, onAdd, children }: { title: string; onDrag(e: React.DragEvent): void; onAdd(): void; children: React.ReactNode }) {
+  return (
+    <div className="addtile checker" role="button" tabIndex={0} draggable title={title} onDragStart={onDrag} onClick={onAdd}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onAdd(); } }}>
+      {children}
+    </div>
+  );
+}
 
 const SHAPES: ShapeType[] = ["solid", "gradient", "pattern", "bands", "circle", "rounded-rect", "window", "crt", "disc-rims", "text"];
 type Tab = "images" | "shapes";
@@ -42,12 +53,12 @@ export function AddSection({ slug }: { slug: string }) {
 
 function PartTile({ m, p, label }: { m: Media; p: Part; label: string }) {
   return (
-    <button className="addtile checker" draggable title={`${label}\n${p.size[0]}×${p.size[1]} · ${m.source}${p.picked ? " · picked" : ""}\nDrag onto the canvas, or click to add`}
-      onDragStart={(e) => { e.dataTransfer.setData(PART_DRAG, `${m.id}/${p.id}`); e.dataTransfer.effectAllowed = "copy"; }}
-      onClick={() => addPartLayer(m, p)}>
+    <Tile title={`${label}\n${p.size[0]}×${p.size[1]} · ${m.source}${p.picked ? " · picked" : ""}\nDrag onto the canvas or the layers, or click to add`}
+      onDrag={(e) => { e.dataTransfer.setData(PART_DRAG, `${m.id}/${p.id}`); e.dataTransfer.effectAllowed = "copy"; }}
+      onAdd={() => addPartLayer(m, p)}>
       <PartImg m={m} p={p} max={256} />
       <span className="k">{label}</span>
-    </button>
+    </Tile>
   );
 }
 
@@ -133,11 +144,11 @@ function ShapeTile({ type, primary, secondary }: { type: ShapeType; primary?: st
     c.getContext("2d")!.drawImage(s, 0, 0);
   }, [type, primary, secondary]);
   return (
-    <button className="addtile checker" draggable title={`${SHAPE_LABELS[type]}\nDrag onto the canvas, or click to add`}
-      onDragStart={(e) => { e.dataTransfer.setData(SHAPE_DRAG, type); e.dataTransfer.effectAllowed = "copy"; }}
-      onClick={() => addShapeLayer(type)}>
+    <Tile title={`${SHAPE_LABELS[type]}\nDrag onto the canvas or the layers, or click to add`}
+      onDrag={(e) => { e.dataTransfer.setData(SHAPE_DRAG, type); e.dataTransfer.effectAllowed = "copy"; }}
+      onAdd={() => addShapeLayer(type)}>
       <canvas ref={ref} />
       <span className="k">{SHAPE_LABELS[type]}</span>
-    </button>
+    </Tile>
   );
 }

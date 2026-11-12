@@ -1,5 +1,4 @@
 .s2 { display: grid; grid-template-columns: 220px minmax(0, 1fr) 384px; grid-template-rows: auto minmax(0, 1fr) 236px; height: 100% }
-.s2.dock-min { grid-template-rows: auto minmax(0, 1fr) 34px }
 .s2 .filters { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel) }
 .filters .fg { display: flex; gap: 4px; align-items: center; flex-wrap: wrap }
 .filters .fl { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; margin-right: 2px }
@@ -70,8 +69,10 @@
 .insp-actions a.btn { text-decoration: none }
 
 /* activity dock */
-.dock { grid-column: 1 / -1; grid-row: 3; background: var(--panel); border-top: 1px solid var(--line-strong); box-shadow: 0 -6px 20px rgba(0,0,0,.06); display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; z-index: 2 }
-.dock-h { display: flex; gap: 12px; align-items: center; padding: 7px 14px; font-size: 12px; background: transparent; border: 0; text-align: left; width: 100%; height: 34px }
+.dock { position: relative; grid-column: 1 / -1; grid-row: 3; background: var(--panel); border-top: 1px solid var(--line-strong); box-shadow: 0 -6px 20px rgba(0,0,0,.06); display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; z-index: 2 }
+.dock-h { display: flex; gap: 8px; align-items: center; padding: 4px 10px 4px 0; font-size: 12px; height: 34px }
+.dock-toggle { display: flex; gap: 12px; align-items: center; padding: 3px 14px; background: transparent; border: 0; text-align: left; flex: 1; min-width: 0; font-size: 12px; white-space: nowrap; overflow: hidden }
+.dock .dock-handle { position: absolute; left: 0; right: 0; top: -5px; z-index: 3; border-top: 0; background: transparent }
 .dock-jobs { overflow: auto; padding: 0 14px 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 28px; align-content: start }
 .dock-jobs .jobsec { grid-column: 1 / -1 }
 
@@ -235,9 +236,14 @@
 .card.hidden-card .art, .card.hidden-card .info { opacity: .4 }
 .insp-hidden { margin: 10px 12px 0; padding: 8px 10px; border-radius: 8px; background: var(--sunk); border: 1px solid var(--line-strong); font-size: 12px; display: flex; gap: 8px; align-items: center }
 .srcpanel .srcwrap { position: relative }
-.srcpanel .src-regather { position: absolute; right: 30px; top: 50%; margin-top: -11px; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--panel); color: var(--muted); padding: 0; font-size: 12px; display: grid; place-items: center; opacity: 0; transition: opacity .12s }
+.srcpanel .src-acts { position: absolute; right: 30px; top: 50%; margin-top: -11px; display: flex; gap: 3px }
+.srcpanel .src-regather { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--panel); color: var(--muted); padding: 0; font-size: 12px; display: grid; place-items: center; opacity: 0; transition: opacity .12s }
 .srcpanel .srcwrap:hover .src-regather, .srcpanel .srcwrap:focus-within .src-regather { opacity: 1 }
 .srcpanel .src-regather:hover { color: var(--fg); background: var(--sunk) }
 /* a video's frame count, centred in the top row; other badges drop to a second row so nothing collides */
 .card .video-badge { position: absolute; top: 9px; left: 50%; transform: translateX(-50%); font-size: 10px; background: rgba(0,0,0,.62); color: #fff; padding: 1px 7px; border-radius: 4px; white-space: nowrap; z-index: 1 }
 .card .badges-tl.below { top: 34px; left: 6px; max-width: calc(100% - 12px) }
+.card .zoom-btn { position: absolute; top: 6px; right: 34px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; background: rgba(0,0,0,.45); color: #fff; display: grid; place-items: center; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,.3); opacity: 0; transition: opacity .12s; z-index: 1 }
+.card:hover .zoom-btn, .card .zoom-btn:focus-visible { opacity: 1 }
+.card .zoom-btn:hover { background: rgba(0,0,0,.7) }
+.gridwrap.dropping { box-shadow: inset 0 0 0 3px var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent) }

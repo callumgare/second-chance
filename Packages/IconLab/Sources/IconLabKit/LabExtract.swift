@@ -17,12 +17,15 @@ nonisolated extension Lab {
         // what was scanned, so "Your files" can be cleared and scanned again
         try Store.json(Scan(scan: String(scan), path: path, at: ISO8601DateFormatter().string(from: Date()))).write(to: out.appendingPathComponent("scan.json"))
         let name = (path as NSString).lastPathComponent
-        await jobs.enqueue(title: "Find images in \(name)", program: slug, group: "scan", source: "files") { [self] progress in
+        await jobs.enqueue(title: "Find images in \(name)", program: slug, group: "scan", source: "files", scan: String(scan)) { [self] progress in
             var seen = 0
             let (lines, sink) = AsyncStream<String>.makeStream()
+            var options = ExtractionOptions(outputDirectory: out)
+            // a scan that's cancelled keeps the pictures it found before it stopped
+            options.keepWhatWasFoundWhenCancelled = true
             let crawl = Task {
                 defer { sink.finish() }
-                _ = try await ProgramImageExtractor.extract(URL(fileURLWithPath: path), options: ExtractionOptions(outputDirectory: out)) {
+                return try await ProgramImageExtractor.extract(URL(fileURLWithPath: path), options: options) {
                     sink.yield($0.jsonLine)
                 }
             }
@@ -38,11 +41,22 @@ nonisolated extension Lab {
                 }
                 if obj["event"] as? String == "image" { seen += 1 }
             }
-            try await withTaskCancellationHandler { try await crawl.value } onCancel: { crawl.cancel() }
+            let summary = try await withTaskCancellationHandler { try await crawl.value } onCancel: { crawl.cancel() }
             await progress(0.92, "Adding the images")
-            try await self.importExtracted(slug, from: out, scanRoot: name)
+            // a picture chosen on its own is wanted whatever the extractor thinks of it
+            let chosenImage = FileKinds.identify(URL(fileURLWithPath: path), isDir: false).0 == "image" && !Lab.isDirectory(path)
+            let added = try await self.importExtracted(slug, from: out, scanRoot: name, keepAll: chosenImage)
+            let pictures = added == 1 ? "1 picture" : "\(added) pictures"
+            if summary.stoppedEarly { throw ScanStopped(kept: pictures) }
+            await progress(1, "\(pictures) added")
         }
         return String(scan)
+    }
+
+    /// A scan cancelled part way: the job ends as cancelled, saying what it kept.
+    struct ScanStopped: Error, CustomStringConvertible {
+        let kept: String
+        var description: String { "cancelled · kept \(kept)" }
     }
 
     public struct Scan: Codable, Sendable { public var scan: String; public var path: String; public var at: String }   // at: ISO 8601
@@ -70,10 +84,18 @@ nonisolated extension Lab {
         return started
     }
 
-    /// Reads `records.jsonl` and adds each image (the best of each family) as media from "Your files".
-    func importExtracted(_ slug: String, from dir: URL, scanRoot: String) async throws {
+    static func isDirectory(_ path: String) -> Bool {
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
+    }
+
+    /// Reads `records.jsonl` and adds each image (the best of each family) as media from "Your files". `keepAll`
+    /// keeps every image, however the extractor ranked it (a picture the person chose on its own). Returns how many
+    /// pictures it added.
+    @discardableResult
+    func importExtracted(_ slug: String, from dir: URL, scanRoot: String, keepAll: Bool = false) async throws -> Int {
         let recordsFile = dir.appendingPathComponent("records.jsonl")
-        guard let text = try? String(contentsOf: recordsFile, encoding: .utf8) else { return }
+        guard let text = try? String(contentsOf: recordsFile, encoding: .utf8) else { return 0 }
         var records: [[String: Any]] = []
         for line in text.split(separator: "\n") {
             if let d = line.data(using: .utf8), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { records.append(o) }
@@ -100,27 +122,29 @@ nonisolated extension Lab {
             guard let frames = movies[k], !frames.isEmpty else { continue }
             try await importMovie(slug, dir: dir, movie: k, frames: frames)
         }
+        var added = movieOrder.count
         let movieShas = Set(movies.values.flatMap { $0 }.compactMap { $0["sha256"] as? String })
-        var added = 0
         for r in reps where !movieShas.contains((r["sha256"] as? String) ?? "") {
             guard let sha = r["sha256"] as? String else { continue }
             let roles = Set((r["roles"] as? [String]) ?? [])
             let score = (r["score"] as? Double) ?? 0
             let isIcon = !roles.isDisjoint(with: iconRoles)
             // runtime files (a system's, an engine's) never come in, icon or not
-            if roles.contains("runtime-library") { continue }
-            if !roles.isDisjoint(with: skipRoles) && !isIcon { continue }
-            if score < 15 && !isIcon { continue }
+            if roles.contains("runtime-library") && !keepAll { continue }
+            if !roles.isDisjoint(with: skipRoles) && !isIcon && !keepAll { continue }
+            if score < 15 && !isIcon && !keepAll { continue }
             if added >= 150 { break }   // the rest stay in the scan's folder
             let file = (r["file"] as? String).map { dir.appendingPathComponent($0) } ?? dir.appendingPathComponent("\(sha).png")
             guard FileManager.default.fileExists(atPath: file.path) else { continue }
             let w = (r["width"] as? Int) ?? 0, h = (r["height"] as? Int) ?? 0
-            if max(w, h) < 16 || Double(max(w, h)) / Double(max(1, min(w, h))) > 8 { continue }
+            if !keepAll, max(w, h) < 16 || Double(max(w, h)) / Double(max(1, min(w, h))) > 8 { continue }
             let provenance = Lab.provenanceString(r)
             let parts = provenance.components(separatedBy: " › ")
             let shortName = parts.count >= 2 ? parts[parts.count - 2] : (parts.last ?? sha)
             let kind: String? = isIcon ? "icon" : (roles.contains("installer-art") ? "art" : (roles.contains("video-frame") ? "title-screen" : nil))
-            var rec = try await store.addMedia(slug, from: file, name: "\(shortName).png", source: "Your files", provenance: provenance, kind: kind)
+            // a picture file's own name keeps its extension rather than gaining another
+            let named = FileKinds.identify(URL(fileURLWithPath: shortName), isDir: false).0 == "image" ? shortName : "\(shortName).png"
+            var rec = try await store.addMedia(slug, from: file, name: named, source: "Your files", provenance: provenance, kind: kind)
             rec.suitability = min(5, max(rec.suitability, score / 20))
             if kind != nil { rec.kindSet = true; rec.kindConfidence = 0.8 }
             if roles.contains("main-program-icon") || roles.contains("likely-main-program-icon") { rec.picked = true }
@@ -133,6 +157,7 @@ nonisolated extension Lab {
             await analyse(slug, rec.id)
             added += 1
         }
+        return added
     }
 
     /// One picture for a video: its best-ranked frame, with every frame as a part (in time order).

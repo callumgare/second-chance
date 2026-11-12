@@ -22,14 +22,24 @@ A program goes through four stages, each a route of the page
    for each bundle (filtered by the search box); choosing one opens the Icon
    Lab program kept for that bundle (`nancy-drew--old-clock`, its bundle id
    recorded in its `program.json`). The search box also searches every
-   catalogue (Wikidata, LaunchBox, IGDB and the rest), for a program with no
-   bundle yet.
+   catalogue (Wikidata, LaunchBox, IGDB and the rest). Second Chance's own
+   programs take part in the search, so each is merged with its catalogue
+   entries, and opening one the first time finds it in the catalogues before
+   it gathers, so its pictures are looked up by the catalogues' ids. When the
+   automatic merge misses, **Merge results…** joins several results into one
+   program, and a merged result's entries can be separated or its merge
+   undone; merges are remembered (`merges.json` in the data folder).
 2. **Gather.** Pictures from the sources, and from **Add from files**, which
    scans an app, installer, disc image or folder for every image in it
    (WrappKit's `ProgramImages`, [program-images.md](program-images.md)), in
-   Second Chance's own process. Built apps (`built-apps/` in a checkout) are
-   offered there with one click. Each picture is analysed (its kind, its
-   subject, its parts), and you pick the ones worth using.
+   Second Chance's own process. In the window it's macOS's open panel; in a
+   browser (`sc icon-lab serve`) the page's own browser, which offers the
+   built apps (`built-apps/` in a checkout) with one click. A scan's progress
+   is in its job in the activity panel, where any job can be cancelled (what
+   it found is kept). Pictures dropped from the Finder onto the grid are
+   added as your files, picked; dropped on Design's canvas or layers, they're
+   also added as a layer. Each picture is analysed (its kind, its subject,
+   its parts), and you pick the ones worth using.
 3. **Design.** Suggestions from the picked pictures (treatments), and an
    editor for layers, effects, masks and Liquid Glass. Designs worth keeping
    are pinned.

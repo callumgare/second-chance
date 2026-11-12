@@ -11,11 +11,8 @@ nonisolated extension IconLabAPI {
 
         router.get("/api/known-programs") { _ in try json(await lab.knownPrograms()) }
 
-        router.post("/api/known-programs/open") { c in
-            let id = try decode(KnownBody.self, c.request).id
-            let (slug, created) = try await lab.openKnown(id)
-            return try json(["slug": slug], status: created ? 201 : 200)
-        }
+        // POST /api/known-programs/open is the catalogue's (CatalogRoutes): a program opened the first time is found
+        // in the catalogues before it gathers.
 
         router.get("/api/wrapps") { _ in try json(lab.wrapps()) }
 

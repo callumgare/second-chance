@@ -116,8 +116,10 @@ nonisolated public final class Lab: Sendable {
 
     /// 0…5, worked out afresh: the picture's own measures (kind, size, subject) and, for an image found in your
     /// files, half from where the extractor found it (its rank: the program's own icon ranks far above a bitmap of
-    /// a printable map, whatever their sizes).
+    /// a printable map, whatever their sizes). A picture added by hand is a 5.
     static func suitability(_ m: MediaRecord) -> Double {
+        // a picture the person added by hand is what they chose: the top of the scale
+        if m.deep?["byHand"] == .bool(true) { return 5 }
         let own = Analyser.suitability(m.analysis, kind: m.kind == "unknown" ? (m.kindGuesses?.first?.kind ?? "unknown") : m.kind,
                                        width: m.width, height: m.height)
         guard let rank = m.deep?["extractScore"]?.doubleValue else { return own }

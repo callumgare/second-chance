@@ -4,7 +4,8 @@
 //
 //  The Icon Lab page in a web view: `iconlab://` answered by the scheme
 //  handler, the engine's events pushed to the page, and the page's
-//  messages (open a link, copy text) carried out. The contract is in
+//  messages (open a link, copy text, choose files) carried out, and its
+//  alert, confirm and prompt panels shown. The contract is in
 //  Packages/IconLab/README.md ("The page's host").
 
 import AppKit
@@ -47,8 +48,9 @@ final class IconLabPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         config.userContentController = controller
         webView = WKWebView(frame: .zero, configuration: config)
         super.init()
-        // through a weak proxy: the controller holds its handlers strongly
+        // through weak proxies: the controller holds its handlers strongly
         controller.add(WeakMessageHandler(self), name: "iconLab")
+        controller.addScriptMessageHandler(WeakReplyHandler(self), contentWorld: .page, name: "iconLabAsk")
         webView.navigationDelegate = self
         webView.uiDelegate = self
         #if DEBUG
@@ -62,6 +64,7 @@ final class IconLabPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         events?.cancel()
         events = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "iconLab")
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "iconLabAsk", contentWorld: .page)
     }
 
     // MARK: Events
@@ -119,6 +122,76 @@ final class IconLabPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         NSWorkspace.shared.open(url)
     }
 
+    // MARK: Panels
+
+    // WKWebView answers `alert`, `confirm` and `prompt` itself only when the delegate shows them: without these,
+    // confirm is always "no" and the page's question is never seen.
+
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping @MainActor () -> Void) {
+        let alert = Self.alert(message)
+        alert.addButton(withTitle: "OK")
+        Self.show(alert, over: webView) { _ in completionHandler() }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping @MainActor (Bool) -> Void) {
+        let alert = Self.alert(message)
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        Self.show(alert, over: webView) { completionHandler($0 == .alertFirstButtonReturn) }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor (String?) -> Void) {
+        let alert = Self.alert(prompt)
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.stringValue = defaultText ?? ""
+        alert.accessoryView = field
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        Self.show(alert, over: webView) { completionHandler($0 == .alertFirstButtonReturn ? field.stringValue : nil) }
+    }
+
+    private static func alert(_ message: String) -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = "Icon Lab"
+        alert.informativeText = message
+        return alert
+    }
+
+    /// As a sheet on the page's window, or on its own when the page has none yet.
+    private static func show(_ alert: NSAlert, over webView: WKWebView, then done: @escaping @MainActor (NSApplication.ModalResponse) -> Void) {
+        if let window = webView.window {
+            alert.beginSheetModal(for: window) { done($0) }
+        } else {
+            done(alert.runModal())
+        }
+    }
+
+    // MARK: Choosing files
+
+    /// macOS's open panel for Add from files: files, folders, apps and disc images, several at once. The paths
+    /// chosen, or none when cancelled.
+    func chooseFiles() async -> [String] {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.treatsFilePackagesAsDirectories = false
+        panel.resolvesAliases = true
+        panel.prompt = "Scan"
+        panel.message = "Choose a program's app, installer or folder, or pictures, to look for images in. Nothing in it is run."
+        let response: NSApplication.ModalResponse
+        if let window = webView.window {
+            response = await panel.beginSheetModal(for: window)
+        } else {
+            response = panel.runModal()
+        }
+        guard response == .OK else { return [] }
+        return panel.urls.map(\.path)
+    }
+
     // MARK: Messages
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -133,6 +206,32 @@ final class IconLabPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         default:
             logger.warning("Icon Lab's page sent a message the app doesn't know: \(type)")
         }
+    }
+}
+
+/// The messages the page awaits an answer to (`iconLabAsk`): `{type: "chooseFiles"}` → the paths chosen.
+extension IconLabPage {
+    func answer(_ message: WKScriptMessage) async -> (Any?, String?) {
+        guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return (nil, "not a message") }
+        switch type {
+        case "chooseFiles":
+            return (await chooseFiles(), nil)
+        default:
+            logger.warning("Icon Lab's page asked the app something it doesn't know: \(type)")
+            return (nil, "unknown message \(type)")
+        }
+    }
+}
+
+/// Holds the page weakly, so the content controller doesn't keep it alive.
+private final class WeakReplyHandler: NSObject, WKScriptMessageHandlerWithReply {
+    weak var target: IconLabPage?
+
+    init(_ target: IconLabPage) { self.target = target }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) async -> (Any?, String?) {
+        guard let target else { return (nil, "the window has closed") }
+        return await target.answer(message)
     }
 }
 

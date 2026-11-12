@@ -13,6 +13,7 @@ public actor Jobs {
         public var detail: String?
         public var group: String?
         public var source: String?          // the source a gather job is for
+        public var scan: String?            // the scan a scan job runs (its `scan` events)
         public var started: Date?
         public var finished: Date?
     }
@@ -59,10 +60,10 @@ public actor Jobs {
 
     /// Queues work; it runs when a slot is free. `work` gets a progress callback (0…1, optional ETA in seconds).
     @discardableResult
-    public func enqueue(title: String, program: String? = nil, group: String? = nil, source: String? = nil,
+    public func enqueue(title: String, program: String? = nil, group: String? = nil, source: String? = nil, scan: String? = nil,
                         _ work: @escaping @Sendable (_ progress: @escaping @Sendable (Double, String?) async -> Void) async throws -> Void) -> String {
         let id = UUID().uuidString.lowercased()
-        let job = Job(id: id, program: program, title: title, state: "queued", progress: 0, group: group, source: source)
+        let job = Job(id: id, program: program, title: title, state: "queued", progress: 0, group: group, source: source, scan: scan)
         jobs[id] = job
         order.append(id)
         if order.count > 300 { let drop = order.removeFirst(); jobs[drop] = nil }

@@ -74,6 +74,15 @@ the dev host and in Second Chance's Icon Lab window.
 
   In the dev host, links open with `window.open` and copying uses
   `navigator.clipboard`.
+- **Questions to the app**, which the page awaits an answer to, go to the
+  `iconLabAsk` handler (a `WKScriptMessageHandlerWithReply`):
+  - `{ "type": "chooseFiles" }` → the paths chosen in macOS's open panel
+    (files, folders, apps, disc images; none when cancelled). Add from files
+    uses it in the app instead of the page's own path browser, which the dev
+    host keeps.
+- **Panels**: the app shows the page's `alert`, `confirm` and `prompt` as
+  sheets. (A WKWebView whose delegate doesn't answers `confirm` with "no"
+  without showing it.)
 
 The rules are the repo's (AGENTS.md): Swift 6 with `MainActor` default
 isolation, so the engine's types are `nonisolated` or actors and nothing heavy

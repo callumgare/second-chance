@@ -47,6 +47,18 @@ function addLayer(layer: Layer, inNewGroup: boolean) {
   d().select({ kind: "layer", id: layer.id });
 }
 
+/** Puts dropped layers in: into a group at an index (the Layers panel), or as a click adds them (each image in a new
+ *  group of its own on the canvas). The first is selected. */
+export function insertLayers(layers: Layer[], where?: { group: string; index: number }) {
+  if (!layers.length) return;
+  if (!where) { for (const l of [...layers].reverse()) addLayer(l, l.content.kind === "image"); }
+  else d().edit((doc) => {
+    const g = findGroup(doc, where.group) ?? targetGroup(doc, layers[0].name.slice(0, 20));
+    g.layers.splice(Math.max(0, Math.min(where.index, g.layers.length)), 0, ...layers);
+  });
+  d().select({ kind: "layer", id: layers[0].id });
+}
+
 export function addShapeLayer(type: ShapeType) {
   const colours = useApp.getState().program?.colours ?? {};
   const layer = newShapeLayer(type, colours.striking, colours["second striking"]);

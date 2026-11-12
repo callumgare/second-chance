@@ -12,6 +12,7 @@ public actor Catalog {
     let screenScraper: ScreenScraperSource
     var searches: [String: SearchState] = [:]
     var searchOrder: [String] = []
+    var loadedRules: MergeRules?
 
     public struct SourceProgress: Codable, Sendable {
         public var id: String
@@ -109,17 +110,26 @@ public actor Catalog {
         let mr = await MacintoshRepositorySource(ctx).info
         sources.append(.init(id: mr.id, name: mr.name, state: mr.state, note: mr.note, running: false, count: 0))
         for l in LinkOnlySource.all { sources.append(.init(id: l.info.id, name: l.info.name, state: .linkOnly, note: l.info.note, running: false, count: 0)) }
+        // the host's own programs take part, so they merge with the catalogues' entries
+        let own = await hostHits(q)
+        if !lab.host.knownPrograms.isEmpty {
+            sources.insert(.init(id: Self.hostSource, name: "Second Chance", state: .ready, note: "its own programs", running: false, count: own.count), at: 0)
+        }
         Merger.sourceNames = Dictionary(uniqueKeysWithValues: sources.map { ($0.id, $0.name) })
-        searches[id] = SearchState(snapshot: Snapshot(id: id, q: q, sources: sources, results: [], done: false))
+        var state = SearchState(snapshot: Snapshot(id: id, q: q, sources: sources, results: [], done: false))
+        state.hits = own
+        searches[id] = state
         searchOrder.append(id)
         if searchOrder.count > 30 { searches[searchOrder.removeFirst()] = nil }
-        Task { await self.run(id, q, ready) }
+        let shift = lab.host.knownPrograms.isEmpty ? 0 : 1
+        Task { await self.run(id, q, ready.map { ($0.0 + shift, $0.1) }) }
         return id
     }
 
     public func snapshot(_ id: String) -> Snapshot? { searches[id]?.snapshot }
 
     func run(_ id: String, _ q: String, _ ready: [(Int, any ProgramSource)]) async {
+        recompute(id)
         await emit(id, force: true)
         await withTaskGroup(of: (Int, Result<[ProgramHit], Error>).self) { group in
             for (i, s) in ready {
@@ -163,7 +173,7 @@ public actor Catalog {
 
     func recompute(_ id: String) {
         guard var st = searches[id] else { return }
-        st.snapshot.results = Self.results(st.hits, query: st.snapshot.q)
+        st.snapshot.results = Self.results(st.hits, query: st.snapshot.q, rules: mergeRules())
         // the id-only and link-only sources count the results that link to them
         for i in st.snapshot.sources.indices where ["macintoshrepository", "mobygames", "macintoshgarden", "gamefaqs", "discmaster"].contains(st.snapshot.sources[i].id) {
             let sid = st.snapshot.sources[i].id
@@ -173,8 +183,8 @@ public actor Catalog {
     }
 
     /// Merged, ranked results for a query's hits (the pure part, for tests too).
-    public static func results(_ hits: [ProgramHit], query: String, limit: Int = 40) -> [ProgramResult] {
-        var merged = Merger.merge(Merger.collapse(hits))
+    public static func results(_ hits: [ProgramHit], query: String, limit: Int = 40, rules: MergeRules = MergeRules()) -> [ProgramResult] {
+        var merged = rules.apply(Merger.collapse(hits))
         for i in merged.indices {
             for (k, v) in LinkOnlySource.searchLinks(title: merged[i].title, platforms: merged[i].platforms, ids: merged[i].ids) where merged[i].links[k] == nil {
                 merged[i].links[k] = v
@@ -228,6 +238,15 @@ public actor Catalog {
     /// Creates a program from a chosen result: a slug from its title (with the year if that's taken), and
     /// `program.json` with its title, year, ids and platforms.
     public func createProgram(_ r: ProgramResult) async throws -> String {
+        if let bundle = r.bundleId {
+            let slug = try await lab.openKnown(bundle).slug
+            if var p = await lab.store.program(slug) {
+                p.ids = (p.ids ?? [:]).merging(r.ids) { a, _ in a }
+                if p.platforms?.isEmpty ?? true { p.platforms = r.platforms }
+                try await lab.store.saveProgram(p)
+            }
+            return slug
+        }
         let base = Store.slugify(r.title).isEmpty ? "program" : Store.slugify(r.title)
         var slug = base
         let existing = await lab.store.program(slug)

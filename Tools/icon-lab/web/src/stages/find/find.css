@@ -51,3 +51,13 @@
 .src .st { font-size: 11px; color: var(--warn) }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); justify-self: center } .dot.off { background: var(--line-strong) } .dot.warn { background: var(--warn) }
 .sources .about { font-size: 11px; padding: 4px 12px 12px; margin: 0; line-height: 1.45 }
+.mergebar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; margin-bottom: 8px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); font-size: 12.5px }
+.mergebar > span { flex: 1 }
+.res.chosen { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) }
+.res.ours { border-left: 3px solid var(--accent) }
+.tag.ours { background: var(--accent-soft); color: var(--accent); border-color: var(--accent) }
+.res-main:has(.mergebox) { grid-template-columns: 22px 56px minmax(0, 1fr) auto }
+.mergebox { width: 20px; height: 20px; border-radius: 5px; border: 2px solid var(--line-strong); display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff }
+.mergebox.on { background: var(--accent); border-color: var(--accent) }
+.merge .hit { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap }
+.merge .hit .sep { margin-left: auto; font-size: 11px }

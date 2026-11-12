@@ -48,6 +48,9 @@ nonisolated public struct ExtractionOptions: Sendable {
     /// Asked between files: true stops the crawl with `CancellationError`. `extract` sets it from its task's
     /// cancellation, which its crawl, on a thread of its own, can't see.
     public var isCancelled: (@Sendable () -> Bool)?
+    /// When cancelled, stop opening files but still rank what was found and write records.jsonl, returning a
+    /// summary whose `stoppedEarly` is true, rather than throwing `CancellationError`.
+    public var keepWhatWasFoundWhenCancelled = false
 
     public init(outputDirectory: URL) {
         self.outputDirectory = outputDirectory
@@ -59,6 +62,8 @@ nonisolated public struct ExtractionSummary: Sendable {
     public let nodes: Int
     public let skipped: Int
     public let recordsFile: URL
+    /// Cancelled with `keepWhatWasFoundWhenCancelled`: the records are what was found before it stopped.
+    public var stoppedEarly = false
 }
 
 nonisolated public enum ProgramImageExtractor {
@@ -226,9 +231,13 @@ nonisolated final class Crawl: @unchecked Sendable {
             filter = filter.forWrapp(keeping: wrappIcon.map { ["contents/resources/" + $0] } ?? [])
         }
 
+        var stoppedEarly = false
         while let node = queue.popLast() {
-            try Task.checkCancellation()
-            if options.isCancelled?() == true { throw CancellationError() }
+            if Task.isCancelled || options.isCancelled?() == true {
+                guard options.keepWhatWasFoundWhenCancelled else { throw CancellationError() }
+                stoppedEarly = true
+                break
+            }
             guard nodesSeen < options.maxNodes else {
                 skip(node, "the crawl reached its limit of \(options.maxNodes) files")
                 break
@@ -237,7 +246,8 @@ nonisolated final class Crawl: @unchecked Sendable {
             process(node)
             reportProgress()
         }
-        let summary = try finish()
+        var summary = try finish()
+        summary.stoppedEarly = stoppedEarly
         emit(.done(nodes: nodesSeen, images: summary.records.count,
                    families: Set(summary.records.map(\.familyID)).count, skipped: skipped,
                    records: summary.recordsFile.path, seconds: Date().timeIntervalSince(started)))

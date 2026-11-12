@@ -56,6 +56,26 @@ import Testing
         #expect(await api.handle(APIRequest(method: "DELETE", path: "/api/programs")).status == 404)
     }
 
+    @Test func aDroppedPictureIsPickedAtTheTopAndClearedWithItsSource() async throws {
+        try await api.lab.store.saveProgram(Store.ProgramInfo(slug: "demo", title: "Demo"))
+        let png = try #require(Bitmap(width: 40, height: 30, fill: (200, 30, 30, 255)).pngData())
+        let r = await api.handle(APIRequest(method: "POST", path: "/api/programs/demo/media/upload",
+                                            query: [URLQueryItem(name: "name", value: "Box.png")], body: png))
+        #expect(r.status == 201)
+        let m = try #require(json(r) as? [String: Any])
+        #expect(m["source"] as? String == "Your files")
+        #expect(m["picked"] as? Bool == true)
+        #expect(m["suitability"] as? Double == 5)
+        #expect(m["width"] as? Int == 40)
+
+        let notAPicture = await api.handle(APIRequest(method: "POST", path: "/api/programs/demo/media/upload", body: Data("hello".utf8)))
+        #expect(notAPicture.status == 500)
+
+        let cleared = await api.handle(APIRequest(method: "POST", path: "/api/programs/demo/clear", body: Data(#"{"sources": ["files"]}"#.utf8)))
+        #expect((try json(cleared) as? [String: Any])?["removed"] as? Int == 1)
+        #expect(await api.lab.store.media("demo").isEmpty)
+    }
+
     @Test func servesThePage() async throws {
         let index = await api.handle(APIRequest(method: "GET", path: "/"))
         #expect(index.status == 200)
