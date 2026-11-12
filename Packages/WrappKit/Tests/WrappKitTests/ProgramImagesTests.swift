@@ -484,3 +484,32 @@ nonisolated final class EventLog: @unchecked Sendable {
         return collected
     }
 }
+
+/// Solid black is ranked as filler; a dark picture with something in it isn't marked down for being dark.
+@Suite struct DarkImageRanking {
+    /// A 256 px square: `pixel(x, y)` gives each pixel's RGBA.
+    func scored(_ pixel: (Int, Int) -> [UInt8]) throws -> (score: Double, reasons: [String]) {
+        var pixels: [UInt8] = []
+        for y in 0..<256 { for x in 0..<256 { pixels += pixel(x, y) } }
+        let image = try #require(RGBAImage(width: 256, height: 256, pixels: pixels, bitDepth: 32))
+        return Ranking.score(FoundImage(sha256: "x", image: image, order: 0))
+    }
+
+    @Test func solidBlackIsMarkedDown() throws {
+        let r = try scored { _, _ in [0, 0, 0, 255] }
+        #expect(r.reasons.contains("-15 nearly black"))
+        #expect(r.reasons.contains("-20 mostly one colour"))
+    }
+
+    @Test func aBlackSilhouetteIsMarkedDown() throws {
+        let r = try scored { x, y in (x - 128) * (x - 128) + (y - 128) * (y - 128) < 90 * 90 ? [0, 0, 0, 255] : [0, 0, 0, 0] }
+        #expect(r.reasons.contains("-15 nearly black"))
+    }
+
+    @Test func aDarkPictureWithDetailIsnt() throws {
+        // a dark, varied picture (a night sky): its mean is under 12, but no colour dominates
+        let r = try scored { x, y in [UInt8((x * 7 + y * 3) % 24), UInt8((x * 5 + y * 11) % 20), UInt8((x + y * 13) % 28), 255] }
+        #expect(!r.reasons.contains("-15 nearly black"))
+        #expect(!r.reasons.contains("-20 mostly one colour"))
+    }
+}

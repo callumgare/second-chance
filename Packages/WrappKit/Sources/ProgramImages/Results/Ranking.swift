@@ -172,7 +172,9 @@ nonisolated enum Ranking {
         let flat = image.dominantColourShare
         if flat > 0.85 { add(-20, "mostly one colour") }
         let luma = image.meanLuma
-        if luma < 12 { add(-15, "nearly black") } else if luma > 248 { add(-10, "nearly white") }
+        // Solid black is filler (a mask, a blank background); a dark picture with something in it can be an icon's
+        // background, so darkness alone costs nothing.
+        if luma < 12, flat > 0.85 { add(-15, "nearly black") } else if luma > 248 { add(-10, "nearly white") }
         if image.hasAlpha, !image.isFullyTransparent { add(5, "has transparency") }
         if roles.contains(.videoFrame), luma < 24 { add(-10, "a dark frame") }
         return (score, reasons)
