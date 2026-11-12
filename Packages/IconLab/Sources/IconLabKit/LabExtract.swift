@@ -47,13 +47,36 @@ nonisolated extension Lab {
             // Composer icon (a dark silhouette scores as hardly art, and is just what a design is made of)
             let chosenImage = FileKinds.identify(URL(fileURLWithPath: path), isDir: false).0 == "image" && !Lab.isDirectory(path)
             let iconDocument = (path as NSString).pathExtension.lowercased() == "icon"
-            let result = try await self.importExtracted(slug, from: out, scanRoot: name, keepAll: chosenImage || iconDocument)
+            var result = try await self.importExtracted(slug, from: out, scanRoot: name, keepAll: chosenImage || iconDocument)
+            // an Icon Composer icon comes in as it looks, too, not only as its layers
+            if iconDocument, try await self.importRendered(slug, icon: URL(fileURLWithPath: path), into: out) { result.added += 1 }
             let pictures = result.added == 1 ? "1 picture" : "\(result.added) pictures"
             if summary.stoppedEarly { throw ScanStopped(kept: pictures) }
             await progress(1, result.leftOut == 0 ? "\(pictures) added"
                 : "\(pictures) added, \(result.leftOut) left out as unlikely to be art (choose a picture on its own to add it anyway)")
         }
         return String(scan)
+    }
+
+    /// Adds an Icon Composer icon as macOS shows it (light, 1024 px), rendered by `ictool`, as an icon from your
+    /// files. False, and logged, when this Mac has no `ictool` or it made nothing: its layers still came in.
+    func importRendered(_ slug: String, icon: URL, into dir: URL) async throws -> Bool {
+        let png = dir.appendingPathComponent("rendered-icon.png")
+        do {
+            try await composer.renderFile(icon, to: png)
+        } catch {
+            logger.warning("Couldn't render \(icon.lastPathComponent), so only its layers came in: \(error)")
+            return false
+        }
+        let name = icon.deletingPathExtension().lastPathComponent + ".png"
+        var rec = try await store.addMedia(slug, from: png, name: name, source: "Your files",
+                                           provenance: "\(icon.lastPathComponent) › rendered", kind: "icon")
+        rec.kindSet = true
+        rec.kindConfidence = 1
+        try await store.upsertMedia(slug, rec)
+        await broadcastMedia(slug, rec)
+        await analyse(slug, rec.id)
+        return true
     }
 
     /// A scan cancelled part way: the job ends as cancelled, saying what it kept.

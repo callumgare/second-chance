@@ -41,7 +41,9 @@ A program goes through four stages, each a route of the page
 2. **Gather.** Pictures from the sources, and from **Add from files**, which
    scans an app, installer, disc image or folder for every image in it
    (WrappKit's `ProgramImages`, [program-images.md](program-images.md)), in
-   Second Chance's own process. In the window it's macOS's open panel; in a
+   Second Chance's own process. An Icon Composer `.icon` brings in every layer
+   in it, and the icon itself rendered by `ictool` (when Xcode is installed). In
+   the window it's macOS's open panel; in a
    browser (`sc icon-lab serve`) the page's own browser, which offers the
    built apps (`built-apps/` in a checkout) with one click. A scan's progress
    is in its job in the activity panel, where any job can be cancelled (what

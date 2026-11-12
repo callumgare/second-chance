@@ -174,23 +174,23 @@ nonisolated enum Xcode {
         #expect(KnownProgram.slug(forBundle: "nancy-drew/old-clock") == "nancy-drew--old-clock")
     }
 
-    /// An Icon Composer icon's layers are often one-colour silhouettes, which the extractor ranks as hardly art: a
-    /// chosen `.icon` brings them all in anyway.
-    @Test func anIconsLayersAllComeIn() async throws {
+    /// A made-up Icon Composer icon whose one layer is a black disc on nothing (one colour, nearly black), scanned
+    /// into the bundle's program through `api`: the scan's job when it ended, and the pictures it added.
+    func scanIcon(_ api: IconLabAPI) async throws -> (job: Jobs.Job?, added: [MediaRecord]) {
         let icon = root.appendingPathComponent("drawn.icon")
-        try FileManager.default.createDirectory(at: icon.appendingPathComponent("Assets"), withIntermediateDirectories: true)
-        try Data(#"{"groups":[{"layers":[{"image-name":"Shape.png","name":"Shape"}]}]}"#.utf8).write(to: icon.appendingPathComponent("icon.json"))
-        // a black disc on nothing: one colour, nearly black
-        let ctx = try #require(CGContext(data: nil, width: 512, height: 512, bitsPerComponent: 8, bytesPerRow: 0,
-                                         space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-                                         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-        ctx.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
-        ctx.fillEllipse(in: CGRect(x: 40, y: 40, width: 432, height: 432))
-        let png = try #require(ctx.makeImage())
-        let dest = try #require(CGImageDestinationCreateWithURL(icon.appendingPathComponent("Assets/Shape.png") as CFURL, "public.png" as CFString, 1, nil))
-        CGImageDestinationAddImage(dest, png, nil)
-        #expect(CGImageDestinationFinalize(dest))
-
+        if !FileManager.default.fileExists(atPath: icon.path) {
+            try FileManager.default.createDirectory(at: icon.appendingPathComponent("Assets"), withIntermediateDirectories: true)
+            try Data(#"{"groups":[{"layers":[{"image-name":"Shape.png","name":"Shape"}]}]}"#.utf8).write(to: icon.appendingPathComponent("icon.json"))
+            let ctx = try #require(CGContext(data: nil, width: 512, height: 512, bitsPerComponent: 8, bytesPerRow: 0,
+                                             space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            ctx.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
+            ctx.fillEllipse(in: CGRect(x: 40, y: 40, width: 432, height: 432))
+            let png = try #require(ctx.makeImage())
+            let dest = try #require(CGImageDestinationCreateWithURL(icon.appendingPathComponent("Assets/Shape.png") as CFURL, "public.png" as CFString, 1, nil))
+            CGImageDestinationAddImage(dest, png, nil)
+            #expect(CGImageDestinationFinalize(dest))
+        }
         let lab = api.lab
         let slug = try await lab.openKnown("freeware/plain").slug
         let scan = try await lab.extract(slug, path: icon.path)
@@ -201,9 +201,29 @@ nonisolated enum Xcode {
             if job != nil { break }
             try await Task.sleep(for: .milliseconds(100))
         }
+        return (job, await lab.store.media(slug).filter { $0.source == "Your files" })
+    }
+
+    /// An Icon Composer icon's layers are often one-colour silhouettes, which the extractor ranks as hardly art: a
+    /// chosen `.icon` brings them all in anyway (and, with no `ictool` to render it, only them).
+    @Test func anIconsLayersAllComeIn() async throws {
+        let (job, added) = try await scanIcon(api)
         #expect(job?.state == "done")
         #expect(job?.detail == "1 picture added")
-        #expect(await lab.store.media(slug).filter { $0.source == "Your files" }.count == 1)
+        #expect(added.count == 1)
+    }
+
+    /// With Icon Composer's `ictool`, a chosen `.icon` comes in as it looks too: rendered, an icon.
+    @Test(.enabled(if: LabTools.installedICTool != nil, "needs Xcode's Icon Composer"))
+    func anIconComesInRenderedToo() async throws {
+        let withTool = IconLabAPI(dataDir: root.appendingPathComponent("data-ictool"), webRoot: nil,
+                                  tools: LabTools(ictool: LabTools.installedICTool, builtApps: apps),
+                                  host: LabHostInfo(knownPrograms: KnownProgram.read(bundles: bundles), bundles: bundles))
+        let (job, added) = try await scanIcon(withTool)
+        #expect(job?.detail == "2 pictures added")
+        let rendered = try #require(added.first { $0.name == "drawn.png" })
+        #expect(rendered.kind == "icon")
+        #expect(rendered.width == 1024)
     }
 
     @Test func aQueuedJobCanBeCancelled() async throws {

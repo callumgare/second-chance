@@ -84,7 +84,14 @@ nonisolated public struct IconComposer: Sendable {
         let size = max(16, min(1024, size))
         let png = icon.deletingPathExtension().appendingPathExtension("\(appearance)-\(size).png")
         if FileManager.default.fileExists(atPath: png.path) { return (png, icon) }
+        try await renderFile(icon, appearance: appearance, size: size, to: png)
+        return (png, icon)
+    }
+
+    /// Renders any `.icon` (one of ours, or one the person chose) to a PNG, as macOS shows it in an appearance.
+    public func renderFile(_ icon: URL, appearance: String = "light", size: Int = 1024, to png: URL) async throws {
         guard let tool = ictool else { throw IconLabError.tool("ictool isn't installed (Xcode 26's Icon Composer)") }
+        let size = max(16, min(1024, size))
         let rendition = IconComposer.renditions[appearance] ?? "Default"
         let out = try await Run.tool(tool, [icon.path, "--export-image", "--output-file", png.path, "--platform", "macOS",
                                             "--rendition", rendition, "--width", "\(size)", "--height", "\(size)", "--scale", "1"],
@@ -92,7 +99,6 @@ nonisolated public struct IconComposer: Sendable {
         guard FileManager.default.fileExists(atPath: png.path) else {
             throw IconLabError.tool("ictool made no picture: \(out.suffix(400))")
         }
-        return (png, icon)
     }
 }
 
