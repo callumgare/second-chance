@@ -265,6 +265,14 @@ void scaledPictureWindowEnd(NSWindow *window);
 /// Whether `window` is shown smaller so.
 int windowIsScaledPictureWindow(NSWindow *window);
 
+/// In a Space, cover the screen beside `picture` (screen coordinates) with
+/// windows of the helper's own, so the pointer leaves Wine's window there;
+/// out of one, or while it moves, take them away.
+void scaledPictureBarsShow(NSWindow *window, NSRect picture);
+
+/// Take those windows away.
+void scaledPictureBarsRemove(NSWindow *window);
+
 /// The content view's bounds as Wine and the program see them: the whole
 /// screen's while the window is shown smaller, else its own.
 NSRect scaledPictureWindowTrueBounds(NSWindow *window);

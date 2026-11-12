@@ -234,6 +234,15 @@ when their frame timer's tick landed between the two, leaving the Space
 black. The window is the size of the screen before and after the move, so
 the game misses nothing.
 
+It also replaces one of `WineContentView`'s, `mouseDown:`, which Wine's view
+passes on up the responder chain to the window's frame view. In a Space
+that frame view (`NSThemeFrame`) starts dragging the window on every click,
+however the window is set up, and the drag sets the Mac's arrow cursor:
+Webmaster's glove, which it sets as the cursor, then showed with the arrow
+beside it after any click (2026-11-12). In a Space the click goes no
+further than Wine's view. Wine has taken it for the game already, before
+views see it.
+
 Every other window keeps Wine's behaviour. The helper checks these methods
 exist before replacing them. If Wine has changed and they don't, it reports
 a warning and gives fullscreen only to the windows Wine already allows.
@@ -787,6 +796,28 @@ dialog opening and closing. The wrapp's log says
 `[Helpers] Mode scaling: showing the program's 1440x1080 picture in its 929x697 window`,
 and the helper's own lines `out of fullscreen: showing the program's …` and
 `the program's window covers the screen again: going into fullscreen`.
+
+#### Beside the picture in a Space
+
+A window in a Space covers the screen, so where the picture is narrower
+than the screen the pointer never leaves Wine's window: Wine shows the
+game's cursor over the black bars too, and moves the game's cursor there.
+Out of a Space the Mac's arrow comes back as the pointer leaves the window
+and the game's cursor stays at the edge it left by, because Wine looks for
+the window under the pointer (`+[NSWindow windowNumberAtPoint:…]` in
+`-handleMouseMove:`) and leaves the pointer to the Mac when it isn't one of
+Wine's. Wine's window can't be made the picture's size instead: in a Space
+AppKit sizes it to the screen. So once the window is in its Space,
+`scaled_picture_window.m` covers the bars with black windows of its own,
+children of Wine's window (`scaledPictureBarsShow`, which mode scaling calls
+each time it places the picture). Over them the pointer is the Mac's, as
+beside a window. They take no clicks and never become key, and they go
+when the window starts to leave its Space, starts to enter one, or is shown
+smaller. The log says
+`in its Space: the bars beside the program's 1440x1080 picture are windows of their own`.
+Checked on Webmaster (2026-11-12, a test session, by the cursor AppKit and
+Wine set, as Screen Sharing's pictures leave the pointer out): over a bar
+Wine set the Mac's arrow, and clicks on the picture no longer set it.
 
 What the scaling costs was measured on Bioscopia (2026-11-07, a test session
 on an M1 Max): the time from moving the pointer to the game drawing its

@@ -492,6 +492,110 @@ void scaledPictureWindowEnd(NSWindow *window) {
     endSmaller(window, "going into fullscreen");
 }
 
+// MARK: - The bars beside the picture in a Space
+//
+// In a Space the window covers the screen, the bars beside the picture
+// included, so the pointer never leaves it: Wine shows the game's cursor
+// over the bars too, and moves it there. Out of a Space, the Mac's cursor
+// comes back as the pointer leaves the window, and the game's stays at the
+// edge it left by: Wine finds the window under the pointer
+// (+[NSWindow windowNumberAtPoint:...] in -handleMouseMove:) and leaves it
+// alone if it isn't one of Wine's. So in a Space the bars are windows of
+// this file's own, black, children of Wine's window, and the same happens
+// at the picture's edge.
+
+@interface SecondChancePictureBarWindow : NSWindow
+@end
+
+@implementation SecondChancePictureBarWindow
+- (BOOL)canBecomeKeyWindow { return NO; }
+- (BOOL)canBecomeMainWindow { return NO; }
+@end
+
+@interface SecondChancePictureBarView : NSView
+@end
+
+@implementation SecondChancePictureBarView
+- (void)mouseDown:(NSEvent *)event {}
+- (void)rightMouseDown:(NSEvent *)event {}
+- (BOOL)mouseDownCanMoveWindow { return NO; }
+- (BOOL)acceptsFirstMouse:(NSEvent *)event { return YES; }
+- (void)resetCursorRects { [self addCursorRect:self.bounds cursor:NSCursor.arrowCursor]; }
+@end
+
+static char kBarsKey;
+
+static NSWindow *newBar(void) {
+    NSWindow *bar = [[SecondChancePictureBarWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1, 1)
+                                                                    styleMask:NSWindowStyleMaskBorderless
+                                                                      backing:NSBackingStoreBuffered defer:NO];
+    bar.releasedWhenClosed = NO;
+    bar.opaque = YES;
+    bar.backgroundColor = NSColor.blackColor;
+    bar.hasShadow = NO;
+    bar.collectionBehavior = NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorIgnoresCycle |
+                             NSWindowCollectionBehaviorTransient;
+    bar.contentView = [[SecondChancePictureBarView alloc] initWithFrame:NSMakeRect(0, 0, 1, 1)];
+    return bar;
+}
+
+void scaledPictureBarsRemove(NSWindow *window) {
+    NSArray<NSWindow *> *bars = objc_getAssociatedObject(window, &kBarsKey);
+    if (!bars) return;
+    objc_setAssociatedObject(window, &kBarsKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    for (NSWindow *bar in bars) {
+        if (bar.parentWindow) [bar.parentWindow removeChildWindow:bar];
+        [bar orderOut:nil];
+    }
+}
+
+void scaledPictureBarsShow(NSWindow *window, NSRect picture) {
+    NSScreen *screen = window.screen;
+    // Only once the window is in its Space, covering its screen: not while
+    // it moves in or out, nor shown smaller.
+    if (!screen || !(window.styleMask & NSWindowStyleMaskFullScreen) || isOurs(window) || !window.isVisible ||
+        !NSEqualRects(NSIntegralRect(window.frame), NSIntegralRect(screen.frame))) {
+        scaledPictureBarsRemove(window);
+        return;
+    }
+    NSRect frame = window.frame;
+    picture = NSIntersectionRect(NSIntegralRect(picture), frame);
+    NSRect sides[4] = {
+        NSMakeRect(NSMinX(frame), NSMinY(frame), NSMinX(picture) - NSMinX(frame), frame.size.height),
+        NSMakeRect(NSMaxX(picture), NSMinY(frame), NSMaxX(frame) - NSMaxX(picture), frame.size.height),
+        NSMakeRect(NSMinX(picture), NSMinY(frame), picture.size.width, NSMinY(picture) - NSMinY(frame)),
+        NSMakeRect(NSMinX(picture), NSMaxY(picture), picture.size.width, NSMaxY(frame) - NSMaxY(picture)),
+    };
+    BOOL any = NO;
+    for (int i = 0; i < 4; i++) any = any || (sides[i].size.width >= 1 && sides[i].size.height >= 1);
+    if (!any || NSIsEmptyRect(picture)) {
+        scaledPictureBarsRemove(window);
+        return;
+    }
+    NSArray<NSWindow *> *bars = objc_getAssociatedObject(window, &kBarsKey);
+    BOOL made = NO;
+    if (!bars) {
+        bars = @[newBar(), newBar(), newBar(), newBar()];
+        objc_setAssociatedObject(window, &kBarsKey, bars, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        made = YES;
+    }
+    for (int i = 0; i < 4; i++) {
+        NSWindow *bar = bars[i];
+        if (sides[i].size.width < 1 || sides[i].size.height < 1) {
+            if (bar.parentWindow) [bar.parentWindow removeChildWindow:bar];
+            if (bar.isVisible) [bar orderOut:nil];
+            continue;
+        }
+        if (!NSEqualRects(bar.frame, sides[i])) [bar setFrame:sides[i] display:NO];
+        if (bar.parentWindow != window) [window addChildWindow:bar ordered:NSWindowAbove];
+        [bar.contentView.window invalidateCursorRectsForView:bar.contentView];
+    }
+    if (made) {
+        helperReport("ScaledPictureWindow", "notice", "in its Space: the bars beside the program's %.0fx%.0f picture are windows of their own",
+                     picture.size.width, picture.size.height);
+    }
+}
+
 __attribute__((constructor))
 static void scaledPictureWindowInit(void) {
     gLog = os_log_create("com.secondchance.gamewrapper", "ScaledPictureWindow");

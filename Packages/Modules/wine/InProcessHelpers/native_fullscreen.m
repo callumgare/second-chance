@@ -509,6 +509,21 @@ static BOOL validateMenuItemForMaximized(NSWindow *self, SEL _cmd, NSMenuItem *i
     return !disabled && wineMaximized(self);
 }
 
+static IMP gWineContentMouseDown;
+
+/// A click on a window in a Space stops at Wine's view. Wine takes clicks
+/// before they're sent to a view (-[WineApplicationController handleEvent:]),
+/// so its views leave -mouseDown: to NSResponder, which passes it up to the
+/// window's frame; in a Space that starts dragging the window
+/// (-[NSThemeFrame handleMouseDown:]), wherever the click is and though Wine
+/// says the window can't be moved, and the drag sets the Mac's arrow, over
+/// the game's own cursor until the game next changes it (Webmaster's glove,
+/// 2026-11-12).
+static void contentMouseDownNotDragging(NSView *self, SEL _cmd, NSEvent *event) {
+    if (self.window.styleMask & NSWindowStyleMaskFullScreen) return;
+    ((void (*)(id, SEL, NSEvent *))gWineContentMouseDown)(self, _cmd, event);
+}
+
 /// Watch for the player's -toggleFullScreen: on Wine's windows. Main thread.
 static void installToggleWatch(void) {
     static BOOL attempted = NO;
@@ -518,6 +533,10 @@ static void installToggleWatch(void) {
     gWineToggleFullScreen = replaceOwnMethod(wineWindow, @selector(toggleFullScreen:), (IMP)playerAwareToggleFullScreen);
     if (!gWineToggleFullScreen) {
         helperReport("NativeFullscreen", "warning", "WineWindow has no -toggleFullScreen:; the player's fullscreen changes go unreported");
+    }
+    gWineContentMouseDown = replaceOwnMethod(NSClassFromString(@"WineContentView"), @selector(mouseDown:), (IMP)contentMouseDownNotDragging);
+    if (!gWineContentMouseDown) {
+        helperReport("NativeFullscreen", "warning", "Wine has no WineContentView; a click in a Space may show the Mac's arrow");
     }
     if (classDefinesMethod(wineWindow, @selector(validateMenuItem:))) {
         gWineValidateMenuItem = replaceOwnMethod(wineWindow, @selector(validateMenuItem:), (IMP)validateMenuItemForMaximized);
@@ -905,6 +924,7 @@ void watchFullscreenTransitions(void) {
             [center addObserverForName:NSWindowWillEnterFullScreenNotification object:nil queue:nil
                             usingBlock:^(NSNotification *notification) {
                 [gEnteringWindows addObject:notification.object];
+                scaledPictureBarsRemove(notification.object);
                 noteTransitionCause(notification.object);
                 transitionLog("window %ld will enter fullscreen", (long)[notification.object windowNumber]);
             }];
@@ -918,6 +938,7 @@ void watchFullscreenTransitions(void) {
             [center addObserverForName:NSWindowWillExitFullScreenNotification object:nil queue:nil
                             usingBlock:^(NSNotification *notification) {
                 [gExitingWindows addObject:notification.object];
+                scaledPictureBarsRemove(notification.object);
                 noteTransitionCause(notification.object);
             }];
             [center addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:nil

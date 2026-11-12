@@ -651,8 +651,10 @@ static void centredUpdateLayer(NSView *self, SEL _cmd) {
         // The layer, the smaller window's content, fits the picture in it.
         layer.contentsGravity = kCAGravityResizeAspect;
         layer.position = surface.origin;
+        scaledPictureBarsRemove(window);
     } else {
         layer.position = CGPointMake(surface.origin.x + shown.origin.x, surface.origin.y + shown.origin.y);
+        scaledPictureBarsShow(window, [window convertRectToScreen:[self convertRect:shown toView:nil]]);
     }
     scaledPictureWindowNoteShown(window, shown);
     if (window.isOpaque && ![window.backgroundColor isEqual:NSColor.blackColor]) window.backgroundColor = NSColor.blackColor;
