@@ -48,6 +48,19 @@ import Testing
         #expect(r.box[0] < 0 && r.box[2] > 1)
     }
 
+    @Test func brightnessAndContrast() {
+        let grey = Bitmap(width: 2, height: 1, pixels: [64, 128, 192, 200, 10, 20, 30, 0])
+        func bc(_ b: Double, _ c: Double) -> [UInt8] {
+            Effects.apply(Effect("brightness-contrast", ["brightness": .number(b), "contrast": .number(c)]), to: Rendered(bitmap: grey), unit: 100).bitmap.pixels
+        }
+        #expect(bc(0, 0) == grey.pixels)                          // unchanged at 0, 0
+        #expect(bc(1, 0) == [255, 255, 255, 200, 255, 255, 255, 0])  // all the way up is white, alpha kept
+        #expect(bc(-1, 0)[0..<3].allSatisfy { $0 == 0 })
+        let low = bc(0, -1), high = bc(0, 1)
+        #expect(low[0] > 64 && low[2] < 192)                      // less contrast pulls towards mid-grey
+        #expect(high[0] < 64 && high[2] > 192)                    // more pushes away from it
+    }
+
     @Test func shapesRenderAtTheAskedSize() {
         for t in ["solid", "pattern", "bands", "window", "crt", "disc-rims", "text", "circle"] {
             let b = Shapes.render(Shape(t, ["color": "#ff0000", "a": "#000000", "b": "#ffffff", "colors": ["#ff0000", "#0000ff"], "text": "Z"]), size: 64)

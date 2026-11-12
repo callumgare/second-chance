@@ -97,6 +97,7 @@ export type Effect =
   | { op: "posterize"; colors: number }
   | { op: "scanlines" }
   | { op: "tint"; color: string; amount: number }
+  | { op: "brightness-contrast"; brightness: number; contrast: number }   // each -1…1, 0 unchanged
   | { op: "key"; tolerance: number }
   | { op: "mask"; mask: Mask; lock: "canvas" | "image"; invert?: boolean } // canvas: stays put as the layer moves; image: moves with it
   | { op: "flatten"; color: string }

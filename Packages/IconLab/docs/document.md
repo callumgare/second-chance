@@ -104,6 +104,9 @@ type Effect =
   | { op: "posterize"; colors: number }                // flat enamel fills
   | { op: "scanlines" }
   | { op: "tint"; color: string; amount: number }      // blend towards a colour
+  | { op: "brightness-contrast"; brightness: number; contrast: number }  // each -1…1, 0 unchanged: brightness shifts
+                                                      // every channel by up to the whole range, contrast scales them
+                                                      // about mid-grey by 4^contrast
   | { op: "key"; tolerance: number }                   // the corners' colour made transparent (a logo on a plain ground)
   | { op: "flatten"; color: string }                   // transparency over a plain colour
 

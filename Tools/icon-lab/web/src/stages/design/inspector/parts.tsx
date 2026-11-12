@@ -183,6 +183,10 @@ function EffectParams({ e, update }: { e: Effect; update: Update<Effect> }) {
     case "tint": return <>{colour("color", "Colour")}{slider("amount", "Amount", 0, 1, 0.01, (v) => `${Math.round(v * 100)}%`)}</>;
     case "key": return slider("tolerance", "Tolerance", 0, 0.5, 0.005, (v) => `${Math.round(v * 100)}%`);
     case "flatten": return colour("color", "Colour");
+    case "brightness-contrast": {
+      const signed = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.round(Math.abs(v) * 100);
+      return <>{slider("brightness", "Brightness", -1, 1, 0.01, signed)}{slider("contrast", "Contrast", -1, 1, 0.01, signed)}</>;
+    }
     case "autocontrast": case "scanlines": case "mask": return null;
   }
 }

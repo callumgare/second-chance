@@ -2,7 +2,7 @@
 // browser. Rough stand-ins for the engine's Core Image versions, good enough to design against.
 import type { Content, Effect, Mask, Media, Shape } from "../api";
 import { hexToRgb, mix, shade } from "../lib/colour";
-import { loadImage } from "../render/resources";
+import { brightnessContrastTable, loadImage } from "../render/resources";
 
 const cv = (w: number, h: number) => {
   const c = document.createElement("canvas");
@@ -200,6 +200,14 @@ export function applyEffect(src: HTMLCanvasElement, e: Effect, unit: number): HT
       g.drawImage(src, 0, 0);
       g.globalCompositeOperation = e.invert ? "destination-out" : "destination-in";
       g.drawImage(m, 0, 0, w, h);
+      return c;
+    }
+    case "brightness-contrast": {
+      const c = cv(w, h), g = ctx2d(c);
+      g.drawImage(src, 0, 0);
+      const d = g.getImageData(0, 0, w, h), a = d.data, lut = brightnessContrastTable(e.brightness, e.contrast);
+      for (let i = 0; i < a.length; i += 4) { a[i] = lut[a[i]]; a[i + 1] = lut[a[i + 1]]; a[i + 2] = lut[a[i + 2]]; }
+      g.putImageData(d, 0, 0);
       return c;
     }
     case "tint": {

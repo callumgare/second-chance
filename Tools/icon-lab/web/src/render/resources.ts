@@ -266,6 +266,7 @@ type Spec =
   | { kind: "gmap"; dark: string; light: string }        // gradient map: luminance → dark…light
   | { kind: "tint"; color: string; amount: number }      // blend towards a colour
   | { kind: "key"; color: string }                       // outline: the key colour's pixels take the colour
+  | { kind: "bc"; brightness: number; contrast: number } // brightness / contrast, as the engine's sums
 
 const NEUTRAL_KEY = "#ff00ff";
 
@@ -282,9 +283,18 @@ export function splitColour(content: Content): { neutral: Content; spec: Spec | 
     case "halftone": case "riso": return { ...withLast({ ...last, ink: "#000000" }), spec: { kind: "ink", color: last.ink } };
     case "gradient-map": return { ...withLast({ ...last, dark: "#000000", light: "#ffffff" }), spec: { kind: "gmap", dark: last.dark, light: last.light } };
     case "tint": return { ...withLast(null), spec: { kind: "tint", color: last.color, amount: last.amount } };
+    case "brightness-contrast": return { ...withLast(null), spec: { kind: "bc", brightness: last.brightness, contrast: last.contrast } };
     case "outline": return { ...withLast({ ...last, color: NEUTRAL_KEY }), spec: { kind: "key", color: last.color } };
     default: return { neutral: content, spec: null };
   }
+}
+
+/** Each channel's value after brightness / contrast (each -1…1): the engine's `Effects.brightnessContrast`. */
+export function brightnessContrastTable(brightness: number, contrast: number): Uint8ClampedArray {
+  const f = Math.pow(4, Math.max(-1, Math.min(1, contrast))), shift = Math.max(-1, Math.min(1, brightness)) * 255;
+  const lut = new Uint8ClampedArray(256);
+  for (let v = 0; v < 256; v++) lut[v] = Math.round((v - 127.5) * f + 127.5 + shift);
+  return lut;
 }
 
 const recolourCache = new WeakMap<Img, Map<string, HTMLCanvasElement>>();
@@ -305,7 +315,10 @@ function recoloured(img: Img, spec: Spec): HTMLCanvasElement {
   } else {
     try {
       const d = g.getImageData(0, 0, w, h), a = d.data;
-      if (spec.kind === "gmap") {
+      if (spec.kind === "bc") {
+        const lut = brightnessContrastTable(spec.brightness, spec.contrast);
+        for (let i = 0; i < a.length; i += 4) { a[i] = lut[a[i]]; a[i + 1] = lut[a[i + 1]]; a[i + 2] = lut[a[i + 2]]; }
+      } else if (spec.kind === "gmap") {
         const [r0, g0, b0] = hexToRgb(spec.dark), [r1, g1, b1] = hexToRgb(spec.light);
         for (let i = 0; i < a.length; i += 4) { const t = a[i] / 255; a[i] = r0 + (r1 - r0) * t; a[i + 1] = g0 + (g1 - g0) * t; a[i + 2] = b0 + (b1 - b0) * t; }
       } else {

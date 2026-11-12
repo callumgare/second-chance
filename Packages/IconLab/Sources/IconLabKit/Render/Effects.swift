@@ -59,6 +59,8 @@ nonisolated public enum Effects {
                 r.bitmap.pixels[i + 1] = UInt8(Double(r.bitmap.pixels[i + 1]) * (1 - a) + Double(c.g) * a)
                 r.bitmap.pixels[i + 2] = UInt8(Double(r.bitmap.pixels[i + 2]) * (1 - a) + Double(c.b) * a)
             }
+        case "brightness-contrast":
+            r.bitmap = brightnessContrast(r.bitmap, brightness: t.double("brightness", 0), contrast: t.double("contrast", 0))
         case "key":
             r.bitmap = keyBackground(r.bitmap, tolerance: t.double("tolerance", 30))
         case "flatten":
@@ -360,6 +362,19 @@ nonisolated public enum Effects {
                 if d < bd { bd = d; best = c }
             }
             out.pixels[i] = best.r; out.pixels[i + 1] = best.g; out.pixels[i + 2] = best.b
+        }
+        return out
+    }
+
+    /// Brightness shifts every channel by up to the whole range (-1…1); contrast scales them about mid-grey, by
+    /// 4^contrast (-1…1: a quarter to four times). The page's preview (`render/resources.ts`) does the same sums.
+    static func brightnessContrast(_ b: Bitmap, brightness: Double, contrast: Double) -> Bitmap {
+        let f = pow(4, max(-1, min(1, contrast))), shift = max(-1, min(1, brightness)) * 255
+        var lut = [UInt8](repeating: 0, count: 256)
+        for v in 0..<256 { lut[v] = UInt8(max(0, min(255, ((Double(v) - 127.5) * f + 127.5 + shift).rounded()))) }
+        var out = b
+        for i in stride(from: 0, to: b.pixels.count, by: 4) {
+            out.pixels[i] = lut[Int(b.pixels[i])]; out.pixels[i + 1] = lut[Int(b.pixels[i + 1])]; out.pixels[i + 2] = lut[Int(b.pixels[i + 2])]
         }
         return out
     }

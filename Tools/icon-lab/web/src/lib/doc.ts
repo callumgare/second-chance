@@ -98,7 +98,7 @@ export function newShapeLayer(type: ShapeType, primary?: string, secondary?: str
 export const EFFECT_LABELS: Record<EffectOp, string> = {
   silhouette: "Silhouette", outline: "Outline (sticker)", feather: "Feather", halftone: "Halftone", tone: "Tone (screenprint)",
   "gradient-map": "Gradient map", blur: "Blur", autocontrast: "Auto contrast", edges: "Edges", riso: "Risograph ink",
-  posterize: "Posterise", scanlines: "Scanlines", tint: "Tint", key: "Key out background", flatten: "Flatten onto colour", mask: "Mask",
+  posterize: "Posterise", scanlines: "Scanlines", tint: "Tint", "brightness-contrast": "Brightness / Contrast", key: "Key out background", flatten: "Flatten onto colour", mask: "Mask",
 };
 
 export function defaultEffect(op: EffectOp, primary = "#2463d9", secondary = "#f6c445"): Effect {
@@ -116,6 +116,7 @@ export function defaultEffect(op: EffectOp, primary = "#2463d9", secondary = "#f
     case "posterize": return { op, colors: 5 };
     case "scanlines": return { op };
     case "tint": return { op, color: primary, amount: 0.4 };
+    case "brightness-contrast": return { op, brightness: 0, contrast: 0 };
     case "key": return { op, tolerance: 0.12 };
     case "flatten": return { op, color: "#ffffff" };
     case "mask": return { op, mask: { kind: "ring", outer: 0.43, inner: 0.07 }, lock: "canvas" };
