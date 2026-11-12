@@ -29,6 +29,8 @@ export function IconArt({ doc, size, appearance = "light", real = false, priorit
   const [visible, setVisible] = useState(real === "eager");
   const renderPx = Math.min(1024, renderSize ?? Math.round(size * (window.devicePixelRatio || 1)));
   const [url, setUrl] = useState<string | null>(() => (real ? cachedIconRender(doc, appearance, renderPx) : null));
+  // The real render shows once its image has loaded; until then the sketch (or the previous render) stays.
+  const [shown, setShown] = useState<string | null>(null);
 
   // The sketch, redrawn when the doc changes or pixels arrive.
   useEffect(() => {
@@ -63,8 +65,9 @@ export function IconArt({ doc, size, appearance = "light", real = false, priorit
 
   return (
     <span ref={box} className={"icon-art " + (className ?? "")} style={{ width: size, height: size }} title={title}>
-      <canvas ref={ref} style={{ visibility: url ? "hidden" : "visible", opacity: waiting && real && !url ? 0.55 : 1 }} />
-      {url && <img src={url} alt="" draggable={false} />}
+      <canvas ref={ref} style={{ visibility: url && shown ? "hidden" : "visible", opacity: waiting && real && !url ? 0.55 : 1 }} />
+      {url && shown && shown !== url && <img src={shown} alt="" draggable={false} />}
+      {url && <img key={url} src={url} alt="" draggable={false} onLoad={() => setShown(url)} style={shown === url ? undefined : { visibility: "hidden" }} />}
       {waiting && real && !url && <span className="art-wait"><span className="spin" /></span>}
     </span>
   );

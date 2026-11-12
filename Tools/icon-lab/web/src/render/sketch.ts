@@ -267,7 +267,9 @@ export function sketchCanvas(doc: Doc, cssSize: number, appearance: Appearance, 
   const pr = window.devicePixelRatio || 1;
   const c = canvas ?? document.createElement("canvas");
   const px = Math.round(cssSize * pr);
-  if (c.width !== px) { c.width = px; c.height = px; }
+  // Both sides: a new canvas is 300×150, so a 300 px icon (150 pt on a Retina screen, Review's size) kept its
+  // height and showed stretched until the real render came.
+  if (c.width !== px || c.height !== px) { c.width = px; c.height = px; }
   const g = c.getContext("2d")!;
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, px, px);
