@@ -18,10 +18,12 @@ doesn't repeat them.
 A program goes through four stages, each a route of the page
 (`#/p/<slug>/<stage>`):
 
-1. **Find the program.** Second Chance's own programs are listed first, one
-   for each bundle (filtered by the search box); choosing one opens the Icon
+1. **Find the program.** Before a search, the programs worked on recently
+   are listed, then Second Chance's own, one for each bundle (those Recent
+   already shows are left out until **Show all**); choosing one opens the Icon
    Lab program kept for that bundle (`nancy-drew--old-clock`, its bundle id
-   recorded in its `program.json`). The search box also searches every
+   recorded in its `program.json`), shown with its picture once it has one.
+   The search box searches every
    catalogue (Wikidata, LaunchBox, IGDB and the rest). Second Chance's own
    programs take part in the search, so each is merged with its catalogue
    entries, and opening one the first time finds it in the catalogues before

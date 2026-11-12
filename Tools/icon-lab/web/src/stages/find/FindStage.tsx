@@ -2,7 +2,7 @@
 // merged into one row per program and re-ranked as they come. Second Chance's own programs take part in the search,
 // so each merges with its catalogue entries. When the automatic merge misses, "Merge results" joins several rows into
 // one program, and a merged row's hits can be separated or its merge undone; merges are remembered. Recent programs
-// sit below; the sources panel says what each source is doing.
+// sit below, then Second Chance's own; the sources panel says what each source is doing.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IconArt } from "../../components/IconArt";
 import { api, hitKey, type Doc, type KnownProgram, type OpenedProgram, type ProgramResult, type ProgramSummary, type SearchSnapshot, type SourceInfo } from "../../api";
@@ -15,9 +15,14 @@ import "./find.css";
 const KINDS = [["all", "All"], ["game", "Games"], ["software", "Software"], ["demo", "Demos"], ["remake", "Remakes"]] as const;
 type KindFilter = (typeof KINDS)[number][0];
 const WEAK = 35;
+/** How many recent programs, and Second Chance's, show before "Show all". */
+const RECENTS = 12;
 
 export function FindStage({ route }: { route: Route }) {
   const programs = useApp((s) => s.programs);
+  const [allRecents, setAllRecents] = useState(false);
+  // what Recent shows now, which Second Chance's programs leave out until they're all shown
+  const inRecents = useMemo(() => new Set((allRecents ? programs : programs?.slice(0, RECENTS))?.map((p) => p.slug) ?? []), [programs, allRecents]);
   const { q, current, snapshots, sources, error } = useSearch();
   const [text, setText] = useState(q);
   const [kind, setKind] = useState<KindFilter>("all");
@@ -117,7 +122,6 @@ export function FindStage({ route }: { route: Route }) {
         )}
 
         <div className="scroll results-scroll">
-          {!text.trim() && <KnownPrograms filter={text} />}
           {merging && (
             <div className="mergebar">
               <span>{toMerge.size < 2 ? "Choose the results that are the same program." : `${toMerge.size} results chosen.`} A merged program gathers from all of them.</span>
@@ -137,7 +141,8 @@ export function FindStage({ route }: { route: Route }) {
               {!snap && !error && <div className="empty"><span className="spin" /> Searching…</div>}
             </div>
           )}
-          <Recents programs={programs} current={route.slug} />
+          <Recents programs={programs} current={route.slug} all={allRecents} onShowAll={() => setAllRecents(true)} />
+          {!text.trim() && <KnownPrograms programs={programs} inRecents={inRecents} />}
         </div>
       </div>
 
@@ -263,18 +268,24 @@ function KindIcon({ kind }: { kind?: string }) {
   );
 }
 
-/** The programs the host has bundles for (Second Chance's), above the search's results: choosing one opens the
- *  program kept for its bundle, made the first time. */
-function KnownPrograms({ filter }: { filter: string }) {
+/** The programs the host has bundles for (Second Chance's), below Recent: choosing one opens the program kept for its
+ *  bundle, made the first time. One already opened shows its picture, as Recent does; those Recent shows are left out
+ *  until all are shown. */
+function KnownPrograms({ programs, inRecents }: { programs: ProgramSummary[] | null; inRecents: Set<string> }) {
   const [known, setKnown] = useState<KnownProgram[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [all, setAll] = useState(false);
   useEffect(() => { api.knownPrograms().then(setKnown).catch(() => setKnown([])); }, []);
+  // the program kept for each bundle: the one recording it, else the one named for it
+  const opened = useMemo(() => {
+    const m = new Map<string, ProgramSummary>();
+    for (const p of programs ?? []) if (p.bundleId) m.set(p.bundleId, p);
+    for (const k of known ?? []) { const p = programs?.find((x) => x.slug === k.slug); if (p && !m.has(k.id)) m.set(k.id, p); }
+    return m;
+  }, [programs, known]);
   if (!known?.length) return null;
-  const words = filter.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const matching = known.filter((k) => words.every((w) => k.title.toLowerCase().includes(w) || k.id.includes(w)));
-  if (!matching.length) return null;
-  const shown = all || words.length ? matching : matching.slice(0, 12);
+  const rest = known.filter((k) => { const p = opened.get(k.id); return !p || !inRecents.has(p.slug); });
+  const shown = all ? known : rest.slice(0, RECENTS);
   const open = async (k: KnownProgram) => {
     setBusy(k.id);
     try {
@@ -290,34 +301,41 @@ function KnownPrograms({ filter }: { filter: string }) {
     <div className="recent known">
       <h2>Second Chance's programs</h2>
       <div className="recents">
-        {shown.map((k) => (
-          <button key={k.id} className="rec" onClick={() => void open(k)} disabled={busy === k.id} title={k.id}>
-            <span className="rec-ph" />
-            <span className="ellipsis"><b className="ellipsis">{k.title}</b><small>{k.id}{k.opened ? " · opened" : ""}</small></span>
-          </button>
-        ))}
+        {shown.map((k) => {
+          const p = opened.get(k.id);
+          return (
+            <button key={k.id} className="rec" onClick={() => void open(k)} disabled={busy === k.id} title={k.id}>
+              {p?.thumb ? <img src={p.thumb} alt="" loading="lazy" /> : <span className="rec-ph" />}
+              <span className="ellipsis"><b className="ellipsis">{k.title}</b><small>{k.id}{p ? ` · ${p.media} images${p.pins ? ` · ${p.pins} pinned` : ""}` : k.opened ? " · opened" : ""}</small></span>
+            </button>
+          );
+        })}
       </div>
-      {!all && !words.length && matching.length > shown.length && (
-        <button className="linkish" onClick={() => setAll(true)}>Show all {matching.length}</button>
+      {!all && known.length > shown.length && (
+        <button className="linkish" onClick={() => setAll(true)}>Show all {known.length}</button>
       )}
     </div>
   );
 }
 
-function Recents({ programs, current }: { programs: ProgramSummary[] | null; current: string | null }) {
+function Recents({ programs, current, all, onShowAll }: { programs: ProgramSummary[] | null; current: string | null; all: boolean; onShowAll(): void }) {
   if (!programs) return <div className="recent"><h2>Recent</h2><div className="empty"><span className="spin" /></div></div>;
   if (!programs.length) return null;
+  const shown = all ? programs : programs.slice(0, RECENTS);
   return (
     <div className="recent">
       <h2>Recent</h2>
       <div className="recents">
-        {programs.map((p) => (
+        {shown.map((p) => (
           <button key={p.slug} className={"rec" + (p.slug === current ? " cur" : "")} onClick={() => go(p.slug, p.pins ? "design" : "gather")} title={p.slug}>
             {p.thumb ? <img src={p.thumb} alt="" loading="lazy" /> : <span className="rec-ph" />}
             <span className="ellipsis"><b className="ellipsis">{p.title}</b><small>{p.year ? `${p.year} · ` : ""}{p.media} images{p.pins ? ` · ${p.pins} pinned` : ""}</small></span>
           </button>
         ))}
       </div>
+      {!all && programs.length > shown.length && (
+        <button className="linkish" onClick={onShowAll}>Show all {programs.length}</button>
+      )}
     </div>
   );
 }
