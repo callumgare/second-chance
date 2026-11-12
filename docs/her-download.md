@@ -178,9 +178,10 @@ otherwise. Its discs are `DISK_<n>`, each a disc's name and a file on it
 isn't on the image is missing from it.
 
 A disc's image builds as the disc does, not by Cider's list: the Windows
-installer installs the runtimes the game needs with it (`mfc90.dll`, which
-the Silent Spy's and Sea of Darkness's loose files lack), and some games
-check for their disc. The builder recognises the game (from the Cider
+installer installs the prerequisites the game needs with it (a Sea of
+Darkness wrapp made from the files alone quit for want of `mfc90.dll`;
+The Silent Spy's disc carries DirectX's `d3dx9_33` in `Prereqs/`), and some
+games check for their disc. The builder recognises the game (from the Cider
 installer's names, else as a disc is recognised), finds its Windows
 installer (`GameDetector.installerLookup`, refusing an image with none),
 and builds the bundle's disc edition, with the image as disc 1
