@@ -413,3 +413,33 @@ func hit(_ source: String, _ id: String, _ title: String, year: Int? = nil, plat
         #expect(firstYear("released 12345") == nil)
     }
 }
+
+/// Which search result a program already opened belongs to.
+@Suite struct OpenedProgramLinks {
+    let result = Merger.merge([hit("wikidata", "Q1", "Ingenious", year: 1995, ids: ["wikidata": "Q1"])])[0]
+
+    @Test func aProgramWithNoIdsIsItsTitlesResult() {
+        #expect(Catalog.overlap(Store.ProgramInfo(slug: "ingenious", title: "Ingenious"), result) > 0)
+        #expect(Catalog.overlap(Store.ProgramInfo(slug: "other", title: "Ingenious II"), result) == 0)
+    }
+
+    @Test func idsOutrankATitle() {
+        var withIds = Store.ProgramInfo(slug: "ingenious-1995", title: "Something Else")
+        withIds.ids = ["wikidata": "Q1"]
+        #expect(Catalog.overlap(withIds, result) > Catalog.overlap(Store.ProgramInfo(slug: "ingenious", title: "Ingenious"), result))
+    }
+
+    @Test func aTitleSharedByManyIsTheHostsProgram() {
+        var ours = Merger.merge([hit("wikidata", "Q9", "Ingenious", year: 1997, ids: ["wikidata": "Q9"])])[0]
+        ours.bundleId = "ingenious-consortium/ingenious"
+        let p = Store.ProgramInfo(slug: "ingenious", title: "Ingenious")
+        #expect(Catalog.bestMatch(p, [result, ours]) == 1)
+        #expect(Catalog.bestMatch(p, [result]) == 0)
+    }
+
+    @Test func aProgramWithIdsIsntMatchedByTitle() {
+        var p = Store.ProgramInfo(slug: "ingenious", title: "Ingenious")
+        p.ids = ["wikidata": "Q2"]
+        #expect(Catalog.overlap(p, result) == 0)
+    }
+}

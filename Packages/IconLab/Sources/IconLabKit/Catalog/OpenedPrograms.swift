@@ -18,7 +18,7 @@ nonisolated public struct OpenedProgram: Codable, Sendable, Equatable {
 }
 
 /// Search results and the programs opened from them: a program is a result's when they share ids (the catalogue
-/// ids it was opened with, kept in `program.json`) or the host's bundle. Merging results that had each been opened
+/// ids it was opened with, kept in `program.json`) or the host's bundle, or, for a program that has neither, a title. Merging results that had each been opened
 /// merges the programs; separating a result leaves the program with the side that has the most sources.
 extension Catalog {
     struct Opened: Sendable {
@@ -39,20 +39,33 @@ extension Catalog {
         return out
     }
 
-    /// How strongly a program is this result: its bundle, then each id they share.
+    /// How strongly a program is this result: its bundle, then each id they share. A program that knows neither (one
+    /// made before programs kept their catalogues' ids) is the result with its title, the weakest link of all.
     static func overlap(_ p: Store.ProgramInfo, _ r: ProgramResult) -> Int {
         var n = 0
-        if let b = p.bundleId, b == r.bundleId || r.hits.contains(where: { $0.source == hostSource && $0.sourceId == b }) { n += 100 }
-        for (k, v) in p.ids ?? [:] where r.ids[k] == v { n += 1 }
+        if let b = p.bundleId, b == r.bundleId || r.hits.contains(where: { $0.source == hostSource && $0.sourceId == b }) { n += 200 }
+        for (k, v) in p.ids ?? [:] where r.ids[k] == v { n += 2 }
+        if p.bundleId == nil, (p.ids ?? [:]).isEmpty {
+            let title = Titles.normalise(p.title)
+            if !title.isEmpty, Titles.normalise(r.title) == title || r.hits.contains(where: { Titles.normalise($0.title) == title }) { n += 1 }
+        }
         return n
+    }
+
+    /// The result a program is: the one it matches most strongly; of those matching as well, the host's program's (a
+    /// title shared by many results is most likely the one Second Chance has), else the first, the best ranked.
+    static func bestMatch(_ p: Store.ProgramInfo, _ results: [ProgramResult]) -> Int? {
+        let scores = results.map { overlap(p, $0) }
+        guard let top = scores.max(), top > 0 else { return nil }
+        let tied = scores.indices.filter { scores[$0] == top }
+        return tied.first { results[$0].bundleId != nil } ?? tied.first
     }
 
     /// Each program on the result it best matches, the one with the most designs (then pictures) first.
     func linking(_ results: [ProgramResult], _ opened: [Opened]) -> [ProgramResult] {
         var out = results.map { r -> ProgramResult in var r = r; r.programs = nil; return r }
         for o in opened {
-            let scores = out.map { Self.overlap(o.info, $0) }
-            guard let best = scores.indices.max(by: { scores[$0] < scores[$1] }), scores[best] > 0 else { continue }
+            guard let best = Self.bestMatch(o.info, out) else { continue }
             out[best].programs = ((out[best].programs ?? []) + [o.link]).sorted { ($0.pins, $0.media) > ($1.pins, $1.media) }
         }
         return out
@@ -97,8 +110,7 @@ extension Catalog {
         let opened = await openedPrograms()
         var owners: [(Opened, ProgramResult)] = []
         for o in opened {
-            let scores = before.map { Self.overlap(o.info, $0) }
-            if let best = scores.indices.max(by: { scores[$0] < scores[$1] }), scores[best] > 0 { owners.append((o, before[best])) }
+            if let best = Self.bestMatch(o.info, before) { owners.append((o, before[best])) }
         }
         guard owners.count > 1, let target = owners.max(by: { a, b in
             let ha = a.0.info.bundleId != nil, hb = b.0.info.bundleId != nil
