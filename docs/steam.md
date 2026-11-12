@@ -80,7 +80,9 @@ thrown away after, then the edition is built. In order:
    builds the wine module's prefix and the steam module's client stage
    (`SteamWrappPreparer`), restoring each from its layer when it can — the
    prefix, then Valve's `SteamSetup.exe /S` (downloaded once to
-   `~/Library/Caches/SecondChance/`). Not `winetricks steam`: it installs
+   `~/Library/Caches/SecondChance/`), run once Wine's desktop has
+   registered the display devices, as any installer is, and once more in a
+   fresh Wine session if it still found no display. Not `winetricks steam`: it installs
    Microsoft's core fonts first, which Steam doesn't need under the bundled
    Wine. Then lay the
    cached updated client

@@ -37,6 +37,14 @@ public enum FocusDetector {
         case .reportsFullscreen(let isFullscreen):
             return isFullscreen()
         case .frontmost:
+            // The window server's order first: AppKit learns of another app
+            // coming in front only on the main run loop, which a scenario
+            // polling on the main thread never turns, so `isActive` alone
+            // kept a game "in front" behind another app's window, its keys
+            // going to that app.
+            if let front = WindowFinder.frontOwner(of: WindowFinder.onScreenWindows()) {
+                return front == pid
+            }
             guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == pid }) else {
                 return false
             }
@@ -83,10 +91,8 @@ public enum FocusDetector {
             }
 
             if Date().timeIntervalSince(lastLog) >= 2 {
-                let frontmost = NSWorkspace.shared.frontmostApplication
-                let frontmostName = frontmost?.localizedName ?? frontmost?.bundleIdentifier ?? "unknown"
                 let elapsed = String(format: "%.1f", Date().timeIntervalSince(start))
-                logger.notice("   [\(elapsed)s] Not focused yet — frontmost is \(frontmostName) (PID \(frontmost?.processIdentifier ?? -1))")
+                logger.notice("   [\(elapsed)s] Not focused yet — in front is \(WindowFinder.describeFront())")
                 lastLog = Date()
             }
 

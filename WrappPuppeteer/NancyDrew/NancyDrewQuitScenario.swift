@@ -968,6 +968,21 @@ struct NancyDrewQuitScenario {
                                     waitForChange(from: before, after: last, context: context)
                                 }
                             }
+                            // A key reaches only the app in front: one pressed
+                            // while something else is (a build's installer
+                            // starting beside the test) is lost, and the rest of
+                            // the sequence would land somewhere it wasn't meant
+                            // for. So the sequence is given up, the game brought
+                            // back, and the handler starts it again from its
+                            // screen, not having acted.
+                            guard FocusDetector.isFocused(pid: gamePid, strategy: strategy) else {
+                                switch regainFocus(before: pressing, gamePid: gamePid, strategy: strategy, context: context) {
+                                case .focused: continue attemptLoop
+                                case .timedOut, .blocked:
+                                    forceQuit(app)
+                                    return notFound
+                                }
+                            }
                             logger.notice("  ✓ \(handler.id): found its \(handler.when), pressing \(pressing)...")
                             before = keyProbe(context)
                             guard context.game.press(pressing) else {
@@ -1072,6 +1087,20 @@ struct NancyDrewQuitScenario {
     }
 
     static let keyChangeWait: TimeInterval = 10
+
+    /// Bring the game back in front after something else took it during a
+    /// sequence of keys, saying what was in front, so the log tells a lost
+    /// key from one the program ignored.
+    private func regainFocus(before key: String, gamePid: Int32, strategy: FocusStrategy, context: Context) -> FocusWaitResult {
+        logger.warning("    ⚠️  The game isn't in front before \(key) (\(WindowFinder.describeFront()) is): bringing it back to start its keys again")
+        let result = FocusDetector.waitForFocus(pid: gamePid, strategy: strategy, activate: wrapp.activatesForFocus, timeout: 60, settleDelay: 1)
+        // What the game's own window says: in front and key, yet a program
+        // may still ignore its keys after being switched away from (Iji does).
+        if result == .focused, let state = context.game.state() {
+            logger.notice("    Back in front: the game's window says active \(state.active), key \(state.key)")
+        }
+        return result
+    }
 
     /// How long after a Quit that should only ask the program is checked to
     /// be still running, before the next Quit.

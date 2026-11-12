@@ -55,6 +55,53 @@ struct ShardedRunTests {
         #expect(plan.unrunnable.isEmpty)
     }
 
+    @Test("Games that sign in to an account all go to one shard, the rest balancing around them")
+    func signingInTogether() {
+        let games = [
+            Game(slug: "steam-big", weight: 10, needs: [], signsIn: true),
+            Game(slug: "steam-small", weight: 1, needs: [], signsIn: true),
+            Game(slug: "disc", weight: 9, needs: []),
+            Game(slug: "big-fish", weight: 5, needs: [], signsIn: true),
+            Game(slug: "trial", weight: 2, needs: []),
+        ]
+        let plan = ShardPlan.assign(games, to: [Slot(name: "one", has: []), Slot(name: "two", has: [])])
+        #expect(plan.shards.map { $0.map(\.slug) } == [["steam-big", "big-fish", "steam-small"], ["disc", "trial"]])
+    }
+
+    @Test("A game's sources that sign in are split from the rest, so only they are held to one shard")
+    func splitSources() {
+        #expect(ShardPlan.split([.disk, .steam, .herDownload, .bigFish, .bigFishTrial]) == [[.disk, .herDownload, .bigFishTrial], [.steam, .bigFish]])
+        #expect(ShardPlan.split([.disk]) == [[.disk]])
+        #expect(ShardPlan.split([.steam]) == [[.steam]])
+    }
+
+    @Test("A shard makes one run for each set of sources it was handed, in the order they came")
+    func runsBySources() {
+        let shard = [
+            Game(slug: "a", weight: 1, needs: [], signsIn: true, sources: [.steam, .bigFish]),
+            Game(slug: "b", weight: 1, needs: [], sources: [.disk]),
+            Game(slug: "a", weight: 1, needs: [], sources: [.disk]),
+            Game(slug: "c", weight: 1, needs: [], signsIn: true, sources: [.steam, .bigFish]),
+        ]
+        let runs = ShardPlan.runs(shard)
+        #expect(runs.map(\.sources) == [[.steam, .bigFish], [.disk]])
+        #expect(runs.map { $0.games.map(\.slug) } == [["a", "c"], ["b", "a"]])
+    }
+
+    @Test("A shard's run names only its own sources")
+    func withSources() {
+        let options = ["--source", "all", "--refresh-wrapp", "full"]
+        #expect(ShardCoordinator.withSources([.steam, .bigFish], options) == ["--source", "steam,big-fish", "--refresh-wrapp", "full"])
+        #expect(ShardCoordinator.withSources([.disk], ["--skip-app-build"]) == ["--skip-app-build", "--source", "disk"])
+    }
+
+    @Test("Steam and owned Big Fish games sign in; trials and other sources don't")
+    func signsIn() {
+        #expect(ShardPlan.signsIn([.disk, .steam]))
+        #expect(ShardPlan.signsIn([.bigFish]))
+        #expect(!ShardPlan.signsIn([.disk, .herDownload, .bigFishTrial, .download]))
+    }
+
     @Test("With no Mac, every game is unrunnable")
     func noMacs() {
         let plan = ShardPlan.assign([game("a")], to: [])
