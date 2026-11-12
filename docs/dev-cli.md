@@ -1059,7 +1059,8 @@ There the pointer can't be moved by a program
 ([virtual pointer](wine-in-process-helpers.md#virtual-pointer)): Peekaboo's
 clicks, `CGWarpMouseCursorPosition` and posted events leave it where it was, so a Wine
 program reads the old position and the click lands somewhere else. Only a game
-`sc puppet` started has the virtual pointer. A pointer event from a Screen Sharing
+`sc puppet` started has the virtual pointer, which follows `session do`'s moves as well
+as puppet control's. A pointer event from a Screen Sharing
 viewer moves the real one, so `session do` reaches anything on that screen: an
 installer a build step runs, a dialog, the Finder. Points are in a
 `session screenshot` picture (`--width`, 1600 unless the picture was taken with

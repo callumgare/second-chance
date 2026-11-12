@@ -1434,7 +1434,13 @@ real pointer as before. In a Wine process:
   click puppet control posted, which puppet control marks with
   `kPuppetEventTag` in the event's user data — the one field
   `-[NSApplication postEvent:atStart:]` keeps (it renumbers events);
-- every other mouse event is given its pointer as its position: the window
+- so does the real pointer when it moves: only a Screen Sharing viewer can
+  move it here, so an event carrying it anywhere other than where it was
+  last seen is the viewer's — `sc session do`'s clicks — and the pointer
+  follows (before 2026-11-12 these too were given its pointer, and `session
+  do` couldn't click in a game `sc puppet` started);
+- every other mouse event, which carries the real pointer where it was, is
+  given its pointer as its position: the window
   server's, the moves AppKit makes up when the app is activated (as a click
   activates it), which even carry the game's own process id, and cursor
   lock's middle clicks, which aim at the real pointer. Any of them would
