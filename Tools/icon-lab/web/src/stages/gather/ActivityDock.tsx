@@ -9,6 +9,24 @@ import { useScans } from "../../state/scans";
 import { ResizeHandle } from "../../components/ResizeHandle";
 import { ScanTreeBody } from "./ScanTree";
 
+/** The engine's lane a job runs in (`Jobs.Lane`): a queued job waits only for running ones in its own lane. */
+const laneOf = (group?: string) => (group === "gather" || group === "match" || group === "sources" ? "network" : group === "scan" ? "files" : "compute");
+
+/** Other programs' running jobs that this program's queued ones wait for (those in the same lanes), when none of its
+ *  own is running: what holds it up, and when the first of them should be done. */
+function useHeldBy(slug: string, queued: Job[], running: Job[]) {
+  const all = useJobs((s) => s.jobs);
+  const programs = useApp((s) => s.programs);
+  if (running.length || !queued.length) return null;
+  const lanes = new Set(queued.map((j) => laneOf(j.group)));
+  const others = [...all.values()].filter((j) => j.state === "running" && j.program && j.program !== slug && lanes.has(laneOf(j.group)));
+  if (!others.length) return null;
+  const names = [...new Set(others.map((j) => programs?.find((p) => p.slug === j.program)?.title ?? j.program!))];
+  const etas = others.map((j) => j.eta).filter((e): e is number => e != null);
+  const progress = others.reduce((n, j) => n + j.progress, 0) / others.length;
+  return { count: others.length, names, soonest: etas.length ? Math.min(...etas) : null, progress };
+}
+
 export const fmtEta = (s?: number) => (s == null ? "" : s < 1 ? "<1 s" : s < 90 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`);
 
 export function useProgramJobs(slug: string): Job[] {
@@ -58,6 +76,8 @@ export function ActivityDock({ slug, collapsed, onToggle, height, maxHeight, onR
   const picksPending = [...run, ...q].filter((j) => j.group === "hires").length;
   const live = [...run, ...q];
   const cancelAll = () => { for (const j of live) void cancel(j); };
+  const held = useHeldBy(slug, q, run);
+  const heldText = held && `${held.count} running for ${held.names.length === 1 ? held.names[0] : `${held.names.length} other programs`}`;
   return (
     <div className={"dock" + (collapsed ? " collapsed" : "")}>
       <ResizeHandle edge label="Resize the activity panel" height={height} min={DOCK_MIN} max={maxHeight} reset={DOCK_H} collapsed={DOCK_BAR}
@@ -66,6 +86,7 @@ export function ActivityDock({ slug, collapsed, onToggle, height, maxHeight, onR
         <button className="dock-toggle" onClick={onToggle} aria-expanded={!collapsed}>
           {run.length ? <span className="spin" /> : <span style={{ color: failed.length ? "var(--bad)" : "var(--ok)" }}>●</span>}
           <b>{run.length || q.length ? `${run.length} running · ${q.length} queued` : "Nothing running"}</b>
+          {held && <span className="muted">waiting: {heldText}</span>}
           {failed.length > 0 && <span style={{ color: "var(--bad)" }}>{failed.length} failed or cancelled</span>}
           <span className="muted">{picksPending ? `Picked images ready in about ${fmtEta(eta)}` : run.length ? `about ${fmtEta(eta)} left` : "Everything picked is ready"}</span>
         </button>
@@ -74,6 +95,16 @@ export function ActivityDock({ slug, collapsed, onToggle, height, maxHeight, onR
       </div>
       {!collapsed && (
         <div className="dock-jobs">
+          {held && (
+            <>
+              <div className="jobsec">Running</div>
+              <div className="held-by" title={held.names.join(", ")}>
+                <span className="spin" /> {heldText}{held.names.length > 1 ? ` (${held.names.join(", ")})` : ""}, which this program's queued work waits for.
+                {" "}{held.soonest != null ? `The first should be done in about ${fmtEta(held.soonest)}.`
+                  : held.progress >= 0.01 ? `They're ${Math.round(held.progress * 100)}% done on average.` : "They've only just started."}
+              </div>
+            </>
+          )}
           {([["Running", run], ["Queued", q], ["Failed or cancelled", failed], ["Done", done]] as const).filter(([, l]) => l.length).map(([t, l]) => (
             <div key={t} style={{ display: "contents" }}>
               <div className="jobsec">{t}</div>
