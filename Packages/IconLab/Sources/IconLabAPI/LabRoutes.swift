@@ -6,6 +6,7 @@ nonisolated extension IconLabAPI {
     static func addLabRoutes(_ router: inout Router, lab: Lab) {
         router.get("/api/programs") { _ in try json(await lab.programs()) }
         router.get("/api/programs/:slug") { c in try json(try await lab.program(try c.param("slug"))) }
+        router.get("/api/programs/:slug/look") { c in try json(try await lab.look(try c.param("slug"))) }
         router.get("/api/treatments") { _ in try json(Treatments.info) }
 
         router.get("/api/programs/:slug/media/:id/:variant") { c in

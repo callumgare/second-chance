@@ -395,6 +395,8 @@ const enc = encodeURIComponent;
 export const api = {
   programs: () => req<ProgramSummary[]>("GET", "/api/programs"),
   program: (slug: string) => req<Program>("GET", `/api/programs/${enc(slug)}`),
+  /** The program's colours and roles, which change as its pictures do. */
+  look: (slug: string) => req<Pick<Program, "colours" | "colourOrder" | "roles">>("GET", `/api/programs/${enc(slug)}/look`),
   patchMedia: (slug: string, id: string, patch: { picked?: boolean; kind?: MediaKind }) =>
     req<Media>("PATCH", `/api/programs/${enc(slug)}/media/${enc(id)}`, patch),
 

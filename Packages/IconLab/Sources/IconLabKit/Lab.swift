@@ -94,6 +94,22 @@ nonisolated public final class Lab: Sendable {
                           colourOrder: order, roles: roles)
     }
 
+    /// What follows from a program's pictures rather than being one of them: its colours and the pictures in each
+    /// role. They change as gathering and analysis go on, so the page asks again when its pictures change.
+    public struct ProgramLook: Codable, Sendable {
+        var colours: [String: String]
+        var colourOrder: [String]
+        var roles: [String: String]
+    }
+
+    public func look(_ slug: String) async throws -> ProgramLook {
+        guard await store.program(slug) != nil else { throw IconLabError.notFound("program \(slug)") }
+        let media = await store.media(slug)
+        let roles = Treatments.defaultRoles(media)
+        let (colours, order) = Lab.mergeSameColours(await colourOptions(slug, subject: roles["subject"], media: media))
+        return ProgramLook(colours: colours, colourOrder: order, roles: roles)
+    }
+
     /// Options that are the same colour show once, named for all of them ("dominant & lightest"), in order of first
     /// appearance.
     static func mergeSameColours(_ c: ([String: String], [String])) -> ([String: String], [String]) {

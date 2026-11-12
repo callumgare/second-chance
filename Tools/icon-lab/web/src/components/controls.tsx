@@ -96,18 +96,28 @@ export function ColourField({ value, onChange, allowNone, label }: {
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
       {nameOf && <span className="faint wraps" style={{ fontSize: 10.5 }}>{nameOf}</span>}
       <Popup anchor={pop.anchor} onClose={pop.close}>
-        <HexColorPicker color={value ?? "#888888"} onChange={(c) => onChange(c)} />
-        {named.length > 0 && <>
-          <div className="faint" style={{ fontSize: 10.5 }}>From the program's images</div>
-          <div className="names">
-            {named.map(([n, c]) => (
-              <button key={n} className={"swatch" + (value?.toLowerCase() === c.toLowerCase() ? " on" : "")} style={{ background: c }} title={`${n} ${c}`} onClick={() => onChange(c)} />
-            ))}
-          </div>
-        </>}
+        <FreePicker named={named} value={value} onChange={onChange} />
         {allowNone && <button className="btn small" onClick={() => { onChange(undefined); pop.close(); }}>Automatic</button>}
       </Popup>
     </span>
+  );
+}
+
+/** A free colour picker, with the program's colours as swatches under it (every one, wherever it opens). */
+function FreePicker({ named, value, onChange }: { named: [string, string][]; value: string | undefined | null; onChange(v: string): void }) {
+  const v = value?.toLowerCase();
+  return (
+    <>
+      <HexColorPicker color={value ?? "#888888"} onChange={(c) => onChange(c)} />
+      {named.length > 0 && <>
+        <div className="faint" style={{ fontSize: 10.5 }}>The program's colours</div>
+        <div className="names">
+          {named.map(([n, c]) => (
+            <button key={n} className={"swatch" + (v === c.toLowerCase() ? " on" : "")} style={{ background: c }} title={`${n} ${c}`} aria-label={`${n} ${c}`} onClick={() => onChange(c)} />
+          ))}
+        </div>
+      </>}
+    </>
   );
 }
 
@@ -146,7 +156,7 @@ export function SwatchRow({ value, onChange }: { value: string | undefined; onCh
       <button className={"swatch" + (custom ? " on" : "")} title="Custom…" style={{ background: custom ? value : "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)" }}
         onClick={(e) => pop.toggle(e.currentTarget)} />
       <Popup anchor={pop.anchor} onClose={pop.close}>
-        <HexColorPicker color={value ?? "#888888"} onChange={(c) => onChange(c)} />
+        <FreePicker named={named} value={value} onChange={onChange} />
       </Popup>
     </div>
   );

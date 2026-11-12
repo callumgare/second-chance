@@ -27,6 +27,28 @@ type AppState = {
 
 let toastTimer: number | undefined;
 
+// The program asked for last: a fetch that answers after another program was asked for is dropped.
+let wanted: string | null = null;
+
+// A program's colours and roles follow from its pictures (the subject image's palette), and gathering and analysis
+// change them long after the program was opened: asked for again a moment after its pictures change, so a palette
+// that was empty when the program opened fills in without a reload.
+let lookTimer: number | undefined;
+function refreshLookSoon(slug: string) {
+  window.clearTimeout(lookTimer);
+  lookTimer = window.setTimeout(async () => {
+    try {
+      const look = await api.look(slug);
+      const p = useApp.getState().program;
+      if (!p || p.slug !== slug) return;
+      if (JSON.stringify([p.colours, p.colourOrder, p.roles]) === JSON.stringify([look.colours, look.colourOrder, look.roles])) return;
+      const next = { ...p, ...look };
+      remember(next);
+      useApp.setState({ program: next });
+    } catch { /* the next change asks again */ }
+  }, 800);
+}
+
 // Programs seen before open at once from their last copy (memory, then localStorage), and refresh behind it.
 const seen = new Map<string, Program>();
 const storeKey = (slug: string) => `iconlab.program.${slug}`;
@@ -57,13 +79,14 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async loadProgram(slug) {
-    if (get().program?.slug === slug) return;
+    wanted = slug;
+    if (get().program?.slug === slug) { refreshLookSoon(slug); return; }
     const c0 = cachedProgram(slug);
     const cached = c0 ? { ...c0, media: c0.media.map((m) => withParts(slug, m)) } : c0;
     set({ program: cached, programError: null, media: new Map((cached?.media ?? []).map((m) => [m.id, m])) });
     try {
       const raw = await api.program(slug);
-      if (get().program && get().program?.slug !== slug) return;   // moved on meanwhile
+      if (wanted !== slug) return;   // moved on meanwhile
       remember(raw);
       const p = { ...raw, media: raw.media.map((m) => withParts(slug, m)) };
       set({ program: p, media: new Map(p.media.map((m) => [m.id, m])) });
@@ -101,6 +124,7 @@ export const useApp = create<AppState>((set, get) => ({
     const gone = new Set(ids);
     const media = p.media.filter((m) => !gone.has(m.id));
     set({ program: { ...p, media }, media: new Map(media.map((m) => [m.id, m])) });
+    refreshLookSoon(program);
   },
 
   upsertMedia(program, raw) {
@@ -112,6 +136,7 @@ export const useApp = create<AppState>((set, get) => ({
     const next = { ...p, media };
     seen.set(next.slug, next);
     set({ program: next, media: new Map(media.map((x) => [x.id, x])) });
+    refreshLookSoon(program);
   },
 
   async setHidden(id, hidden) {

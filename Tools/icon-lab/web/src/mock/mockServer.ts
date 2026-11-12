@@ -150,6 +150,10 @@ const routes: [string, RegExp, Handler][] = [
     });
   }],
   ["GET", /^\/api\/programs\/([^/]+)$/, async (m) => program(m[1])],
+  ["GET", /^\/api\/programs\/([^/]+)\/look$/, async (m) => {
+    const { colours, colourOrder, roles } = await program(m[1]);
+    return { colours, colourOrder, roles };
+  }],
   ...stageOneAndTwoRoutes(),
   ["PATCH", /^\/api\/programs\/([^/]+)\/media\/([^/]+)$/, async (m, body) => {
     const s = store(m[1]);

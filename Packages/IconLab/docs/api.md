@@ -56,6 +56,11 @@ type MediaKind = "box-front" | "box-back" | "box-spine" | "disc" | "logo" | "ico
   | "banner" | "manual" | "cutout" | "art" | "other"
 ```
 
+`GET /api/programs/:slug/look` → `{ colours, colourOrder, roles }`, the parts of `Program` that follow from its
+pictures. They change as gathering and analysis go on (the subject image is chosen, a larger copy replaces it), so
+the page asks again a moment after its pictures change rather than keeping what it was given when it opened the
+program.
+
 `PATCH /api/programs/:slug/media/:id` `{ picked?: boolean, kind?: MediaKind }` → `Media`
 
 ## Suggestions
