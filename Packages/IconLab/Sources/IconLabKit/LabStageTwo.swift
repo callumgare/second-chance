@@ -73,23 +73,25 @@ nonisolated extension Lab {
                     guard let big = Bitmap.load(tmp) else { throw IconLabError.tool("the source's copy isn't a picture") }
                     if big.width * big.height <= cur.width * cur.height {
                         // what we have is already the largest: say so (no download next time) and analyse it as it is
-                        cur.remote?.width = big.width; cur.remote?.height = big.height
-                        try await store.upsertMedia(slug, cur)
+                        let w = big.width, h = big.height
+                        cur = try await store.updateMedia(slug, id) { $0.remote?.width = w; $0.remote?.height = h } ?? cur
                     } else {
-                    try await store.replaceMediaFile(slug, id, with: tmp)
-                    // the store renamed the file (its type may have changed): carry on from its record, not the old one
-                    if let fresh = await store.mediaRecord(slug, id) { cur.file = fresh.file }
-                    cur.width = big.width; cur.height = big.height
-                    cur.upgraded = true
-                    try await store.upsertMedia(slug, cur)
-                    await forgetMediaCache(slug, id)
-                    await progress(0.4, "Analysing the larger copy")
-                    // the cheap tier again, on the big copy (a better mask)
-                    let r = Analyser.analyse(big, name: cur.name, knownKind: cur.kindSet == true ? cur.kind : nil, knownCircle: cur.analysis.circle)
-                    if let m = r.mask { try m.writePNG(to: store.maskFile(slug, id)); cur.hasMask = true }
-                    cur.analysis = r.analysis; cur.kind = r.kind; cur.kindConfidence = r.kindConfidence; cur.suitability = r.suitability
-                    try await store.upsertMedia(slug, cur)
-                    await forgetMediaCache(slug, id)
+                        // the store renames the file (its type may have changed): carry on from its record, not the old one
+                        try await store.replaceMediaFile(slug, id, with: tmp)
+                        let w = big.width, h = big.height
+                        cur = try await store.updateMedia(slug, id) { $0.width = w; $0.height = h; $0.upgraded = true } ?? cur
+                        await forgetMediaCache(slug, id)
+                        await progress(0.4, "Analysing the larger copy")
+                        // the cheap tier again, on the big copy (a better mask)
+                        let r = Analyser.analyse(big, name: cur.name, knownKind: cur.kindSet == true ? cur.kind : nil, knownCircle: cur.analysis.circle)
+                        if let m = r.mask { try m.writePNG(to: store.maskFile(slug, id)) }
+                        let analysed = r
+                        cur = try await store.updateMedia(slug, id) { c in
+                            if analysed.mask != nil { c.hasMask = true }
+                            c.analysis = analysed.analysis; c.kind = analysed.kind; c.kindConfidence = analysed.kindConfidence
+                            c.suitability = analysed.suitability
+                        } ?? cur
+                        await forgetMediaCache(slug, id)
                     }
                 }
                 await progress(0.5, "Second-opinion cut-out")
@@ -98,21 +100,28 @@ nonisolated extension Lab {
                 // that's nearly all or nothing of the picture
                 if let bm = try? await models.subjectMask(img) {
                     try? bm.writePNG(to: store.dir(slug).appendingPathComponent("masks/\(id)-birefnet.png"))
+                    if let now = await store.mediaRecord(slug, id) { cur = now }
                     if !cur.hasMask || cur.analysis.coverage < 0.05 || cur.analysis.coverage > 0.92 {
                         try bm.writePNG(to: store.maskFile(slug, id))
-                        cur.hasMask = true
-                        cur.deep = (cur.deep ?? [:]).merging(["mask": "birefnet"]) { _, b in b }
                         await forgetMediaCache(slug, id)
-                        if let c = try? await assets.cutout(slug, id) { cur.cutoutSize = [c.bitmap.width, c.bitmap.height] }
+                        let size: [Int]? = (try? await assets.cutout(slug, id)).map { [$0.bitmap.width, $0.bitmap.height] }
+                        cur = try await store.updateMedia(slug, id) { c in
+                            c.hasMask = true
+                            c.deep = (c.deep ?? [:]).merging(["mask": "birefnet"]) { _, b in b }
+                            if let size { c.cutoutSize = size }
+                        } ?? cur
                     }
                 }
                 await progress(0.6, "Deep analysis")
+                if let now = await store.mediaRecord(slug, id) { cur = now }
                 let cut = cur.hasMask ? try? await assets.cutout(slug, id).bitmap : nil
-                let deep = Deep.analyse(img, cutout: cut, record: cur, programTitle: title)
-                cur.deep = (cur.deep ?? [:]).merging(deep.findings) { _, b in b }
-                cur.hires = "done"
-                try await store.upsertMedia(slug, cur)
-                await broadcastMedia(slug, cur)
+                let findings = Deep.analyse(img, cutout: cut, record: cur, programTitle: title).findings
+                // only its own fields, onto the record as it is now: the analysis may have saved meanwhile
+                guard let done = try await store.updateMedia(slug, id, { c in
+                    c.deep = (c.deep ?? [:]).merging(findings) { _, b in b }
+                    c.hires = "done"
+                }) else { return }
+                await broadcastMedia(slug, done)
                 await progress(0.85, "Adding what it found")
                 // parts replaced the derived copies (straightened, title) and upscaling moved to the design stage
             } catch {
@@ -129,10 +138,18 @@ nonisolated extension Lab {
     }
 
     func setHires(_ slug: String, _ id: String, _ state: String) async {
-        guard var cur = await store.mediaRecord(slug, id) else { return }
-        cur.hires = state
-        do { try await store.upsertMedia(slug, cur) } catch { logger.error("Couldn't save \(slug)/\(id)'s hi-res state: \(error)") }
-        await broadcastMedia(slug, cur)
+        do {
+            guard let cur = try await store.updateMedia(slug, id, { $0.hires = state }) else { return }
+            await broadcastMedia(slug, cur)
+        } catch { logger.error("Couldn't save \(slug)/\(id)'s hi-res state: \(error)") }
+    }
+
+    /// Picked pictures whose hi-res job was queued or running when Icon Lab last quit: nothing is doing it any
+    /// more, so it's queued again (otherwise they'd say "analysing…" for ever, and picking them again wouldn't help).
+    public func resumeDeepening(_ slug: String) async {
+        for m in await store.media(slug) where m.hires == "queued" || m.hires == "running" {
+            await deepen(slug, m.id)
+        }
     }
 
     /// A derived image (straightened, trimmed, the title) added as media of its own and analysed.

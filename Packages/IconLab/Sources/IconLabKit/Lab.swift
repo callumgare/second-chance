@@ -315,33 +315,47 @@ nonisolated public final class Lab: Sendable {
             await progress(0.7, "Finding parts")
             let title = await store.program(slug)?.title ?? slug
             let found = PartsFinder.find(img, analysis: r, kind: kind, programTitle: title)
-            guard var cur = await store.mediaRecord(slug, id) else { return }
-            if let mask = r.mask {
-                try mask.writePNG(to: store.maskFile(slug, id))
-                cur.hasMask = true
-            }
+            if let mask = r.mask { try mask.writePNG(to: store.maskFile(slug, id)) }
             for (pid, m) in found.masks { try m.writePNG(to: assets.partMaskFile(slug, id, pid)) }
-            cur.analysis = r.analysis
-            cur.kind = kind
-            cur.kindConfidence = (confidence * 100).rounded() / 100
-            if known == nil { cur.kindSource = kind == "unknown" ? nil : "analysis"; cur.kindGuesses = guesses }
-            if fromSource { cur.kindSource = "source"; cur.kindSet = true; cur.sourceLabel = rec.sourceLabel ?? rec.remote?.sourceLabel }
-            cur.suitability = r.suitability
-            if let (score, why) = relevance { cur.relevance = score; cur.relevanceWhy = why }
-            cur.width = img.width; cur.height = img.height
-            // you turned it yourself when rotationAuto is false and there's no automatic reason
-            if !(cur.rotationAuto == false && cur.rotationWhy == nil) {
-                cur.rotation = found.rotation
-                cur.rotationAuto = found.rotation != 0 ? true : nil
-                cur.rotationWhy = found.rotationWhy
-            }
-            cur.parts = mergeParts(old: cur.allParts, found: found.parts, kind: kind, rec: cur)
-            cur.picked = cur.anyPicked
-            try await store.upsertMedia(slug, cur)
+            // Applied to the record as it is now, not the copy read before the work: the hi-res job runs alongside
+            // and saves its own fields (its state among them), which a whole stale copy would undo.
+            let analysed = r, foundParts = found, kindGuesses = guesses, isFromSource = fromSource, fromSourceLabel = rec.sourceLabel ?? rec.remote?.sourceLabel
+            let confidenceRounded = (confidence * 100).rounded() / 100, isKnown = known != nil, kindFound = kind, rel = relevance
+            let width = img.width, height = img.height
+            guard let saved = try await store.updateMedia(slug, id, { [self] cur in
+                if analysed.mask != nil { cur.hasMask = true }
+                cur.analysis = analysed.analysis
+                cur.kind = kindFound
+                cur.kindConfidence = confidenceRounded
+                if !isKnown { cur.kindSource = kindFound == "unknown" ? nil : "analysis"; cur.kindGuesses = kindGuesses }
+                if isFromSource { cur.kindSource = "source"; cur.kindSet = true; cur.sourceLabel = fromSourceLabel }
+                cur.suitability = analysed.suitability
+                if let (score, why) = rel { cur.relevance = score; cur.relevanceWhy = why }
+                cur.width = width; cur.height = height
+                // you turned it yourself when rotationAuto is false and there's no automatic reason
+                if !(cur.rotationAuto == false && cur.rotationWhy == nil) {
+                    cur.rotation = foundParts.rotation
+                    cur.rotationAuto = foundParts.rotation != 0 ? true : nil
+                    cur.rotationWhy = foundParts.rotationWhy
+                }
+                cur.parts = mergeParts(old: cur.allParts, found: foundParts.parts, kind: kindFound, rec: cur)
+                cur.picked = cur.anyPicked
+            }) else { return }
             await forgetMediaCache(slug, id)
-            cur = await sizeParts(slug, cur)
-            if cur.hasMask, let c = try? await assets.cutout(slug, id) { cur.cutoutSize = [c.bitmap.width, c.bitmap.height] }
-            try await store.upsertMedia(slug, cur)
+            let sized = await sizeParts(slug, saved)
+            let cutoutSize: [Int]? = sized.hasMask ? (try? await assets.cutout(slug, id)).map { [$0.bitmap.width, $0.bitmap.height] } : nil
+            // only what sizing found: the part list as it was sized, and the cut-out's size
+            guard let cur = try await store.updateMedia(slug, id, { cur in
+                let sizes = Dictionary(sized.allParts.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+                var parts = cur.allParts
+                for i in parts.indices {
+                    guard let s = sizes[parts[i].id] else { continue }
+                    parts[i].size = s.size
+                    if parts[i].flatSides == nil { parts[i].flatSides = s.flatSides }
+                }
+                cur.parts = parts
+                if let cutoutSize { cur.cutoutSize = cutoutSize }
+            }) else { return }
             await broadcastMedia(slug, cur)
         }
     }

@@ -85,6 +85,19 @@ public actor Store {
         try saveMedia(slug, all)
     }
 
+    /// Changes one record in place, reading and saving it in one step on the store, so work that ran alongside
+    /// (the analysis and the hi-res job run at once on a picture just added) keeps what it wrote. A job that
+    /// read the record, awaited, then saved its whole copy back would undo the other's changes. Nil when it's gone.
+    @discardableResult
+    public func updateMedia(_ slug: String, _ id: String, _ change: @Sendable (inout MediaRecord) throws -> Void) throws -> MediaRecord? {
+        var all = media(slug)
+        guard let i = all.firstIndex(where: { $0.id == id }) else { return nil }
+        try change(&all[i])
+        let rec = all[i]
+        try saveMedia(slug, all)
+        return rec
+    }
+
     /// Adds an image file to a program (copied in), returning its new record (not yet analysed).
     public func addMedia(_ slug: String, from file: URL, name: String? = nil, source: String, sourceUrl: String? = nil,
                          provenance: String? = nil, kind: String? = nil) throws -> MediaRecord {

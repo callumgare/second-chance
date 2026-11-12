@@ -83,6 +83,7 @@ nonisolated public final class IconLabAPI: Sendable {
         for p in await lab.store.programs() {
             await lab.dropDerivedCopies(p.slug)
             await lab.analyseMissing(p.slug)
+            await lab.resumeDeepening(p.slug)
         }
         // Warm each program's cached colours and thumbnails, so opening one is instant.
         Task.detached {

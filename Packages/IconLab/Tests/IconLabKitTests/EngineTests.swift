@@ -177,3 +177,24 @@ import Testing
         #expect(SuitabilityFactor.total(factors) == 0)
     }
 }
+
+@Suite struct StoreTests {
+    /// The analysis and the hi-res job run at once on a picture just added. Each saving its whole copy of the record
+    /// undid the other's work: a hi-res state put back to "running" after it had finished left the picture saying
+    /// "analysing…" for good. Each changes its own fields on the record as it is now instead.
+    @Test func updatesFromJobsRunningAtOnceKeepEachOthersChanges() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("iconlab-store-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = Store(root: root)
+        var rec = MediaRecord(id: "p", name: "p.png", file: "p.png", source: "Your files", width: 10, height: 10)
+        rec.hires = "running"
+        try await store.saveMedia("s", [rec])
+        // the analysis read the record, then the hi-res job finished before the analysis saved
+        try await store.updateMedia("s", "p") { $0.hires = "done" }
+        try await store.updateMedia("s", "p") { $0.kind = "logo" }
+        let now = try #require(await store.mediaRecord("s", "p"))
+        #expect(now.hires == "done")
+        #expect(now.kind == "logo")
+        #expect(try await store.updateMedia("s", "gone") { $0.kind = "logo" } == nil)
+    }
+}
