@@ -31,8 +31,10 @@ A program goes through four stages, each a route of the page
    automatic merge misses, **Merge results…** joins several results into one
    program, and a merged result's entries can be separated or its merge
    undone; merges are remembered (`merges.json` in the data folder). A result
-   opened before says so, and one with designs shows them, pinned, with
-   **Continue designing**; choosing it opens that program again. Merging
+   opened before says so (a program is a result's by the catalogues' ids it
+   was opened with, or its bundle; one made before programs kept ids, by its
+   title, Second Chance's own result first when several share it), and one
+   with designs shows them, pinned, with **Continue designing**; choosing it opens that program again. Merging
    results that had each been opened makes one program of them (its pictures,
    designs and pins together, Second Chance's own program or else the one with
    the most sources taking the rest), and separating them leaves it with the
