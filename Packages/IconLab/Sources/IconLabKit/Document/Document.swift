@@ -156,6 +156,8 @@ nonisolated public struct Effect: Codable, Sendable, Hashable {
     public var t: Tagged
     public init(_ op: String, _ values: [String: JSONValue] = [:]) { t = Tagged(op, values) }
     public var op: String { t.tag }
+    /// Whether it's applied: an effect turned off (`"off": true`) stays in the list, doing nothing.
+    public var on: Bool { !t.bool("off") }
     public init(from decoder: Decoder) throws { t = try Tagged.decode(from: decoder, tagKey: "op") }
     public func encode(to encoder: Encoder) throws { try t.encode(to: encoder, tagKey: "op") }
 }

@@ -37,7 +37,7 @@ export async function renderContent(content: Content, pixelWidth: number, media:
   g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
   const unit = pw / Math.max(0.05, canvasWidth); // pixels per canvas unit
   const w0 = c.width, h0 = c.height;
-  for (const e of content.effects) c = applyEffect(c, e, unit);
+  for (const e of content.effects) if (!e.off) c = applyEffect(c, e, unit);
   // Effects that grow the image (an outline) grow it evenly: say where the content box sits in it.
   const px = (c.width - w0) / 2 / w0, py = (c.height - h0) / 2 / h0;
   (c as any).box = [-px, -py, 1 + px, 1 + py];

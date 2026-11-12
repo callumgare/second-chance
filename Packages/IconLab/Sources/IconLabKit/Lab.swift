@@ -344,7 +344,7 @@ nonisolated public final class Lab: Sendable {
         e.outputFormatting = [.sortedKeys]
         // the layer's place only matters to a mask locked to the canvas
         var placeKey = ""
-        if case .image(let ic) = content, ic.effects.contains(where: { $0.op == "mask" && $0.t.string("lock", "canvas") == "canvas" }), let t = transform {
+        if case .image(let ic) = content, ic.effects.contains(where: { $0.on && $0.op == "mask" && $0.t.string("lock", "canvas") == "canvas" }), let t = transform {
             placeKey = String(data: (try? e.encode(t)) ?? Data(), encoding: .utf8) ?? ""
         }
         let stamp = await assetStamp(program, content)

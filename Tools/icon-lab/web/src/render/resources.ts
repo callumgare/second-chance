@@ -176,8 +176,14 @@ class Resources {
 
 export const resources = new Resources();
 
+/** The content with the effects turned off left out: what's rendered, and what a render is keyed by. */
+export function withoutOff(content: Content): Content {
+  return content.kind === "image" && content.effects.some((e) => e.off) ? { ...content, effects: content.effects.filter((e) => !e.off) } : content;
+}
+
 /** Effects sized in canvas units depend on how wide the layer is: only then is its width part of the key. */
 export function contentWhat(content: Content, canvasWidth?: number, transform?: Transform) {
+  content = withoutOff(content);
   // Only those effects' renders depend on the width; others are asked with 1 so scaling doesn't re-render them.
   const fx = content.kind === "image" ? content.effects : [];
   const sized = fx.some((e) => e.op === "outline" || e.op === "feather" || e.op === "halftone" || e.op === "blur" || e.op === "riso" || (e.op === "mask" && e.lock === "canvas"));
@@ -194,6 +200,7 @@ export function contentWhat(content: Content, canvasWidth?: number, transform?: 
 /** Canvas-locked masks at the end of the effects are applied by the page (the content is asked for without them),
  *  so moving the layer never waits on the engine. */
 export function splitMasks(content: Content): { head: Content; trailing: { mask: Mask; invert: boolean }[] } {
+  content = withoutOff(content);
   if (content.kind !== "image") return { head: content, trailing: [] };
   const fx = [...content.effects];
   const trailing: { mask: Mask; invert: boolean }[] = [];

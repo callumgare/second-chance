@@ -83,7 +83,7 @@ export type Shape =
 
 export type ShapeType = Shape["type"]
 
-export type Effect =
+export type Effect = (
   | { op: "silhouette"; color: string }
   | { op: "outline"; color: string; width: number }
   | { op: "feather"; softness: number; offset: number }   // canvas units; offset: negative in, positive out
@@ -101,7 +101,7 @@ export type Effect =
   | { op: "key"; tolerance: number }
   | { op: "mask"; mask: Mask; lock: "canvas" | "image"; invert?: boolean } // canvas: stays put as the layer moves; image: moves with it
   | { op: "flatten"; color: string }
-
+) & { /** Turned off: kept in its place, doing nothing. */ off?: boolean }
 export type EffectOp = Effect["op"]
 
 export type Mask =

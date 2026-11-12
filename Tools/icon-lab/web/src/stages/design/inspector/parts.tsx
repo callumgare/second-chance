@@ -127,9 +127,12 @@ export function EffectsEditor({ effects, update, maskCtx }: { effects: Effect[];
   return (
     <div className="col">
       {effects.map((e, i) => (
-        <div key={i} className={"fx" + (r.dragging === i ? " dragging" : "")} {...r.row(i)}>
+        <div key={i} className={"fx" + (r.dragging === i ? " dragging" : "") + (e.off ? " off" : "")} {...r.row(i)}>
           <div className="fx-h" {...r.handle(i)} title="Drag to change the order effects are applied in">
             <span className="grip" aria-hidden>⠿</span>
+            <button className={"fx-onoff" + (e.off ? "" : " on")} role="switch" aria-checked={!e.off}
+              aria-label={`${EFFECT_LABELS[e.op]} ${e.off ? "off" : "on"}`} title={e.off ? "Turned off: click to turn it on" : "Click to turn it off, keeping its settings"}
+              onClick={() => update((l) => { if (l[i].off) delete l[i].off; else l[i].off = true; })}><span /></button>
             <b>{EFFECT_LABELS[e.op]}</b>
             <span className="grow" />
             <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Apply earlier" title="Apply earlier">↑</button>

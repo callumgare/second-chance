@@ -61,6 +61,13 @@ import Testing
         #expect(high[0] < 64 && high[2] > 192)                    // more pushes away from it
     }
 
+    @Test func anEffectTurnedOffStaysButIsntApplied() throws {
+        let off = try JSONDecoder().decode(Effect.self, from: Data(#"{"op":"blur","radius":0.01,"off":true}"#.utf8))
+        let on = try JSONDecoder().decode(Effect.self, from: Data(#"{"op":"blur","radius":0.01}"#.utf8))
+        #expect(!off.on && on.on)
+        #expect(String(decoding: try JSONEncoder().encode(off), as: UTF8.self).contains(#""off":true"#))   // kept when saved
+    }
+
     @Test func shapesRenderAtTheAskedSize() {
         for t in ["solid", "pattern", "bands", "window", "crt", "disc-rims", "text", "circle"] {
             let b = Shapes.render(Shape(t, ["color": "#ff0000", "a": "#000000", "b": "#ffffff", "colors": ["#ff0000", "#0000ff"], "text": "Z"]), size: 64)

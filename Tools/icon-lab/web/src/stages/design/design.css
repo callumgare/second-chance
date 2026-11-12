@@ -82,6 +82,13 @@
 .fx-h button { cursor: default }
 .grip { color: var(--faint); cursor: grab; font-size: 11px; line-height: 1; padding: 0 2px; user-select: none; -webkit-user-select: none }
 .fx.dragging, .stop.dragging { opacity: .45 }
+/* each effect's on/off switch; one turned off keeps its settings, greyed */
+.fx-h button.fx-onoff { flex: none; width: 24px; height: 14px; margin: 0 5px 0 2px; padding: 0; border-radius: 7px; border: none; background: var(--line-strong); position: relative; cursor: pointer }
+.fx-onoff span { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: left .12s }
+.fx-h button.fx-onoff.on { background: var(--accent) }
+.fx-onoff.on span { left: 12px }
+.fx.off { background: transparent; border-style: dashed }
+.fx.off > :not(.fx-h), .fx.off .fx-h b { opacity: .45 }
 .fx[data-drop="before"], .stop[data-drop="before"] { box-shadow: 0 -2px 0 var(--accent) }
 .fx[data-drop="after"], .stop[data-drop="after"] { box-shadow: 0 2px 0 var(--accent) }
 .media-pick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px }

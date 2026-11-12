@@ -315,7 +315,7 @@ export async function renderPartContent(content: Content, pixelWidth: number, me
   let r = out;
   const unit = pw / Math.max(0.05, canvasWidth);
   const w0 = r.width, h0 = r.height;
-  for (const e of content.effects) r = applyEffect(r, e, unit);
+  for (const e of content.effects) if (!e.off) r = applyEffect(r, e, unit);
   const px = (r.width - w0) / 2 / w0, py = (r.height - h0) / 2 / h0;
   return { url: await toBlobUrl(r), width: r.width, height: r.height, box: [-px, -py, 1 + px, 1 + py] as [number, number, number, number] };
 }

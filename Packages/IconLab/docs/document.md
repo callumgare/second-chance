@@ -104,6 +104,7 @@ type Effect =
   | { op: "posterize"; colors: number }                // flat enamel fills
   | { op: "scanlines" }
   | { op: "tint"; color: string; amount: number }      // blend towards a colour
+  // Any effect can carry `off: true`: it stays in the list, in its place, and does nothing until turned on.
   | { op: "brightness-contrast"; brightness: number; contrast: number }  // each -1…1, 0 unchanged: brightness shifts
                                                       // every channel by up to the whole range, contrast scales them
                                                       // about mid-grey by 4^contrast

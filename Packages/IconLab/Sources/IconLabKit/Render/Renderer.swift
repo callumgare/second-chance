@@ -30,7 +30,7 @@ nonisolated public struct Renderer: Sendable {
             let ph = max(1, Int((Double(pw) * Double(src.height) / Double(src.width)).rounded()))
             var r = Rendered(bitmap: src.resized(width: pw, height: ph, pixel: ic.smoothing == "pixel"))
             let unit = Double(pw) / max(0.001, canvasWidth)
-            for e in ic.effects {
+            for e in ic.effects where e.on {
                 if e.op == "feather" {
                     let softness = max(0, e.t.double("softness", 0.03) * unit), offset = e.t.double("offset", 0) * unit
                     var backing: Bitmap?, backingPad = 0.0
