@@ -72,6 +72,15 @@ struct InstallersStoreTests {
         #expect(found == ["nancy-drew/trail-of-the-twister/her-windows", "nancy-drew/old-clock/cd"])
     }
 
+    @Test func anInputThatIsAFolderCounts() throws {
+        // A sparse bundle disk image is a folder, named .dmg.
+        let twister = try manifest("nancy-drew/trail-of-the-twister")
+        let store = try store(["nancy-drew/trail-of-the-twister/her-mac/installer.dmg/Info.plist"])
+        #expect(store.herDownloads(of: twister).map(\.edition) == ["her-mac"])
+        let found = InstallersStore.editions(inListing: ["./nancy-drew/trail-of-the-twister/her-mac/installer.dmg"], manifests: Self.manifests)
+        #expect(found == ["nancy-drew/trail-of-the-twister/her-mac"])
+    }
+
     @Test func aProgramsDiscsHerDownloadsAndDiscFolderComeFromItsManifest() throws {
         let twister = try manifest("nancy-drew/trail-of-the-twister")
         let disc = try #require(twister.editions.first { $0.source == .disc })

@@ -523,7 +523,8 @@ struct ShardCoordinator: Sendable {
     private func installers(on mac: Mac) async -> Set<String> {
         if mac.isThisMac { return localInstallers }
         let store = Remote.quote(InstallersStore.defaultRoot.path)
-        let command = "cd \(store) 2>/dev/null && find -L . -mindepth 2 -maxdepth 4 -type f"
+        // Folders too: an input can be one (a sparse bundle disk image).
+        let command = "cd \(store) 2>/dev/null && find -L . -mindepth 2 -maxdepth 4"
         let host = mac.raw.split(separator: ":", maxSplits: 1).first.map(String.init) ?? mac.host
         guard let result = try? await Proc.collect("ssh", ["-T", host, command]), result.succeeded else { return [] }
         return ShardPlan.installerKeys(listing: result.output.split(whereSeparator: \.isNewline).map(String.init), manifests: repo.manifests)
@@ -536,8 +537,8 @@ struct ShardCoordinator: Sendable {
         while let url = walker?.nextObject() as? URL {
             let path = String(url.path.dropFirst(root.path.count + 1))
             if path.split(separator: "/").count >= 4 { walker?.skipDescendants() }
-            var isFolder: ObjCBool = false
-            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isFolder), !isFolder.boolValue { listing.append(path) }
+            // Folders too: an input can be one (a sparse bundle disk image).
+            listing.append(path)
         }
         return ShardPlan.installerKeys(listing: listing, manifests: repo.manifests)
     }
