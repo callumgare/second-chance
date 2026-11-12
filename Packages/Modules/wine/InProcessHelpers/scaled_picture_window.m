@@ -17,7 +17,10 @@
 //  and the program go on seeing it cover the screen:
 //
 //  - The frame. AppKit gets a title bar and a frame of the picture's shape,
-//    centred on the screen at three quarters of it; Wine's own record of the
+//    centred on the screen at three quarters of it (or where the player left
+//    it last time), which the player can move and resize, keeping the
+//    picture's shape: Wine's live-resize handlers, which would ask the
+//    program, are kept out of it. Wine's own record of the
 //    frame (-wine_fractionalFrame) stays the one it had, and the frame
 //    changes AppKit reports are kept from it (-postWindowFrameChanged:...).
 //    A frame Wine sets that isn't the one it has, or a style that drops the
@@ -59,6 +62,9 @@ static NSRect gTrueFrame;          // the frame Wine and the program go on seein
 static NSWindowStyleMask gTrueStyle;
 static BOOL gTrueShadow;
 static NSString *gTrueGravity;
+static NSSize gTrueAspect;
+static NSRect gLastSmaller;        // the smaller window's frame as the player left it, for next time
+static BOOL gHasLastSmaller;
 static NSRect gShown;              // the picture on the emulated screen, in the true content view's coordinates
 static BOOL gHasShown;
 
@@ -119,11 +125,13 @@ static CGPoint toWindow(NSWindow *window, CGPoint point) {
     return CGPointMake(clampTo(x, NSMinX(to), NSMaxX(to) - 1), clampTo(y, NSMinY(to), NSMaxY(to) - 1));
 }
 
-/// The frame of the smaller window: the picture's shape in a content area
-/// three quarters the size of the screen's visible part, centred in it.
+/// The frame of the smaller window: where the player last left it, if that's
+/// still on the screen, or else the picture's shape in a content area three
+/// quarters the size of the screen's visible part, centred in it.
 static NSRect smallerFrame(NSWindow *window, NSWindowStyleMask style) {
     NSScreen *screen = window.screen ?: NSScreen.mainScreen;
     NSRect visible = screen.visibleFrame;
+    if (gHasLastSmaller && NSContainsRect(visible, gLastSmaller)) return gLastSmaller;
     CGSize shape = gHasShown ? gShown.size : gTrueFrame.size;
     if (shape.width < 1 || shape.height < 1) shape = CGSizeMake(4, 3);
     NSRect titled = [NSWindow frameRectForContentRect:NSMakeRect(0, 0, 100, 100) styleMask:style];
@@ -136,7 +144,7 @@ static NSRect smallerFrame(NSWindow *window, NSWindowStyleMask style) {
     return frame;
 }
 
-static const NSWindowStyleMask kSmallerStyle = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable;
+static const NSWindowStyleMask kSmallerStyle = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable;
 
 // MARK: - Keeping Wine's frame
 
@@ -145,6 +153,7 @@ static const NSWindowStyleMask kSmallerStyle = NSWindowStyleMaskTitled | NSWindo
 @end
 
 static IMP gWineFractionalFrame, gWinePostFrameChanged, gWineSetFrameFromWine, gWineSetWindowFeatures, gWineAdjustFeatures;
+static IMP gWinePreventResizing, gWineWillResize, gWineWillStartLiveResize, gWineDidEndLiveResize;
 
 static BOOL isOurs(id window) {
     return gActive && window && window == gWindow;
@@ -177,28 +186,77 @@ static void setFrameFromWineEndingSmaller(NSWindow *self, SEL _cmd, NSRect conte
     ((void (*)(id, SEL, NSRect))gWineSetFrameFromWine)(self, _cmd, contentRect);
 }
 
+static void keepSmallerResizable(NSWindow *self);
+
 static void setWindowFeaturesKeepingTitle(NSWindow *self, SEL _cmd, const void *features) {
+    BOOL ours = isOurs(self);
+    NSRect frame = self.frame;
     ((void (*)(id, SEL, const void *))gWineSetWindowFeatures)(self, _cmd, features);
-    if (!isOurs(self)) return;
+    if (!ours || !isOurs(self)) return;
     // Wine gives the window the style the program's window has; that is the
-    // one to put back, and the title bar stays meanwhile.
+    // one to put back, and the title bar stays meanwhile, at the frame it
+    // had: AppKit keeps the content rect through a change of style, so each
+    // of these (two whenever the program opens or closes a dialog) cost the
+    // window its title bar's height.
     gTrueStyle = self.styleMask & ~NSWindowStyleMaskFullScreen;
     if ((self.styleMask & kSmallerStyle) != kSmallerStyle) {
-        NSRect frame = self.frame;
         self.styleMask = (self.styleMask & ~NSWindowStyleMaskBorderless) | kSmallerStyle;
-        [self setFrame:frame display:YES];
     }
+    if (!NSEqualRects(self.frame, frame)) [self setFrame:frame display:YES];
+    // A change of style forgets the content's aspect ratio.
+    keepSmallerResizable(self);
+}
+
+/// The smallest the window's content may be made: the picture at a third of
+/// its size, or 320 points across.
+static NSSize smallestContent(void) {
+    CGSize shape = gHasShown ? gShown.size : gTrueFrame.size;
+    if (shape.width < 1 || shape.height < 1) return NSMakeSize(320, 240);
+    CGFloat width = fmax(320, round(shape.width / 3));
+    return NSMakeSize(width, round(width * shape.height / shape.width));
+}
+
+/// Wine sizes a window it won't let be resized from its own frame, the
+/// whole screen's; this one can be resized, keeping the picture's shape, and
+/// moved.
+static void keepSmallerResizable(NSWindow *self) {
+    self.contentMinSize = smallestContent();
+    self.contentMaxSize = NSMakeSize(FLT_MAX, FLT_MAX);
+    if (gHasShown && gShown.size.width >= 1 && gShown.size.height >= 1) self.contentAspectRatio = gShown.size;
+    if (!self.isMovable) self.movable = YES;
 }
 
 static void adjustFeaturesKeepingSmaller(NSWindow *self, SEL _cmd) {
     ((void (*)(id, SEL))gWineAdjustFeatures)(self, _cmd);
-    if (!isOurs(self)) return;
-    // Wine sizes a window it won't let be resized from its own frame, the
-    // whole screen's; this one keeps its smaller size, and can be moved.
-    NSSize content = [self contentRectForFrameRect:self.frame].size;
-    self.contentMinSize = content;
-    self.contentMaxSize = content;
-    if (!self.isMovable) self.movable = YES;
+    if (isOurs(self)) keepSmallerResizable(self);
+}
+
+// Resizing it is the player's alone: Wine's handlers would ask the program
+// (WM_ENTERSIZEMOVE, WM_SIZING) about a window it thinks covers the screen,
+// hold it to that size, and restore it if it counts as maximized.
+static BOOL preventResizingUnlessSmaller(NSWindow *self, SEL _cmd) {
+    if (isOurs(self)) return NO;
+    return ((BOOL (*)(id, SEL))gWinePreventResizing)(self, _cmd);
+}
+
+/// The size the player drags the window to, as AppKit proposes it, already
+/// held to the picture's shape by contentAspectRatio.
+static NSSize willResizeKeepingSmaller(NSWindow *self, SEL _cmd, NSWindow *sender, NSSize size) {
+    if (isOurs(self)) return size;
+    return ((NSSize (*)(id, SEL, NSWindow *, NSSize))gWineWillResize)(self, _cmd, sender, size);
+}
+
+static void willStartLiveResizeKeepingSmaller(NSWindow *self, SEL _cmd, NSNotification *notification) {
+    if (isOurs(self)) return;
+    ((void (*)(id, SEL, NSNotification *))gWineWillStartLiveResize)(self, _cmd, notification);
+}
+
+static void didEndLiveResizeKeepingSmaller(NSWindow *self, SEL _cmd, NSNotification *notification) {
+    if (isOurs(self)) {
+        [self.contentView setNeedsDisplay:YES];
+        return;
+    }
+    ((void (*)(id, SEL, NSNotification *))gWineDidEndLiveResize)(self, _cmd, notification);
 }
 
 // MARK: - The mouse
@@ -330,6 +388,10 @@ static BOOL installReplacements(void) {
         { controller, NSSelectorFromString(@"handleScrollWheel:") },
         { controller, NSSelectorFromString(@"setCursorPosition:") },
         { queue, NSSelectorFromString(@"postEvent:") },
+        { window, NSSelectorFromString(@"preventResizing") },
+        { window, @selector(windowWillResize:toSize:) },
+        { window, @selector(windowWillStartLiveResize:) },
+        { window, @selector(windowDidEndLiveResize:) },
     };
     for (size_t i = 0; i < sizeof(needed) / sizeof(*needed); i++) {
         if (!needed[i].cls || !class_getInstanceMethod(needed[i].cls, needed[i].selector)) {
@@ -349,6 +411,10 @@ static BOOL installReplacements(void) {
     gWineHandleScrollWheel = replaceOwnMethod(controller, needed[7].selector, (IMP)handleScrollWheelMarked);
     gWineSetCursorPosition = replaceOwnMethod(controller, needed[8].selector, (IMP)setCursorPositionInWindow);
     gWinePostEvent = replaceOwnMethod(queue, needed[9].selector, (IMP)postEventMovingMouse);
+    gWinePreventResizing = replaceOwnMethod(window, needed[10].selector, (IMP)preventResizingUnlessSmaller);
+    gWineWillResize = replaceOwnMethod(window, needed[11].selector, (IMP)willResizeKeepingSmaller);
+    gWineWillStartLiveResize = replaceOwnMethod(window, needed[12].selector, (IMP)willStartLiveResizeKeepingSmaller);
+    gWineDidEndLiveResize = replaceOwnMethod(window, needed[13].selector, (IMP)didEndLiveResizeKeepingSmaller);
     // virtual_pointer.m, armed in a test session, already wraps the pointer
     // Wine reads, and moves it through scaledPictureWindowMouseLocation.
     if (!virtualPointerWrapsMouseLocation()) {
@@ -386,6 +452,7 @@ int scaledPictureWindowBegin(NSWindow *window) {
     gTrueStyle = window.styleMask;
     gTrueShadow = window.hasShadow;
     gTrueGravity = window.contentView.layer.contentsGravity;
+    gTrueAspect = window.contentAspectRatio;
     gWindow = window;
     gActive = YES;
 
@@ -404,8 +471,13 @@ int scaledPictureWindowBegin(NSWindow *window) {
 
 static void endSmaller(NSWindow *window, const char *why) {
     if (!isOurs(window)) return;
+    gLastSmaller = window.frame;
+    gHasLastSmaller = YES;
     gActive = NO;
     gWindow = nil;
+    // A window with no aspect ratio of its own is resized freely again.
+    if (gTrueAspect.width > 0 && gTrueAspect.height > 0) window.contentAspectRatio = gTrueAspect;
+    else window.contentResizeIncrements = NSMakeSize(1, 1);
     window.styleMask = gTrueStyle;
     window.hasShadow = gTrueShadow;
     [window setFrame:gTrueFrame display:YES];

@@ -724,8 +724,8 @@ Native fullscreen takes such a window into a Space (`windowShowsScaledPicture`).
 #### Out of fullscreen, a window of its own
 
 Such a program has no window of its own: its window is the emulated
-screen, so taken out of its Space by the player (the green button, ⌃⌘F) it
-came back as Wine shows it, a borderless window covering the display, above
+screen, so taken out of its Space by the player (the green button, ⌃⌘F,
+or the button on its Space in Mission Control) it came back as Wine shows it, a borderless window covering the display, above
 everything, not the window with a title bar leaving fullscreen gives in any
 other Mac app. Giving it a title bar and a smaller frame for real would tell
 the program its window had shrunk, and its picture would be cut short.
@@ -734,13 +734,31 @@ So `scaled_picture_window.m` shows it smaller while Wine and the program go
 on seeing it cover the screen:
 
 - **The window** gets a title bar with a close button, and a frame of the
-  picture's shape at three quarters of the screen, centred. Wine's record
+  picture's shape at three quarters of the screen, centred, or where the
+  player last left it. The player can move it and resize it, the picture
+  keeping its shape (`contentAspectRatio`). Wine sets the program's
+  borderless style again whenever the program opens or closes a dialog,
+  which costs the window its title bar's height, so the title bar is put
+  back at the frame the window had, and its aspect ratio, which a change
+  of style forgets, set again: without them the window came out of the
+  program's save dialog shorter, off its shape, and was resized freely or
+  jittered. Wine's live-resize handlers
+  (`-windowWillStartLiveResize:`, `-windowWillResize:toSize:`,
+  `-windowDidEndLiveResize:`, `-preventResizing`), which would ask the
+  program about a window it thinks covers the screen and hold it to that
+  size, are kept out of it. Wine's record
   of the frame (`-wine_fractionalFrame`) keeps the one it had, and the frame
   changes AppKit reports (`-postWindowFrameChanged:…`) are kept from it, so
   the window can be moved without the program hearing of it. A frame Wine
   sets that isn't the one it has ends this first; a style it sets keeps the
   title bar. It can't be minimised: Wine would read the smaller frame back
   as the program's when it came back.
+- **Mission Control's button** takes the window out of its Space without
+  `-toggleFullScreen:`, so native fullscreen sees it go with no cause, as
+  when Wine takes out a window that no longer qualifies or the program
+  quits. A window still visible and showing a scaled picture once it's out
+  is shown smaller all the same. Such a move isn't reported as the
+  player's, so the game's fullscreen setting isn't changed by it.
 - **The picture** is cut from Wine's whole window surface, as in the Space
   (Wine's `-updateLayer` cuts the surface to the smaller window), and the
   layer fits it in the window (`kCAGravityResizeAspect`).
@@ -761,7 +779,11 @@ on Webmaster (2026-11-12, a test session): out of its Space it showed in a
 929x729 window on a 1920x1080 screen, its help mode's tips followed the
 pointer over the toolbar's buttons, a click on "easy" started the game, the
 window could be dragged with clicks still landing, and back into its Space
-the picture was placed as before. The wrapp's log says
+the picture was placed as before. Later the same day, through `sc session
+do`: the window resized from its corner, the picture filling it, tips and
+clicks still landing; Mission Control's button brought it out at the
+size it had been left; and it kept its size and shape through the save
+dialog opening and closing. The wrapp's log says
 `[Helpers] Mode scaling: showing the program's 1440x1080 picture in its 929x697 window`,
 and the helper's own lines `out of fullscreen: showing the program's …` and
 `the program's window covers the screen again: going into fullscreen`.

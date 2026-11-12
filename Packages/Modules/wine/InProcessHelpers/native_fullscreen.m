@@ -779,9 +779,14 @@ static void noteTransitionEnded(NSWindow *window, BOOL entered) {
     // The player took a program's scaled picture out of its Space: Wine
     // brings the window back covering the screen (once its own handling of
     // the move is done, so after this), and it's shown in a window instead.
-    if (!entered && cause == kTogglePlayer && windowFlag(window, &kCoversScreenKey)) {
+    // Mission Control's button on the Space takes it out without
+    // -toggleFullScreen:, so with no cause; so does Wine, taking out a
+    // window that no longer shows such a picture, and the window going as
+    // the program quits, which the checks below turn away.
+    if (!entered && (cause == kTogglePlayer || cause == kToggleNone) && windowFlag(window, &kCoversScreenKey)) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (!(window.styleMask & NSWindowStyleMaskFullScreen) && !windowIsMovingSpaces(window) &&
+            if (window.isVisible && !windowFlag(window, &kReenterKey) &&
+                !(window.styleMask & NSWindowStyleMaskFullScreen) && !windowIsMovingSpaces(window) &&
                 windowShowsScaledPicture(window)) {
                 scaledPictureWindowBegin(window);
             }

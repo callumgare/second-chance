@@ -603,6 +603,7 @@
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/display_below_notch.m",
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/cursor_lock.m",
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/emulated_mode_scaling.m",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/scaled_picture_window.m",
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/helper_common.m",
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/quit_watch.m",
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/cocoa_start_wait.m",
