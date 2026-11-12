@@ -152,9 +152,9 @@ nonisolated extension Lab {
         var allowPathAdded: Bool
         /// Said when the manifest's allow-paths couldn't be changed by itself.
         var manifestNote: String?
-        /// The Wrappfile lines that give the app the first icon, when it has no `APP --icon` yet.
+        /// The Wrappfile lines that give the app the first icon, when it doesn't use it yet.
         var wrappfileLines: [String]?
-        /// Whether `addIconLines` can add them itself (the Wrappfile has one stage).
+        /// Whether `addIconLines` can set them itself (it has an icon to repoint, or one stage to add them to).
         var canAddLines: Bool
     }
 
@@ -196,31 +196,77 @@ nonisolated extension Lab {
         let (text, added, note) = Self.allowingAssets(try String(contentsOf: manifest, encoding: .utf8))
         if added { try text.write(to: manifest, atomically: true, encoding: .utf8) }
         let wrappfile = (try? String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8)) ?? ""
-        let lines = Self.hasIcon(wrappfile) ? nil : Self.iconLines(name)
+        let lines = Self.usesIcon(wrappfile, name: name) ? nil : Self.iconLines(name)
         logger.notice("Saved \(ids.count) designs to \(id)")
         return SavedToBundle(bundle: id, files: files, allowPathAdded: added, manifestNote: note, wrappfileLines: lines,
-                             canAddLines: lines != nil && Self.addingIconLines(wrappfile, name: name) != nil)
+                             canAddLines: lines != nil && Self.settingIcon(wrappfile, name: name) != nil)
     }
 
-    /// Adds the icon lines to the bundle's Wrappfile, after its stage's last LAUNCH; the lines added.
-    public func addIconLines(_ slug: String) async throws -> [String] {
+    public struct IconLinesSet: Codable, Sendable {
+        /// The lines that give the app its icon now.
+        var lines: [String]
+        /// What was done: "added", "updated", "replaced" (a module's `set-icon`), or "unchanged".
+        var change: String
+    }
+
+    /// Makes the bundle's Wrappfile give the app the first saved icon: an `APP --icon` it has is pointed at it
+    /// (and the `COPY` that put the old one in `/Resources/`), a module's `DO <module>.set-icon` is replaced, or the
+    /// lines are added after its stage's last LAUNCH.
+    public func addIconLines(_ slug: String) async throws -> IconLinesSet {
         let (_, folder) = try await bundleFolder(slug)
+        let name = folder.lastPathComponent
         let file = folder.appendingPathComponent("Wrappfile")
         let text = try String(contentsOf: file, encoding: .utf8)
-        guard !Self.hasIcon(text) else { return [] }
-        guard let changed = Self.addingIconLines(text, name: folder.lastPathComponent) else {
-            throw IconLabError.invalid("the Wrappfile has more than one stage: add the lines yourself")
+        guard let (changed, change) = Self.settingIcon(text, name: name) else {
+            throw IconLabError.invalid("the Wrappfile has more than one stage and no icon: add the lines yourself")
         }
-        try changed.write(to: file, atomically: true, encoding: .utf8)
-        return Self.iconLines(folder.lastPathComponent)
+        if changed != text { try changed.write(to: file, atomically: true, encoding: .utf8) }
+        logger.notice("Set \(name)'s icon in its Wrappfile (\(change))")
+        return IconLinesSet(lines: Self.iconLines(name), change: change)
     }
 
     static func iconLines(_ name: String) -> [String] {
         ["COPY bundle:assets/\(name).icns /Resources/\(name).icns", "APP --icon=/Resources/\(name).icns"]
     }
 
-    static func hasIcon(_ wrappfile: String) -> Bool {
-        wrappfile.split(separator: "\n").contains { $0.trimmingCharacters(in: .whitespaces).hasPrefix("APP") && $0.contains("--icon") }
+    /// Whether the Wrappfile already gives the app this icon (its `COPY` and its `APP --icon`).
+    static func usesIcon(_ wrappfile: String, name: String) -> Bool {
+        let lines = wrappfile.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        return lines.contains(iconLines(name)[0]) && lines.contains { $0.hasPrefix("APP") && $0.contains("--icon=/Resources/\(name).icns") }
+    }
+
+    /// The Wrappfile giving the app `assets/<name>.icns`, and what was done; nil when it has no icon to repoint and
+    /// several stages, so the person had better place the lines.
+    static func settingIcon(_ wrappfile: String, name: String) -> (String, String)? {
+        if usesIcon(wrappfile, name: name) { return (wrappfile, "unchanged") }
+        let copy = iconLines(name)[0], target = "/Resources/\(name).icns"
+        var lines = wrappfile.components(separatedBy: "\n")
+        let indent = { (l: String) in String(l.prefix { $0 == " " || $0 == "\t" }) }
+        let trimmed = { (l: String) in l.trimmingCharacters(in: .whitespaces) }
+        // a module's icon (DO nancy-drew.set-icon): this one instead
+        if let i = lines.firstIndex(where: { trimmed($0).hasPrefix("DO ") && trimmed($0).hasSuffix(".set-icon") }) {
+            let pad = indent(lines[i])
+            lines.replaceSubrange(i...i, with: iconLines(name).map { pad + $0 })
+            return (lines.joined(separator: "\n"), "replaced")
+        }
+        // an APP line: its --icon pointed here (or given one), the COPY of the old icon replaced or one added
+        if let i = lines.firstIndex(where: { trimmed($0).hasPrefix("APP") && !$0.hasSuffix("\\") }) {
+            let line = lines[i], pad = indent(line)
+            var old: String?
+            if let r = line.range(of: #"--icon=\S+"#, options: .regularExpression) {
+                old = String(line[r].dropFirst("--icon=".count))
+                lines[i] = line.replacingCharacters(in: r, with: "--icon=\(target)")
+            } else {
+                lines[i] = pad + "APP --icon=\(target)" + trimmed(line).dropFirst(3)
+            }
+            if let old, old != target, let c = lines.firstIndex(where: { trimmed($0).hasPrefix("COPY") && trimmed($0).hasSuffix(" " + old) }) {
+                lines[c] = indent(lines[c]) + copy
+            } else if !lines.contains(where: { trimmed($0) == copy }) {
+                lines.insert(pad + copy, at: i)
+            }
+            return (lines.joined(separator: "\n"), "updated")
+        }
+        return addingIconLines(wrappfile, name: name).map { ($0, "added") }
     }
 
     /// The Wrappfile with the icon lines after its last LAUNCH (and that instruction's continuation lines), when it

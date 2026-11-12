@@ -109,7 +109,8 @@ nonisolated extension IconLabAPI {
             let slug = try c.param("slug")
             let docs = await lab.store.docs(slug).compactMap { try? JSONSerialization.jsonObject(with: $0) }
             let st = await lab.store.state(slug)
-            let obj: [String: Any] = ["docs": docs, "pins": st.pins, "current": st.current as Any? ?? NSNull()]
+            let obj: [String: Any] = ["docs": docs, "pins": st.pins, "dropped": st.dropped.filter { st.pins.contains($0) },
+                                      "current": st.current as Any? ?? NSNull()]
             return raw(try JSONSerialization.data(withJSONObject: obj))
         }
 
@@ -158,6 +159,15 @@ nonisolated extension IconLabAPI {
             st.pins = named + st.pins.filter { !named.contains($0) }
             try await lab.store.saveState(slug, st)
             return try json(["pins": st.pins])
+        }
+
+        // Which pins Review keeps: those it doesn't are listed (`dropped`), so a new pin is kept.
+        router.put("/api/programs/:slug/dropped") { c in
+            let slug = try c.param("slug")
+            var st = await lab.store.state(slug)
+            st.dropped = try decode(PinsOrder.self, c.request).pins.filter { st.pins.contains($0) }
+            try await lab.store.saveState(slug, st)
+            return try json(["dropped": st.dropped])
         }
 
         router.delete("/api/programs/:slug/pins/:id") { c in

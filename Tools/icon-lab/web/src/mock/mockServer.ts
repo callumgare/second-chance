@@ -192,7 +192,7 @@ const routes: [string, RegExp, Handler][] = [
   }],
   ["GET", /^\/api\/programs\/([^/]+)\/docs$/, async (m): Promise<DocsState> => {
     const s = store(m[1]);
-    return { docs: Object.values(s.docs), pins: s.pins, current: s.current };
+    return { docs: Object.values(s.docs), pins: s.pins, current: s.current, dropped: (s as { dropped?: string[] }).dropped ?? [] };
   }],
   ["PUT", /^\/api\/programs\/([^/]+)\/docs\/([^/]+)$/, async (m, body) => {
     const s = store(m[1]);
@@ -206,6 +206,11 @@ const routes: [string, RegExp, Handler][] = [
     if (!s.docs[body.id]) throw new ApiError(404, "pin an unsaved doc");
     if (!s.pins.includes(body.id)) s.pins.push(body.id);
     persist(m[1], s); return { pins: s.pins };
+  }],
+  ["PUT", /^\/api\/programs\/([^/]+)\/dropped$/, async (m, body) => {
+    const s = store(m[1]) as ReturnType<typeof store> & { dropped?: string[] };
+    s.dropped = (body.pins as string[]).filter((p) => s.pins.includes(p));
+    persist(m[1], s); return { dropped: s.dropped };
   }],
   ["PUT", /^\/api\/programs\/([^/]+)\/pins$/, async (m, body) => {
     const s = store(m[1]);

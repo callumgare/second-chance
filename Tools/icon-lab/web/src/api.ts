@@ -300,7 +300,7 @@ export type Treatment = { key: string; title: string; about: string; uses: strin
 
 export type Appearance = "light" | "dark" | "tinted" | "clear"
 
-export type DocsState = { docs: Doc[]; pins: string[]; current: string | null }
+export type DocsState = { docs: Doc[]; pins: string[]; current: string | null; /** Pins Review isn't keeping. */ dropped?: string[] }
 
 export type Job = {
   id: string; program?: string; title: string; state: "queued" | "running" | "done" | "failed"
@@ -433,6 +433,8 @@ export const api = {
   /** Makes these programs one: theirs moves into `slug`'s, and they're removed. */
   absorb: (slug: string, from: string[]) => req<ProgramSummary>("POST", `/api/programs/${enc(slug)}/absorb`, { from }),
   orderPins: (slug: string, pins: string[]) => req<{ pins: string[] }>("PUT", `/api/programs/${enc(slug)}/pins`, { pins }),
+  /** The pins Review isn't keeping. */
+  setDropped: (slug: string, pins: string[]) => req<{ dropped: string[] }>("PUT", `/api/programs/${enc(slug)}/dropped`, { pins }),
   unpin: (slug: string, id: string) => req<{ pins: string[] }>("DELETE", `/api/programs/${enc(slug)}/pins/${enc(id)}`),
   save: (slug: string, ids: string[]) =>
     req<{ saved: { id: string; icon: string; png: string }[] }>("POST", `/api/programs/${enc(slug)}/save`, { ids }),
@@ -518,7 +520,8 @@ export const api = {
   tryIcon: (slug: string, id: string, wrapp: string, anywhere = false) =>
     req<{ wrapp: string; icns: string }>("POST", `/api/programs/${enc(slug)}/try-icon`, { id, wrapp, anywhere }),
   saveToBundle: (slug: string, ids: string[]) => req<SavedToBundle>("POST", `/api/programs/${enc(slug)}/save-to-bundle`, { ids }),
-  addIconLines: (slug: string) => req<{ added: string[] }>("POST", `/api/programs/${enc(slug)}/save-to-bundle/lines`),
+  /** Makes the bundle's Wrappfile give the app the first saved icon (updating the icon it has, or adding one). */
+  addIconLines: (slug: string) => req<{ lines: string[]; change: "added" | "updated" | "replaced" | "unchanged" }>("POST", `/api/programs/${enc(slug)}/save-to-bundle/lines`),
 };
 
 /** What the host offers (`GET /api/host`). */

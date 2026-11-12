@@ -1,7 +1,7 @@
 // Stage 3's state: the document being edited (with undo), the history of documents, pins, suggestions and
 // the view's toggles. Edits go through `edit`, which keeps pins frozen: editing a pinned doc forks it first.
 import { create } from "zustand";
-import { api, type Appearance, type Doc, type Suggestion, type SuggestionParams, type Treatment } from "../api";
+import { api, type Appearance, type Doc, type DocsState, type Suggestion, type SuggestionParams, type Treatment } from "../api";
 import { clone, findGroup, findLayer, forkDoc, newDoc, visualKey } from "../lib/doc";
 import { useApp } from "./app";
 import { moved } from "../lib/reorder";
@@ -73,6 +73,10 @@ type DesignState = {
   updatePin(): Promise<void>
   /** Moves a pin to a new place in the order Design, Review and saving share. */
   movePin(from: number, to: number): Promise<void>
+  /** Whether Review keeps a pin (Save leaves out those it doesn't); kept by the engine. */
+  setKeep(id: string, on: boolean): Promise<void>
+  /** Puts back the pin the design being edited was copied from, dropping the changes (an undoable step). */
+  resetToPin(): void
   unpin(id: string): Promise<void>
   openPin(id: string): void
   openSuggestion(s: Suggestion): Promise<void>
@@ -116,12 +120,13 @@ export const useDesign = create<DesignState>((set, get) => ({
     if (get().slug === slug && get().doc) return;
     set({ slug, loading: true, doc: null, docs: {}, pins: [], past: [], future: [], sel: null, suggestions: [], params: loadParams(slug), keep: {}, savedIds: [] });
     const [state, treatments] = await Promise.all([
-      api.docs(slug).catch(() => ({ docs: [], pins: [], current: null })),
+      api.docs(slug).catch((): DocsState => ({ docs: [], pins: [], current: null })),
       api.treatments().catch(() => [] as Treatment[]),
     ]);
     if (get().slug !== slug) return;
     const docs = Object.fromEntries(state.docs.map((d) => [d.id, d]));
-    set({ docs, pins: state.pins, treatments, keep: Object.fromEntries(state.pins.map((p) => [p, true])) });
+    const dropped = new Set(state.dropped ?? []);
+    set({ docs, pins: state.pins, treatments, keep: Object.fromEntries(state.pins.map((p) => [p, !dropped.has(p)])) });
     let doc = state.current ? docs[state.current] : null;
     if (doc) {
       // Edit at once; suggestions fill in when they come.
@@ -215,6 +220,25 @@ export const useDesign = create<DesignState>((set, get) => ({
       set({ docs: { ...get().docs, [id]: old } });
       useApp.getState().say("Couldn't update the pin: " + (e as Error).message, "error");
     }
+  },
+
+  async setKeep(id, on) {
+    const s = get();
+    if (!s.slug) return;
+    const before = s.keep;
+    const keep = { ...before, [id]: on };
+    set({ keep });
+    try { await api.setDropped(s.slug, s.pins.filter((p) => keep[p] === false)); }
+    catch (e) { set({ keep: before }); useApp.getState().say("Couldn't keep that choice: " + (e as Error).message, "error"); }
+  },
+
+  resetToPin() {
+    const s = get();
+    const id = updatablePin(s);
+    if (!s.doc || !id) return;
+    // the edited copy, with the pin's look: still a copy, so the next edit doesn't change the pin
+    get().replaceDoc({ ...clone(s.docs[id]), id: s.doc.id, parent: s.doc.parent, created: s.doc.created });
+    useApp.getState().say(`Back to the pin “${s.docs[id].name}”`, "info", { label: "Undo", run: () => get().undo() });
   },
 
   async movePin(from, to) {

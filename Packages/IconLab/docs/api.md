@@ -115,8 +115,11 @@ Every document the program has (history), which ids are pinned, and which is ope
 
 `POST /api/programs/:slug/pins` `{ id }` or `{ doc }` (saves the doc, then pins it) → `{ pins }`; `DELETE /api/programs/:slug/pins/:id` → `{ pins }`
 
+`PUT /api/programs/:slug/dropped` `{ pins: string[] }` → `{ dropped }` keeps Review's choice: the pins it isn't
+keeping (Save leaves them out); `GET …/docs` gives them as `dropped`, and a pin not listed is kept.
+
 `PUT /api/programs/:slug/pins` `{ pins: string[] }` → `{ pins }` puts the pins in this order (Design's strip and
-Review show it, and Save and Save to bundle follow it: the first is the app's icon). Ids that aren't pins are
+Review show it, and Save follows it, to the bundle too: the first is the app's icon). Ids that aren't pins are
 ignored; pins it leaves out follow the rest. A pin's document is updated in place by `PUT …/docs/:id` with its id
 (Update pin): editing alone never changes one, as the page forks a pin before its first edit.
 
@@ -345,11 +348,14 @@ wrappfileLines?, canAddLines }` — writes the designs, in order, to the program
 `assets/<name>.icon`, `<name>-2.icon`, … (`<name>` the bundle folder's name), each with its compiled `.icns`, and adds
 `"assets/"` to the manifest's `allow-paths` (a one-line list, or a new line after the title; otherwise
 `manifestNote` says what to do). When the Wrappfile has no `APP --icon`, `wrappfileLines` are the `COPY` and `APP`
-lines that give the app the first icon; `canAddLines` says whether the engine can add them itself (the Wrappfile has
-one stage). Nothing is committed. 400 when saving isn't available or the program isn't from a bundle.
+lines that give the app the first icon, when it doesn't use it already; `canAddLines` says whether the engine can set
+them itself. Nothing is committed. 400 when saving isn't available or the program isn't from a bundle. Review's Save
+calls it, and the next, whenever the host can write bundles.
 
-`POST /api/programs/:slug/save-to-bundle/lines` → `{ added: string[] }` — adds those lines after the stage's last
-`LAUNCH`.
+`POST /api/programs/:slug/save-to-bundle/lines` → `{ lines, change }` — makes the Wrappfile give the app the first
+icon: an `APP --icon` it has is pointed at it, with the `COPY` that put the old icon in `/Resources/`; a module's
+`DO <module>.set-icon` is replaced by the lines; else they're added after its stage's last `LAUNCH` (one stage only,
+else 400). `change` is `updated`, `replaced`, `added` or `unchanged`. (`ICON` isn't written: the language refuses it.)
 
 `POST /api/jobs/:id/cancel` → `{ cancelled: boolean }` — a queued job never starts (it ends `failed`, detail
 `"cancelled"`); a running one's task is cancelled, which stops a scan or a download.

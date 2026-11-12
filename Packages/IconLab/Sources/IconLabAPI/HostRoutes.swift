@@ -38,7 +38,7 @@ nonisolated extension IconLabAPI {
 
         router.post("/api/programs/:slug/save-to-bundle/lines") { c in
             let slug = try c.param("slug")
-            return try json(["added": try await refused { try await lab.addIconLines(slug) }])
+            return try json(try await refused { try await lab.addIconLines(slug) })
         }
 
         router.post("/api/jobs/:id/cancel") { c in

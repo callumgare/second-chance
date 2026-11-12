@@ -124,7 +124,16 @@ public actor Store {
     public struct State: Codable, Sendable {
         public var pins: [String] = []
         public var current: String?
+        /// Pins Review isn't keeping (left out of Save): the rest are kept.
+        public var dropped: [String] = []
         public init() {}
+        // older state.json has no `dropped`: read what's there rather than failing (which would lose the pins)
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            pins = try c.decodeIfPresent([String].self, forKey: .pins) ?? []
+            current = try c.decodeIfPresent(String.self, forKey: .current)
+            dropped = try c.decodeIfPresent([String].self, forKey: .dropped) ?? []
+        }
     }
 
     public func state(_ slug: String) -> State {

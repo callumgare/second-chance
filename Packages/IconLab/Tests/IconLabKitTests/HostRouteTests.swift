@@ -127,8 +127,9 @@ nonisolated enum Xcode {
         let folder = bundles.appendingPathComponent("freeware/plain")
         let manifest = try String(contentsOf: folder.appendingPathComponent("manifest.yaml"), encoding: .utf8)
         #expect(manifest.contains("title: \"Plain\"\nallow-paths: [\"assets/\"]   # its icon\n"))
-        let added = try #require(json(await call("POST", "/api/programs/\(slug)/save-to-bundle/lines")) as? [String: [String]])
-        #expect(added["added"] == ["COPY bundle:assets/plain.icns /Resources/plain.icns", "APP --icon=/Resources/plain.icns"])
+        let set = try #require(json(await call("POST", "/api/programs/\(slug)/save-to-bundle/lines")) as? [String: Any])
+        #expect(set["lines"] as? [String] == ["COPY bundle:assets/plain.icns /Resources/plain.icns", "APP --icon=/Resources/plain.icns"])
+        #expect(set["change"] as? String == "added")
         let wrappfile = try String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8)
         #expect(wrappfile.hasSuffix("    \"C:/plain.exe\"\n# Its icon, made in Icon Lab (assets/plain.icon, compiled by `sc generate`).\n"
             + "COPY bundle:assets/plain.icns /Resources/plain.icns\nAPP --icon=/Resources/plain.icns\n"))
@@ -139,6 +140,27 @@ nonisolated enum Xcode {
         let r = await call("POST", "/api/programs", #"{"result": \#(result)}"#)
         let slug = try #require((json(r) as? [String: Any])?["slug"] as? String)
         #expect(await call("POST", "/api/programs/\(slug)/save-to-bundle", #"{"ids": ["x"]}"#).status == 400)
+    }
+
+    @Test func anIconItHasIsPointedAtTheNewOne() throws {
+        // an APP --icon and the COPY that put its icon in /Resources/: both pointed at the saved one
+        let own = "FROM scratch AS a\nLAUNCH a\nCOPY bundle:assets/old.icns /Resources/old.icns\nAPP --icon=/Resources/old.icns --name=A\n"
+        let (o, oc) = try #require(Lab.settingIcon(own, name: "x"))
+        #expect(oc == "updated")
+        #expect(o == "FROM scratch AS a\nLAUNCH a\nCOPY bundle:assets/x.icns /Resources/x.icns\nAPP --icon=/Resources/x.icns --name=A\n")
+        #expect(Lab.settingIcon(o, name: "x")?.1 == "unchanged")
+        // a module's icon, from another place: the COPY added, the APP pointed
+        let module = "FROM scratch AS a\nCOPY module:nancy-drew:/assets/nancy-drew.icns /Resources/nancy-drew.icns\nAPP --icon=/Resources/nancy-drew.icns\n"
+        let (m, _) = try #require(Lab.settingIcon(module, name: "x"))
+        #expect(m.contains("COPY bundle:assets/x.icns /Resources/x.icns\nAPP --icon=/Resources/x.icns\n"))
+        // a module's function that sets its icon: replaced, keeping its indent
+        let fn = "FROM scratch AS a\n  DO nancy-drew.set-icon\nLAUNCH a\n"
+        let (f, fc) = try #require(Lab.settingIcon(fn, name: "x"))
+        #expect(fc == "replaced")
+        #expect(f == "FROM scratch AS a\n  COPY bundle:assets/x.icns /Resources/x.icns\n  APP --icon=/Resources/x.icns\nLAUNCH a\n")
+        // an APP line without an icon gets one
+        #expect(Lab.settingIcon("FROM scratch AS a\nAPP --name=A\n", name: "x")?.0
+            == "FROM scratch AS a\nCOPY bundle:assets/x.icns /Resources/x.icns\nAPP --icon=/Resources/x.icns --name=A\n")
     }
 
     @Test func aStageItCantPlaceIsLeftToThePerson() {

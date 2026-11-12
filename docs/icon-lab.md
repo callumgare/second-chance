@@ -64,18 +64,22 @@ A program goes through four stages, each a route of the page
   removed), the app signed again ad hoc as a build signs it, and touched so
   the Dock and Finder look again. Only apps in `built-apps/` unless the page
   says the person chose another.
-- **Save to bundle** (a Debug build, which knows its checkout) writes the kept
+- **Save** (Review's button) writes each kept design's `.icon` and a
+  1024 px PNG into the program's `saved/` folder in Icon Lab's data. Which
+  pins are kept, and their order, are remembered (`state.json`).
+- In a Debug build, which knows its checkout, **Save** also writes the kept
   designs, in order, to the program's bundle as `assets/<name>.icon`,
   `<name>-2.icon`, … (`<name>` the bundle's folder), each with its `.icns`,
-  and adds `"assets/"` to the manifest's `allow-paths`. When the Wrappfile
-  has no `APP --icon` yet, it shows the two lines that give the app the first
-  one, and adds them after the stage's last `LAUNCH` if asked (only for a
-  Wrappfile of one stage). Nothing is committed: check the changes with git.
+  adds `"assets/"` to the manifest's `allow-paths`, and makes the Wrappfile
+  give the app the first: an `APP --icon` it has is pointed at it (with the
+  `COPY` that put the old icon in `/Resources/`), a module's
+  `DO <module>.set-icon` is replaced by the two lines, or they're added after
+  its stage's last `LAUNCH` (a Wrappfile of several stages with no icon is
+  left to the person, the lines shown). The language has no `ICON`
+  instruction any more. Nothing is committed: check the changes with git.
   `sc generate` compiles a bundle's `.icon`s to `.icns` too, with the same
   code (`IconCompile`, in ProcessKit), so running it after a save changes
   nothing ([wrappfile.md](wrappfile.md) has `APP --icon`).
-- **Save** (Review's own button) writes each kept design's `.icon` and a
-  1024 px PNG into the program's `saved/` folder in Icon Lab's data.
 
 ## How it's built
 
@@ -151,7 +155,7 @@ has the details):
   `SourceCheckout` (`$(SECOND_CHANCE_SOURCE_CHECKOUT)`, set for Debug only),
   and gives the keys (its `.env`), `built-apps/` and `Bundles/`
   (`SECOND_CHANCE_ICON_LAB_BUNDLES` names another). A Release build has none
-  of them: no keys, no built apps, no Save to bundle.
+  of them: no keys, no built apps, no saving to bundles.
 
 ## Keys, Xcode and models
 
@@ -164,7 +168,7 @@ has the details):
   keys says so in the sources panel.
 - **Xcode** is needed for the real renders (Icon Composer's `ictool`; without
   it the page's own sketch stands in) and for compiling `.icns` (`actool`,
-  for Try on an app and Save to bundle). Saving `.icon`s needs neither.
+  for Try on an app and saving to a bundle). Saving `.icon`s needs neither.
 - **Models** (Core ML) are downloaded on the Mac that uses them, never
   shipped: MobileCLIP (what kind of picture it is, and similar pictures),
   BiRefNet (subject masks), Real-ESRGAN (upscaling) and SAM 2.1 (picking

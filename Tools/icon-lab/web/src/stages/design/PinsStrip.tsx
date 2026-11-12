@@ -42,11 +42,14 @@ export function PinsStrip() {
         )}
         {!pins.length && <span className="faint" style={{ fontSize: 11.5 }}>Pin designs worth keeping, then review them side by side.</span>}
       </div>
-      {updatable && (
+      {updatable && <>
+        <button className="btn" onClick={() => useDesign.getState().resetToPin()} title={`Drop your changes: back to the pin “${docs[updatable]?.name}” (undoable)`}>
+          ↺ Reset to pin
+        </button>
         <button className="btn" onClick={() => void useDesign.getState().updatePin()} title={`Save your changes to the pin “${docs[updatable]?.name}”`}>
           ↻ Update pin
         </button>
-      )}
+      </>}
       <button className="btn" disabled={!!match} onClick={() => void useDesign.getState().pinCurrent()} title="Pin a snapshot of the current design as a new pin (P)">
         {match ? "★ Pinned" : updatable ? "☆ Pin as new" : "☆ Pin current"}
       </button>
