@@ -165,6 +165,20 @@ export function FindStage({ route }: { route: Route }) {
   );
 }
 
+/** A program's picture in a list: its first pinned design, once it has one (what it's becoming), else its subject. */
+function ProgramThumb({ slug, pins, thumb }: { slug: string; pins: number; thumb?: string }) {
+  const [doc, setDoc] = useState<Doc | null>(null);
+  useEffect(() => {
+    if (!pins) { setDoc(null); return; }
+    let live = true;
+    api.docs(slug).then((s) => { if (live) setDoc(s.docs.find((d) => d.id === s.pins[0]) ?? null); })
+      .catch(() => { /* its picture stands in */ });
+    return () => { live = false; };
+  }, [slug, pins]);
+  if (doc) return <IconArt doc={doc} size={40} real="visible" priority={3} className="rec-icon" />;
+  return thumb ? <img src={thumb} alt="" loading="lazy" /> : <span className="rec-ph" />;
+}
+
 /** The program's pinned designs, small, from Icon Composer's renders: what was made, at a glance. */
 function PinnedIcons({ slug }: { slug: string }) {
   const [docs, setDocs] = useState<Doc[]>([]);
@@ -312,7 +326,7 @@ function KnownPrograms({ programs, inRecents }: { programs: ProgramSummary[] | n
           const p = opened.get(k.id);
           return (
             <button key={k.id} className="rec" onClick={() => void open(k)} disabled={busy === k.id} title={k.id}>
-              {p?.thumb ? <img src={p.thumb} alt="" loading="lazy" /> : <span className="rec-ph" />}
+              {p ? <ProgramThumb slug={p.slug} pins={p.pins} thumb={p.thumb} /> : <span className="rec-ph" />}
               <span className="ellipsis"><b className="ellipsis">{k.title}</b><small>{k.id}{p ? ` · ${p.media} images${p.pins ? ` · ${p.pins} pinned` : ""}` : k.opened ? " · opened" : ""}</small></span>
             </button>
           );
@@ -335,7 +349,7 @@ function Recents({ programs, current, all, onShowAll }: { programs: ProgramSumma
       <div className="recents">
         {shown.map((p) => (
           <button key={p.slug} className={"rec" + (p.slug === current ? " cur" : "")} onClick={() => go(p.slug, p.pins ? "design" : "gather")} title={p.slug}>
-            {p.thumb ? <img src={p.thumb} alt="" loading="lazy" /> : <span className="rec-ph" />}
+            <ProgramThumb slug={p.slug} pins={p.pins} thumb={p.thumb} />
             <span className="ellipsis"><b className="ellipsis">{p.title}</b><small>{p.year ? `${p.year} · ` : ""}{p.media} images{p.pins ? ` · ${p.pins} pinned` : ""}</small></span>
           </button>
         ))}

@@ -37,6 +37,7 @@
 .rec:hover { border-color: var(--accent) }
 .rec.cur { border-color: var(--accent) }
 .rec img, .rec .rec-ph { width: 40px; height: 40px; border-radius: 9px; object-fit: cover; flex: none; background: var(--sunk) }
+.rec .rec-icon { flex: none; width: 40px; height: 40px }
 .rec > span { display: grid; min-width: 0 }
 .rec b { font-size: 12.5px } .rec small { color: var(--muted) }
 .sources { display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden }
