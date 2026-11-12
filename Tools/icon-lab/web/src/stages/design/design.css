@@ -160,7 +160,6 @@
 .add-group:hover:not(:disabled) { background: var(--sunk) }
 .add-group:disabled { opacity: .5; box-shadow: none }
 .addwrap { display: grid; flex: 0 1 auto; min-height: 110px }
-.dock-handle { position: absolute; left: 0; right: 0; top: -1px; z-index: 3; background: var(--panel) }
 .wb-dock { padding-top: 9px }
 /* inspector sub-pages */
 .subpage { display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100%; min-height: 0 }

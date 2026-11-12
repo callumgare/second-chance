@@ -76,7 +76,6 @@
 .dock { position: relative; grid-column: 1 / -1; grid-row: 3; background: var(--panel); border-top: 1px solid var(--line-strong); box-shadow: 0 -6px 20px rgba(0,0,0,.06); display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; z-index: 2 }
 .dock-h { display: flex; gap: 8px; align-items: center; padding: 4px 10px 4px 0; font-size: 12px; height: 34px }
 .dock-toggle { display: flex; gap: 12px; align-items: center; padding: 3px 14px; background: transparent; border: 0; text-align: left; flex: 1; min-width: 0; font-size: 12px; white-space: nowrap; overflow: hidden }
-.dock .dock-handle { position: absolute; left: 0; right: 0; top: -5px; z-index: 3; border-top: 0; background: transparent }
 .dock-jobs { overflow: auto; padding: 0 14px 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 28px; align-content: start }
 .dock-jobs .jobsec { grid-column: 1 / -1 }
 

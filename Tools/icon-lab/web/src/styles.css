@@ -217,6 +217,8 @@ button, .btn, .chip, .tag, .seg button { overflow-wrap: normal }
 @media (prefers-reduced-motion: reduce) { .xy-pad.anim * { transition: none !important } }
 /* resize handle (shared) */
 .resize-handle { height: 9px; cursor: row-resize; display: grid; place-items: center; border-top: 1px solid var(--line); touch-action: none; outline: none }
+/* over a docked section's own top edge: the same line and grip, laid on its border */
+.resize-handle.edge { position: absolute; left: 0; right: 0; top: -1px; z-index: 3; background: var(--panel) }
 .resize-handle span { width: 36px; height: 3px; border-radius: 2px; background: var(--line-strong); transition: background-color .15s ease, width .15s ease }
 .resize-handle:hover span, .resize-handle:focus-visible span, .resize-handle.dragging span { background: var(--accent); width: 44px }
 @media (prefers-reduced-motion: reduce) { .resize-handle span { transition: none } }

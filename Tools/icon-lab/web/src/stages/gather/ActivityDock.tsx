@@ -47,8 +47,9 @@ export function JobRow({ j, expandable }: { j: Job; expandable?: boolean }) {
 
 export const DOCK_H = 236, DOCK_MIN = 90, DOCK_BAR = 34;
 
-export function ActivityDock({ slug, collapsed, onToggle, height, maxHeight, onResize }: {
-  slug: string; collapsed: boolean; onToggle(): void; height: number; maxHeight: number; onResize(h: number): void
+/** Collapsed is just its smallest height (its bar alone): dragged down to it, or toggled to it and back. */
+export function ActivityDock({ slug, collapsed, onToggle, height, maxHeight, onResize, onResizing }: {
+  slug: string; collapsed: boolean; onToggle(): void; height: number; maxHeight: number; onResize(h: number): void; onResizing?(v: boolean): void
 }) {
   const jobs = useProgramJobs(slug);
   const run = jobs.filter((j) => j.state === "running"), q = jobs.filter((j) => j.state === "queued");
@@ -59,7 +60,8 @@ export function ActivityDock({ slug, collapsed, onToggle, height, maxHeight, onR
   const cancelAll = () => { for (const j of live) void cancel(j); };
   return (
     <div className={"dock" + (collapsed ? " collapsed" : "")}>
-      {!collapsed && <ResizeHandle className="dock-handle" label="Resize the activity panel" height={height} min={DOCK_MIN} max={maxHeight} reset={DOCK_H} onResize={onResize} />}
+      <ResizeHandle edge label="Resize the activity panel" height={height} min={DOCK_MIN} max={maxHeight} reset={DOCK_H} collapsed={DOCK_BAR}
+        onResize={onResize} onResizing={onResizing} />
       <div className="dock-h">
         <button className="dock-toggle" onClick={onToggle} aria-expanded={!collapsed}>
           {run.length ? <span className="spin" /> : <span style={{ color: failed.length ? "var(--bad)" : "var(--ok)" }}>●</span>}

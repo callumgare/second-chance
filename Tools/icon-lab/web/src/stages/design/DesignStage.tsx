@@ -64,7 +64,7 @@ export function DesignStage({ slug }: { slug: string }) {
           <Inspector />
         </div>
         <div className={"wb-dock" + (resizing ? " resizing" : "")} style={{ height: gallery ? wbH : Math.min(dockH, maxDock) }}>
-          {!gallery && <ResizeHandle className="dock-handle" label="Resize the suggestions" height={Math.min(dockH, maxDock)} min={DOCK_MIN} max={maxDock} reset={DOCK_H} onResize={setDockH} onResizing={setResizing} />}
+          {!gallery && <ResizeHandle edge label="Resize the suggestions" height={Math.min(dockH, maxDock)} min={DOCK_MIN} max={maxDock} reset={DOCK_H} onResize={setDockH} onResizing={setResizing} />}
           <SuggestionsBar expanded={gallery} />
           {showGallery ? <Gallery /> : (
             <div className="wb-bottom">

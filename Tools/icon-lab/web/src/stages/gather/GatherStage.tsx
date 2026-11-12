@@ -40,9 +40,28 @@ export function GatherStage({ slug }: { slug: string }) {
   const [srcCollapsed, setSrcCollapsed] = useState(() => { try { return localStorage.getItem("iconlab-sources") === "0"; } catch { return false; } });
   const toggleSources = () => setSrcCollapsed((c) => { try { localStorage.setItem("iconlab-sources", c ? "1" : "0"); } catch { /* fine */ } return !c; });
   const [selId, setSelId] = useState<string | null>(null);
-  const [dockCollapsed, setDockCollapsed] = useState(false);
+  // The activity panel has one height; collapsed is its bar alone. Collapse and Expand move between that and the
+  // height it last had open.
   const [dockH, setDockHState] = useState(() => { try { return Number(localStorage.getItem("iconlab-activityh")) || DOCK_H; } catch { return DOCK_H; } });
-  const setDockH = (h: number) => { setDockHState(h); try { localStorage.setItem("iconlab-activityh", String(Math.round(h))); } catch { /* fine */ } };
+  const openDockH = useRef(dockH >= DOCK_MIN ? dockH : DOCK_H);
+  // while it's dragged, the heights it passes through aren't remembered: only where it's let go, if open
+  const dockDrag = useRef<{ last: number } | null>(null);
+  const setDockH = (h: number) => {
+    setDockHState(h);
+    if (dockDrag.current) dockDrag.current.last = h;
+    else if (h >= DOCK_MIN) openDockH.current = h;
+    try { localStorage.setItem("iconlab-activityh", String(Math.round(h))); } catch { /* fine */ }
+  };
+  const dockCollapsed = dockH <= DOCK_BAR;
+  const [dockDragging, setDockDraggingState] = useState(false);
+  const setDockDragging = (v: boolean) => {
+    setDockDraggingState(v);
+    if (v) { dockDrag.current = { last: dockH }; return; }
+    const last = dockDrag.current?.last;
+    dockDrag.current = null;
+    if (last != null && last >= DOCK_MIN) openDockH.current = last;
+  };
+  const setDockCollapsed = (c: boolean) => setDockH(c ? DOCK_BAR : Math.max(DOCK_MIN, openDockH.current));
   const root = useRef<HTMLDivElement>(null);
   const [rootH, setRootH] = useState(800);
   useEffect(() => {
@@ -225,7 +244,7 @@ export function GatherStage({ slug }: { slug: string }) {
   const filtered = f.kinds.size || f.source !== "all" || f.minSize || f.subject || f.text || f.simple || f.picked;
 
   return (
-    <div ref={root} className={"s2" + (srcCollapsed ? " src-min" : "")} style={{ gridTemplateRows: `auto minmax(0, 1fr) ${shownDock}px` }}>
+    <div ref={root} className={"s2" + (srcCollapsed ? " src-min" : "")} style={{ gridTemplateRows: `auto minmax(0, 1fr) ${shownDock}px`, transition: dockDragging ? "none" : "grid-template-rows .18s ease" }}>
       <div className="filters">
         <div className="fg"><span className="fl">Kind</span>
           {kindsPresent.map(([k, n]) => <button key={k} className={"chip" + (f.kinds.has(k) ? " on" : "")} onClick={() => toggleKind(k)}>{kindLabel(k)} <span className="ct">{n}</span></button>)}
@@ -318,7 +337,7 @@ export function GatherStage({ slug }: { slug: string }) {
 
       <MediaInspector m={sel} all={all} onSelect={reveal} onEdit={setEditing} />
       {editing && <CutoutEditor req={editing} onClose={() => setEditing(null)} />}
-      <ActivityDock slug={slug} collapsed={dockCollapsed} onToggle={() => setDockCollapsed(!dockCollapsed)} height={shownDock} maxHeight={maxDock} onResize={setDockH} />
+      <ActivityDock slug={slug} collapsed={dockCollapsed} onToggle={() => setDockCollapsed(!dockCollapsed)} height={shownDock} maxHeight={maxDock} onResize={setDockH} onResizing={setDockDragging} />
 
       {files && <FilesDialog slug={slug} onClose={() => setFiles(false)} onStarted={() => { setFiles(false); setDockCollapsed(false); }} />}
       {zoom != null && flat[zoom] && <Lightbox index={zoom} onIndex={(i) => { setZoom(i); if (flat[i]) reveal(flat[i].id); }} onClose={() => setZoom(null)}
