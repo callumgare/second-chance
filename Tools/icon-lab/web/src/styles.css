@@ -149,7 +149,7 @@ kbd { font-family: var(--ui); font-size: 10.5px; border: 1px solid var(--line-st
 .job .jw { white-space: nowrap; overflow: hidden; text-overflow: ellipsis } .job .eta { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums }
 .job .job-cancel { width: 20px; height: 20px; padding: 0; font-size: 13px; color: var(--muted) } .job .job-cancel:hover { color: var(--bad) }
 .job .job-open { font: inherit; color: inherit; padding: 0; text-align: left }
-.job-tree { grid-column: 1 / -1; border: 1px solid var(--line); border-radius: 6px; margin: 2px 0 6px; max-height: 240px; display: grid; min-height: 0 }
+.job-tree { grid-column: 1 / -1; border: 1px solid var(--line); border-radius: 6px; margin: 2px 0 6px; max-height: 240px; display: grid; min-height: 100px }
 .job-tree .tree { padding: 6px 10px; max-height: 240px }
 .job.queued { color: var(--faint) } .job.done { color: var(--muted) } .job.failed { color: var(--bad) }
 .jobsec { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-top: 8px; font-weight: 600 }
