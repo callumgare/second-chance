@@ -92,7 +92,6 @@ public actor Jobs {
         let job = Job(id: id, program: program, title: title, state: "queued", progress: 0, group: group, source: source, scan: scan)
         jobs[id] = job
         order.append(id)
-        if order.count > 300 { let drop = order.removeFirst(); jobs[drop] = nil }
         publish(job)
         let lane = Lane.of(group)
         lanes[id] = lane
@@ -113,7 +112,6 @@ public actor Jobs {
         let job = Job(id: id, program: program, title: title, state: "running", progress: 0, group: group, started: Date())
         jobs[id] = job
         order.append(id)
-        if order.count > 300 { let drop = order.removeFirst(); jobs[drop] = nil }
         publish(job)
         tasks[id] = Task.detached { [self] in
             var failure: String?

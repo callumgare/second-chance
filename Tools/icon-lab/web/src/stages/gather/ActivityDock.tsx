@@ -71,7 +71,7 @@ export function ActivityDock({ slug, collapsed, onToggle, height, maxHeight, onR
 }) {
   const jobs = useProgramJobs(slug);
   const run = jobs.filter((j) => j.state === "running"), q = jobs.filter((j) => j.state === "queued");
-  const failed = jobs.filter((j) => j.state === "failed"), done = jobs.filter((j) => j.state === "done").reverse().slice(0, 12);
+  const failed = jobs.filter((j) => j.state === "failed"), done = jobs.filter((j) => j.state === "done").reverse();
   const eta = Math.max(0, ...run.map((j) => j.eta ?? 0), ...q.map((j) => j.eta ?? 0));
   const picksPending = [...run, ...q].filter((j) => j.group === "hires").length;
   const live = [...run, ...q];
