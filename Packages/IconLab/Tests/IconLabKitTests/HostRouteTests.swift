@@ -260,4 +260,27 @@ nonisolated enum Xcode {
         gate.continuation.finish()
         #expect(await !jobs.cancel("nothing"))
     }
+
+    /// Each kind of work has its own slots: a scan starts while gathering and analysis fill theirs, and what waits
+    /// waits only for its own kind.
+    @Test func aScanDoesntWaitBehindGatheringOrAnalysis() async throws {
+        let jobs = Jobs(width: 1, network: 1, files: 1)
+        // each holds its slot until it's cancelled
+        let hold: @Sendable (@escaping @Sendable (Double, String?) async -> Void) async throws -> Void = { _ in try await Task.sleep(for: .seconds(600)) }
+        let gathering = await jobs.enqueue(title: "Gather", group: "gather", hold)
+        let analysis = await jobs.enqueue(title: "Analyse", group: "analysis", hold)
+        let scan = await jobs.enqueue(title: "Find images", group: "scan", hold)
+        let moreGathering = await jobs.enqueue(title: "Gather more", group: "gather", hold)
+        let state = { (id: String) async in await jobs.all().first { $0.id == id }?.state }
+        #expect(await state(gathering) == "running")
+        #expect(await state(analysis) == "running")
+        #expect(await state(scan) == "running")
+        #expect(await state(moreGathering) == "queued")
+        // its lane's slot freed, the next of its kind starts
+        #expect(await jobs.cancel(gathering))
+        let deadline = Date().addingTimeInterval(10)
+        while await state(moreGathering) != "running", Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(await state(moreGathering) == "running")
+        for id in [analysis, scan, moreGathering] { await jobs.cancel(id) }
+    }
 }

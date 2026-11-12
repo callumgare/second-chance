@@ -49,7 +49,10 @@ A program goes through four stages, each a route of the page
    browser (`sc icon-lab serve`) the page's own browser, which offers the
    built apps (`built-apps/` in a checkout) with one click. A scan's progress
    is in its job in the activity panel, where any job can be cancelled (what
-   it found is kept). Pictures dropped from the Finder onto the grid are
+   it found is kept). Jobs run in lanes with slots of their own (`Jobs.Lane`):
+   waiting on the network (gathering, finding a program in the catalogues),
+   scanning files, and the rest (analysis, hi-res), held to a third of the
+   cores, so a scan never queues behind gathering. Pictures dropped from the Finder onto the grid are
    added as your files, picked; dropped on Design's canvas or layers, they're
    also added as a layer. Each picture is analysed (its kind, its subject,
    its parts), and you pick the ones worth using.

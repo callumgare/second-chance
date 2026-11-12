@@ -22,13 +22,39 @@ public actor Jobs {
     private var jobs: [String: Job] = [:]
     private var order: [String] = []
     private var listeners: [UUID: Listener] = [:]
-    private var running = 0
-    private var waiting: [(String, @Sendable () async throws -> Void)] = []
+    /// Work runs in lanes, each with its own slots, so one kind never waits behind another: a scan of your files
+    /// doesn't queue behind gathering that's waiting on a catalogue's rate limit, nor gathering behind analysis.
+    public enum Lane: Sendable, CaseIterable {
+        /// Waiting on the network (gathering from a source, finding a program in the catalogues, updating a
+        /// catalogue's copy): many at once, as each mostly waits and each source paces itself.
+        case network
+        /// Scanning the person's files: unpacking and reading the disk.
+        case files
+        /// Everything else (analysis, hi-res, cut-outs): the CPU and the models, held to a share of the cores.
+        case compute
+
+        static func of(_ group: String?) -> Lane {
+            switch group {
+            case "gather", "match", "sources": .network
+            case "scan": .files
+            default: .compute
+            }
+        }
+    }
+
+    private var running: [Lane: Int] = [:]
+    private var waiting: [(id: String, lane: Lane, work: @Sendable () async throws -> Void)] = []
+    private var lanes: [String: Lane] = [:]
     /// Running jobs' tasks, so a job can be cancelled.
     private var tasks: [String: Task<Void, Never>] = [:]
-    public let width: Int
+    /// How many of each lane's jobs run at once.
+    public let widths: [Lane: Int]
+    /// The compute lane's width.
+    public var width: Int { widths[.compute] ?? 1 }
 
-    public init(width: Int = 3) { self.width = width }
+    public init(width: Int = 3, network: Int = 8, files: Int = 2) {
+        widths = [.compute: max(1, width), .network: max(1, network), .files: max(1, files)]
+    }
 
     public func listen(_ l: @escaping Listener) -> UUID {
         let id = UUID()
@@ -68,7 +94,9 @@ public actor Jobs {
         order.append(id)
         if order.count > 300 { let drop = order.removeFirst(); jobs[drop] = nil }
         publish(job)
-        waiting.append((id, { [weak self] in
+        let lane = Lane.of(group)
+        lanes[id] = lane
+        waiting.append((id, lane, { [weak self] in
             guard let self else { return }
             try await work { p, detail in await self.progress(id, p, detail) }
         }))
@@ -95,10 +123,11 @@ public actor Jobs {
         return id
     }
 
+    /// Starts what's waiting, in order, in each lane with a slot free.
     private func pump() {
-        while running < width, !waiting.isEmpty {
-            let (id, work) = waiting.removeFirst()
-            running += 1
+        while let i = waiting.firstIndex(where: { running[$0.lane, default: 0] < widths[$0.lane, default: 1] }) {
+            let (id, lane, work) = waiting.remove(at: i)
+            running[lane, default: 0] += 1
             jobs[id]?.state = "running"
             jobs[id]?.started = Date()
             if let j = jobs[id] { publish(j) }
@@ -123,9 +152,9 @@ public actor Jobs {
     /// (a scan, a download). False when there's no such job, or it has finished.
     @discardableResult
     public func cancel(_ id: String) -> Bool {
-        if let i = waiting.firstIndex(where: { $0.0 == id }) {
-            waiting.remove(at: i)
-            running += 1   // finish takes the slot back
+        if let i = waiting.firstIndex(where: { $0.id == id }) {
+            let lane = waiting.remove(at: i).lane
+            running[lane, default: 0] += 1   // finish takes the slot back
             finish(id, Self.cancelled)
             return true
         }
@@ -142,7 +171,7 @@ public actor Jobs {
 
     private func finish(_ id: String, _ failure: String?, slotted: Bool = true) {
         tasks[id] = nil
-        if slotted { running -= 1 }
+        if slotted, let lane = lanes.removeValue(forKey: id) { running[lane, default: 1] -= 1 }
         if var j = jobs[id] {
             j.state = failure == nil ? "done" : "failed"
             j.progress = failure == nil ? 1 : j.progress
