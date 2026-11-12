@@ -151,6 +151,38 @@ public nonisolated struct Nothing: Codable, Sendable {
     public init() {}
 }
 
+/// Bytes read but not yet a whole line.
+private nonisolated final class LineBuffer: Sendable {
+    private let pending = Mutex(Data())
+
+    /// The whole lines `data` completes, without their line breaks.
+    func lines(adding data: Data) -> [String] {
+        pending.withLock { pending in
+            pending.append(data)
+            var lines: [String] = []
+            while let end = pending.firstIndex(of: UInt8(ascii: "\n")) {
+                lines.append(Self.text(pending[pending.startIndex..<end]))
+                pending.removeSubrange(pending.startIndex...end)
+            }
+            return lines
+        }
+    }
+
+    /// What's left once the input has ended: a last line with no line break.
+    func rest() -> String? {
+        pending.withLock { pending in
+            defer { pending = Data() }
+            return pending.isEmpty ? nil : Self.text(pending)
+        }
+    }
+
+    private static func text(_ bytes: Data) -> String {
+        var line = String(decoding: bytes, as: UTF8.self)
+        if line.hasSuffix("\r") { line.removeLast() }
+        return line
+    }
+}
+
 /// One end of the protocol: reads a message a line from `input`, answers
 /// each request through `handler` (concurrently), matches each reply to the
 /// request it answers, and writes a message a line to `output`.
@@ -169,39 +201,71 @@ public nonisolated final class RPCConnection: Sendable {
     private let writing = Mutex(())
     private let pending = Mutex<[Int: CheckedContinuation<Data?, Error>]>([:])
     private let nextID = Atomic<Int>(1)
-    private let handler: Mutex<Handler?>
+    private let callbacks: Mutex<Callbacks>
     private let reader = Mutex<Task<Void, Never>?>(nil)
-    /// Called once the other end has gone.
-    private let onClose = Mutex<(@Sendable () -> Void)?>(nil)
     /// The other end's requests being answered, by id, and those answered
     /// before they could be registered.
     private let running = Mutex<(tasks: [Int: Task<Void, Never>], finished: Set<Int>)>(([:], []))
     /// How long a cancelled request waits for its answer before giving up
     /// (decision 8 of the builders plan: 10 s).
     private let cancelGrace: Duration
-    /// Called when a cancelled request went unanswered for `cancelGrace`:
-    /// the other end is to be ended.
-    private let onUnanswered = Mutex<(@Sendable () -> Void)?>(nil)
+
+    /// What answers the other end, and what is told of it, in a struct of
+    /// their own: a closure kept in a `Mutex` as an optional gains a
+    /// reabstraction thunk each time it's read out and called, so the
+    /// handler, called for every message, grew a chain as long as the
+    /// conversation, slower to call each time and, freed, deep enough to
+    /// overflow the stack. Kept in a struct, it doesn't.
+    private struct Callbacks {
+        var handler: Handler?
+        /// Called once the other end has gone.
+        var onClose: (@Sendable () -> Void)?
+        /// Called when a cancelled request went unanswered for
+        /// `cancelGrace`: the other end is to be ended.
+        var onUnanswered: (@Sendable () -> Void)?
+    }
 
     public init(input: FileHandle, output: FileHandle, handler: Handler? = nil, cancelGrace: Duration = .seconds(10)) {
         self.output = output
         self.cancelGrace = cancelGrace
-        self.handler = Mutex(handler)
+        self.callbacks = Mutex(Callbacks(handler: handler))
+        let lines = Self.lines(of: input)
         let task = Task.detached { [weak self] in
-            do {
-                for try await line in input.bytes.lines {
-                    guard let self else { return }
-                    await self.received(line)
-                }
-            } catch {}
+            for await line in lines {
+                guard let self else { return }
+                await self.received(line)
+            }
             self?.closed()
         }
         reader.withLock { $0 = task }
     }
 
-    public func setHandler(_ handler: @escaping Handler) { self.handler.withLock { $0 = handler } }
-    public func whenClosed(_ action: @escaping @Sendable () -> Void) { onClose.withLock { $0 = action } }
-    public func whenCancelUnanswered(_ action: @escaping @Sendable () -> Void) { onUnanswered.withLock { $0 = action } }
+    /// `input`'s lines, as they arrive, until it ends or they're no longer
+    /// wanted. Not `FileHandle.bytes.lines`: its reads block one of the
+    /// process's threads, and only one such read goes on at a time in a
+    /// process, so a connection whose other end was quiet held up every
+    /// other's (two module programs in one build, builds side by side).
+    /// A readability handler has a dispatch source of its own.
+    private static func lines(of input: FileHandle) -> AsyncStream<String> {
+        AsyncStream { continuation in
+            let buffer = LineBuffer()
+            input.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty else {
+                    handle.readabilityHandler = nil
+                    if let last = buffer.rest() { continuation.yield(last) }
+                    continuation.finish()
+                    return
+                }
+                for line in buffer.lines(adding: data) { continuation.yield(line) }
+            }
+            continuation.onTermination = { _ in input.readabilityHandler = nil }
+        }
+    }
+
+    public func setHandler(_ handler: @escaping Handler) { callbacks.withLock { $0.handler = handler } }
+    public func whenClosed(_ action: @escaping @Sendable () -> Void) { callbacks.withLock { $0.onClose = action } }
+    public func whenCancelUnanswered(_ action: @escaping @Sendable () -> Void) { callbacks.withLock { $0.onUnanswered = action } }
 
     /// Ask the other end, waiting for its reply.
     public func request<P: Encodable, R: Decodable>(_ method: String, _ params: P, as result: R.Type) async throws -> R {
@@ -224,7 +288,7 @@ public nonisolated final class RPCConnection: Sendable {
                 try? await Task.sleep(for: grace)
                 guard let self, let waiting = self.pending.withLock({ $0.removeValue(forKey: id) }) else { return }
                 waiting.resume(throwing: CancellationError())
-                self.onUnanswered.withLock { $0 }?()
+                self.callbacks.withLock { $0 }.onUnanswered?()
             }
         }
         return try JSONDecoder().decode(R.self, from: data ?? Data("null".utf8))
@@ -254,7 +318,7 @@ public nonisolated final class RPCConnection: Sendable {
                 }
                 return
             }
-            let handler = handler.withLock { $0 }
+            let handler = callbacks.withLock { $0 }.handler
             guard let id = message.id else {
                 // A notification: in order, before anything after it.
                 _ = try? await handler?(method, message.params?.data)
@@ -291,7 +355,7 @@ public nonisolated final class RPCConnection: Sendable {
     private func closed() {
         let waiting = pending.withLock { pending in defer { pending = [:] }; return pending }
         for continuation in waiting.values { continuation.resume(throwing: StepFailure.failed("the module's program ended")) }
-        onClose.withLock { $0 }?()
+        callbacks.withLock { $0 }.onClose?()
     }
 
     /// Stop reading.

@@ -88,6 +88,11 @@ custom_rules:
     excluded:
       - "Packages/Modules/wine/Sources/WineKit/"
     severity: error
+  optional_closure_in_lock:
+    name: "No optional closure in a lock"
+    regex: '(Mutex|OSAllocatedUnfairLock)<\([^\n]*?->[^\n]*?\)\?>'
+    message: "A closure kept in a lock as an optional gains a reabstraction thunk each time it's read out and called, until calling it crawls and freeing it overflows the stack. Keep it in a struct (RPCConnection.Callbacks) or non-optional."
+    severity: error
   no_privacy_annotation:
     name: "No privacy: annotations"
     regex: 'privacy:\s*\.(public|private)'

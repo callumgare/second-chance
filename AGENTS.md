@@ -481,8 +481,12 @@ direct assignment.
   rather than loosening a rule; where a line genuinely must break one, a
   `swiftlint:disable:next` with the reason. `.swiftlint.yml`'s custom rules
   enforce this file's logging conventions (no `print()`, `os.Logger` or
-  `privacy:`) and its Wine ones (`wine_without_crash_handler`,
-  `wine_path_outside_library`) ([docs/dev-cli.md](docs/dev-cli.md#lint)).
+  `privacy:`), its Wine ones (`wine_without_crash_handler`,
+  `wine_path_outside_library`) and `optional_closure_in_lock`: a closure
+  kept in a `Mutex` as an optional gains a thunk each time it's read out
+  and called, until calling it crawls and freeing it overflows the stack,
+  so keep it in a struct or non-optional
+  ([docs/dev-cli.md](docs/dev-cli.md#lint)).
 - **Every Wine program starts through the Wine library.** `Wine.run`,
   `output(of:)` and `start` (`Packages/Modules/wine/Sources/WineKit/WineProcess.swift`) take a
   `WineCommand`; `wine.registry`, `wine.server` and `Winetricks` cover the

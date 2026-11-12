@@ -25,7 +25,7 @@ var appNapOff: NSObjectProtocol?
 
 /// Kills the game's Wine session, once the configuration is known: called
 /// when the wrapp has to exit without its cleanup having finished.
-nonisolated let killWineBeforeForcedExit = Mutex<(@Sendable () -> Void)?>(nil)
+nonisolated let killWineBeforeForcedExit = Mutex<@Sendable () -> Void>({})
 
 /// Capture a diagnostics bundle on SIGUSR1, whatever the launch or the game
 /// is doing: `kill -USR1 <wrapp pid>`, for a game that seems stuck. See
@@ -71,7 +71,7 @@ func installTerminationHandlers() {
                 DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + after) {
                     mainLogger.error("Cleanup didn't finish within \(Int(after)) s of \(SubprocessWatch.signalName(sig)); exiting anyway")
                     // Not with Wine still running in the prefix, though.
-                    killWineBeforeForcedExit.withLock { $0 }?()
+                    killWineBeforeForcedExit.withLock { $0 }()
                     LogStore.shared.flush()
                     exit(code)
                 }
