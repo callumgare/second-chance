@@ -133,6 +133,18 @@ nonisolated extension IconLabAPI {
             return try json(["pins": st.pins])
         }
 
+        // The pins in a new order (Design's strip and Review share it; Save and Save to bundle follow it). Ids that
+        // aren't pins are ignored, and pins it leaves out keep their place after the rest.
+        router.put("/api/programs/:slug/pins") { c in
+            let slug = try c.param("slug")
+            let order = try decode(PinsOrder.self, c.request).pins
+            var st = await lab.store.state(slug)
+            let named = order.filter { st.pins.contains($0) }
+            st.pins = named + st.pins.filter { !named.contains($0) }
+            try await lab.store.saveState(slug, st)
+            return try json(["pins": st.pins])
+        }
+
         router.delete("/api/programs/:slug/pins/:id") { c in
             let slug = try c.param("slug"), id = try c.param("id")
             var st = await lab.store.state(slug)
@@ -154,6 +166,7 @@ nonisolated extension IconLabAPI {
 // MARK: Bodies
 
 nonisolated struct MediaPatch: Decodable { var picked: Bool?; var kind: String?; var rotation: Int?; var hidden: Bool? }
+nonisolated struct PinsOrder: Decodable { var pins: [String] }
 nonisolated struct SuggestBody: Decodable, Sendable { var params: SuggestionParams?; var treatments: [String]? }
 nonisolated struct ContentBody: Decodable {
     var program: String

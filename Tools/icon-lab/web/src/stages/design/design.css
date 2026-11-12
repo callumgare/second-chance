@@ -42,6 +42,11 @@
 .pins .star { color: var(--pin) }
 .pins .unpin { position: absolute; top: 1px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line-strong); font-size: 9px; display: grid; place-items: center; opacity: 0; color: var(--muted) }
 .pins .tile:hover .unpin { opacity: 1 }
+.pins .tile[role=button] { cursor: pointer }
+.pins .tile.edited { box-shadow: inset 0 0 0 1px var(--accent) }
+.pins .tile.dragging { opacity: .45 }
+.pins .tile[data-drop="before"] { box-shadow: -3px 0 0 var(--accent) }
+.pins .tile[data-drop="after"] { box-shadow: 3px 0 0 var(--accent) }
 
 /* layers */
 .layers { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto auto; overflow: hidden }

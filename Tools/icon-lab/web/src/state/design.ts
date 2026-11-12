@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { api, type Appearance, type Doc, type Suggestion, type SuggestionParams, type Treatment } from "../api";
 import { clone, findGroup, findLayer, forkDoc, newDoc, visualKey } from "../lib/doc";
 import { useApp } from "./app";
+import { moved } from "../lib/reorder";
 import { applyLocally } from "./adjustLocal";
 import { resources } from "../render/resources";
 import { sketchRequests } from "../render/sketch";
@@ -68,6 +69,10 @@ type DesignState = {
   redo(): void
   replaceDoc(d: Doc): void
   pinCurrent(): Promise<void>
+  /** Saves the design being edited back to the pin it was copied from (it never changes by editing alone). */
+  updatePin(): Promise<void>
+  /** Moves a pin to a new place in the order Design, Review and saving share. */
+  movePin(from: number, to: number): Promise<void>
   unpin(id: string): Promise<void>
   openPin(id: string): void
   openSuggestion(s: Suggestion): Promise<void>
@@ -196,6 +201,32 @@ export const useDesign = create<DesignState>((set, get) => ({
     }
   },
 
+  async updatePin() {
+    const s = get();
+    const id = updatablePin(s);
+    if (!s.doc || !s.slug || !id) return;
+    const old = s.docs[id];
+    const pin: Doc = { ...clone(s.doc), id, parent: old.parent, created: old.created, origin: old.origin };
+    set({ docs: { ...s.docs, [id]: pin } });
+    try {
+      await api.putDoc(s.slug, pin);
+      useApp.getState().say(`Updated the pin “${pin.name}”`);
+    } catch (e) {
+      set({ docs: { ...get().docs, [id]: old } });
+      useApp.getState().say("Couldn't update the pin: " + (e as Error).message, "error");
+    }
+  },
+
+  async movePin(from, to) {
+    const s = get();
+    if (!s.slug || from === to) return;
+    const before = s.pins;
+    const pins = moved(before, from, to);
+    set({ pins });
+    try { set({ pins: (await api.orderPins(s.slug, pins)).pins }); }
+    catch (e) { set({ pins: before }); useApp.getState().say("Couldn't reorder the pins: " + (e as Error).message, "error"); }
+  },
+
   async unpin(id) {
     const s = get();
     if (!s.slug) return;
@@ -293,6 +324,13 @@ function loadParams(slug: string): SuggestionParams {
 }
 function saveParams(slug: string, p: SuggestionParams) {
   try { localStorage.setItem("iconlab-params:" + slug, JSON.stringify(p)); } catch { /* unavailable */ }
+}
+
+/** The pin the design being edited was copied from, when it has been changed since: what Update pin would save. */
+export function updatablePin(s: Pick<DesignState, "doc" | "docs" | "pins">): string | null {
+  const parent = s.doc?.parent;
+  if (!s.doc || !parent || !s.pins.includes(parent) || !s.docs[parent]) return null;
+  return visualKey(s.doc) === visualKey(s.docs[parent]) && s.doc.name === s.docs[parent].name ? null : parent;
 }
 
 /** Does the current doc look the same as a pinned one? */

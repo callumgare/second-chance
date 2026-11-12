@@ -107,6 +107,11 @@ Every document the program has (history), which ids are pinned, and which is ope
 
 `POST /api/programs/:slug/pins` `{ id }` or `{ doc }` (saves the doc, then pins it) → `{ pins }`; `DELETE /api/programs/:slug/pins/:id` → `{ pins }`
 
+`PUT /api/programs/:slug/pins` `{ pins: string[] }` → `{ pins }` puts the pins in this order (Design's strip and
+Review show it, and Save and Save to bundle follow it: the first is the app's icon). Ids that aren't pins are
+ignored; pins it leaves out follow the rest. A pin's document is updated in place by `PUT …/docs/:id` with its id
+(Update pin): editing alone never changes one, as the page forks a pin before its first edit.
+
 `POST /api/programs/:slug/save` `{ ids: string[] }` → `{ saved: { id, icon, png }[] }`
 Writes each document's `.icon` and a 1024 PNG to `data/programs/<slug>/saved/`.
 

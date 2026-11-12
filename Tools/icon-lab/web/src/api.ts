@@ -424,6 +424,8 @@ export const api = {
   pin: (slug: string, id: string) => req<{ pins: string[] }>("POST", `/api/programs/${enc(slug)}/pins`, { id }),
   /** Saves the doc and pins it, in one call. */
   pinDoc: (slug: string, doc: Doc) => req<{ pins: string[] }>("POST", `/api/programs/${enc(slug)}/pins`, { doc }),
+  /** The pins in a new order: Design and Review show it, and saving follows it. */
+  orderPins: (slug: string, pins: string[]) => req<{ pins: string[] }>("PUT", `/api/programs/${enc(slug)}/pins`, { pins }),
   unpin: (slug: string, id: string) => req<{ pins: string[] }>("DELETE", `/api/programs/${enc(slug)}/pins/${enc(id)}`),
   save: (slug: string, ids: string[]) =>
     req<{ saved: { id: string; icon: string; png: string }[] }>("POST", `/api/programs/${enc(slug)}/save`, { ids }),

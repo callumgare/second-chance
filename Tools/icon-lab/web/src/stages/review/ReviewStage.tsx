@@ -10,6 +10,7 @@ import { StatusSlot, TitleActions } from "../../shell/slots";
 import "./review.css";
 import { copyText } from "../../host";
 import { SaveToBundle, TryOnWrapp, useHost } from "./HostActions";
+import { useReorder } from "../../lib/reorder";
 
 type Row = { label: string; hint?: string; cell(d: Doc): ReactNode };
 
@@ -27,6 +28,8 @@ export function ReviewStage({ slug }: { slug: string }) {
   const [toBundle, setToBundle] = useState(false);
   const pinned = pins.map((id) => docs[id]).filter(Boolean);
   const kept = pinned.filter((d) => keep[d.id] !== false);
+  // Columns are in the pins' order, which Design's strip shows too and saving follows (the first is the app's icon).
+  const r = useReorder("pins", (from, to) => void useDesign.getState().movePin(pins.indexOf(pinned[from].id), pins.indexOf(pinned[to].id)), true);
 
   const rows: Row[] = [
     { label: "1024 · light", hint: "the full-size render", cell: (d) => <IconArt doc={d} size={150} renderSize={1024} appearance="light" real="eager" priority={1} /> },
@@ -56,7 +59,7 @@ export function ReviewStage({ slug }: { slug: string }) {
   return (
     <div className="cmp scroll">
       <div className="cmp-head">
-        <div><b style={{ fontSize: 15 }}>Compare pinned icons</b> <span className="muted">· keep the ones worth saving</span></div>
+        <div><b style={{ fontSize: 15 }}>Compare pinned icons</b> <span className="muted">· keep the ones worth saving, and drag them into order: the first is the app's icon</span></div>
         <span className="seg"><button className={wall === "light" ? "on" : ""} onClick={() => setWall("light")}>Light desktop</button><button className={wall === "dark" ? "on" : ""} onClick={() => setWall("dark")}>Dark desktop</button></span>
       </div>
       {!pinned.length ? <div className="empty">Nothing pinned yet. Pin designs in the editor, then come back to compare them.<br /><button className="btn" style={{ marginTop: 8 }} onClick={() => go(slug, "design")}>← Back to the editor</button></div> : (
@@ -64,10 +67,10 @@ export function ReviewStage({ slug }: { slug: string }) {
           <thead>
             <tr>
               <th />
-              {pinned.map((d) => {
+              {pinned.map((d, i) => {
                 const on = keep[d.id] !== false;
                 return (
-                  <th key={d.id} className="colh">
+                  <th key={d.id} className={"colh" + (r.dragging === i ? " dragging" : "")} {...r.handle(i)} {...r.row(i)} title="Drag to reorder: saving follows this order, the first is the app's icon">
                     <div className="wraps" title={d.name}>{d.name}</div>
                     <div className="row" style={{ justifyContent: "center", gap: 4, marginTop: 4 }}>
                       <button className={"btn small" + (on ? " on" : "")} aria-pressed={on} onClick={() => useDesign.getState().set({ keep: { ...keep, [d.id]: !on } })}>{on ? "✓ Keep" : "Keep"}</button>

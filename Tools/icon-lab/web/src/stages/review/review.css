@@ -18,3 +18,10 @@
 .ctx.plain.dark { background: #1e1f23 }
 .saved-list { overflow: auto; padding: 8px 16px; display: grid; gap: 8px }
 .saved-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; align-items: center }
+
+/* Columns are dragged by their heads into the order saving follows. */
+.cmpt th.colh[draggable] { cursor: grab }
+.cmpt th.colh button { cursor: default }
+.cmpt th.dragging { opacity: .45 }
+.cmpt th[data-drop="before"] { box-shadow: inset 3px 0 0 var(--accent) }
+.cmpt th[data-drop="after"] { box-shadow: inset -3px 0 0 var(--accent) }

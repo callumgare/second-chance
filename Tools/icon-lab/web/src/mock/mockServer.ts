@@ -207,6 +207,12 @@ const routes: [string, RegExp, Handler][] = [
     if (!s.pins.includes(body.id)) s.pins.push(body.id);
     persist(m[1], s); return { pins: s.pins };
   }],
+  ["PUT", /^\/api\/programs\/([^/]+)\/pins$/, async (m, body) => {
+    const s = store(m[1]);
+    const named = (body.pins as string[]).filter((p) => s.pins.includes(p));
+    s.pins = [...named, ...s.pins.filter((p) => !named.includes(p))];
+    persist(m[1], s); return { pins: s.pins };
+  }],
   ["DELETE", /^\/api\/programs\/([^/]+)\/pins\/([^/]+)$/, async (m) => {
     const s = store(m[1]); s.pins = s.pins.filter((p) => p !== m[2]); persist(m[1], s); return { pins: s.pins };
   }],

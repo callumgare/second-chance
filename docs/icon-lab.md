@@ -42,10 +42,12 @@ A program goes through four stages, each a route of the page
    its parts), and you pick the ones worth using.
 3. **Design.** Suggestions from the picked pictures (treatments), and an
    editor for layers, effects, masks and Liquid Glass. Designs worth keeping
-   are pinned.
+   are pinned. A pin never changes by editing: opening one edits a copy, and
+   **Update pin** saves the copy back to it.
 4. **Review.** Every pinned design side by side, in each appearance and at the
    sizes an icon is seen, from Icon Composer's real renders; and getting one
-   out (below).
+   out (below). Pins are dragged into order here or in Design's strip, and
+   saving follows it: the first is the app's icon.
 
 ## Getting an icon out
 
