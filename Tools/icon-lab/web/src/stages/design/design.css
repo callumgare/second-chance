@@ -38,6 +38,7 @@
 .pinsbar { display: flex; gap: 8px; align-items: center; min-width: 0; height: 84px }
 .pins { display: flex; gap: 6px; align-items: center; overflow-x: auto; padding: 2px; flex: 1; min-width: 0; height: 100% }
 .pins .tile { width: 84px; flex: none }
+.pinsbar.dropping { outline: 2px dashed var(--accent); outline-offset: -2px; border-radius: 6px }
 .pins .tile.cur { outline: 2px solid var(--accent); outline-offset: -2px }
 .pins .star { color: var(--pin) }
 .pins .unpin { position: absolute; top: 1px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line-strong); font-size: 9px; display: grid; place-items: center; opacity: 0; color: var(--muted) }

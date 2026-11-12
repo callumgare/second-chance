@@ -1,4 +1,5 @@
 .cmp { padding: 14px 18px; height: 100% }
+.cmp.dropping { outline: 2px dashed var(--accent); outline-offset: -4px }
 .cmp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 12px }
 .cmpt { border-collapse: separate; border-spacing: 12px 8px }
 .cmpt th { font-size: 11.5px; font-weight: 600; color: var(--muted); text-align: left; white-space: nowrap; padding-right: 6px; vertical-align: middle }

@@ -69,6 +69,8 @@ type DesignState = {
   redo(): void
   replaceDoc(d: Doc): void
   pinCurrent(): Promise<void>
+  /** Pins a design that isn't the one being edited (an `.icon` brought in), after the other pins. */
+  pinNew(d: Doc): Promise<void>
   /** Saves the design being edited back to the pin it was copied from (it never changes by editing alone). */
   updatePin(): Promise<void>
   /** Moves a pin to a new place in the order Design, Review and saving share. */
@@ -192,8 +194,13 @@ export const useDesign = create<DesignState>((set, get) => ({
 
   async pinCurrent() {
     const s = get();
-    if (!s.doc || !s.slug) return;
-    const snap = clone(s.doc);
+    if (!s.doc) return;
+    await get().pinNew(clone(s.doc));
+  },
+
+  async pinNew(snap) {
+    const s = get();
+    if (!s.slug) return;
     // Pinned at once, so an edit made while the requests are out forks rather than changing the pin.
     set({ pins: [...s.pins, snap.id], docs: { ...s.docs, [snap.id]: snap }, keep: { ...s.keep, [snap.id]: true } });
     try {

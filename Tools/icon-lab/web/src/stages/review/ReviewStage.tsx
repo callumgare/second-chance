@@ -11,6 +11,7 @@ import "./review.css";
 import { copyText } from "../../host";
 import { TryOnWrapp, useHost } from "./HostActions";
 import { useReorder } from "../../lib/reorder";
+import { dropIconsOnPins, mayBeIcons } from "../../lib/iconImport";
 
 type Row = { label: string; hint?: string; cell(d: Doc): ReactNode };
 
@@ -25,6 +26,7 @@ export function ReviewStage({ slug }: { slug: string }) {
   const host = useHost();
   const bundle = useApp((s) => s.program?.bundleId);
   const [trying, setTrying] = useState<Doc | null>(null);
+  const [dropping, setDropping] = useState(false);
   // A build that can write bundles (a Debug build from a checkout) saves to the program's bundle too.
   const [toBundle, setToBundle] = useState<{ saved?: SavedToBundle; lines?: { lines: string[]; change: string }; error?: string } | null>(null);
   const pinned = pins.map((id) => docs[id]).filter(Boolean);
@@ -67,12 +69,16 @@ export function ReviewStage({ slug }: { slug: string }) {
   };
 
   return (
-    <div className="cmp scroll">
+    // An Icon Composer .icon dropped from the Finder is brought in as a new pin, at the end.
+    <div className={"cmp scroll" + (dropping ? " dropping" : "")}
+      onDragOver={(e) => { if (mayBeIcons(e.dataTransfer)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDropping(true); } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false); }}
+      onDrop={(e) => { setDropping(false); dropIconsOnPins(slug, e); }}>
       <div className="cmp-head">
-        <div><b style={{ fontSize: 15 }}>Compare pinned icons</b> <span className="muted">· keep the ones worth saving, and drag them into order: the first is the app's icon</span></div>
+        <div><b style={{ fontSize: 15 }}>Compare pinned icons</b> <span className="muted">· keep the ones worth saving, and drag them into order: the first is the app's icon. Drop an Icon Composer .icon here to add it.</span></div>
         <span className="seg"><button className={wall === "light" ? "on" : ""} onClick={() => setWall("light")}>Light desktop</button><button className={wall === "dark" ? "on" : ""} onClick={() => setWall("dark")}>Dark desktop</button></span>
       </div>
-      {!pinned.length ? <div className="empty">Nothing pinned yet. Pin designs in the editor, then come back to compare them.<br /><button className="btn" style={{ marginTop: 8 }} onClick={() => go(slug, "design")}>← Back to the editor</button></div> : (
+      {!pinned.length ? <div className="empty">Nothing pinned yet. Pin designs in the editor, then come back to compare them, or drop an Icon Composer .icon here.<br /><button className="btn" style={{ marginTop: 8 }} onClick={() => go(slug, "design")}>← Back to the editor</button></div> : (
         <table className="cmpt">
           <thead>
             <tr>

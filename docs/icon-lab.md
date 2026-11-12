@@ -63,7 +63,13 @@ A program goes through four stages, each a route of the page
 4. **Review.** Every pinned design side by side, in each appearance and at the
    sizes an icon is seen, from Icon Composer's real renders; and getting one
    out (below). Pins are dragged into order here or in Design's strip, and
-   saving follows it: the first is the app's icon.
+   saving follows it: the first is the app's icon. An Icon Composer `.icon`
+   dropped from the Finder on either is made again as a new pin: its
+   pictures are added to Your files, and its fill, groups' Liquid Glass and
+   layers' places are read from its `icon.json` (`lib/iconDoc.ts`), where
+   Icon Composer draws a picture at its size in points on a 1024-point canvas,
+   moved by `translation-in-points` (y down). What a design can't hold, such
+   as a layer's blend mode or an appearance's own settings, is left out.
 
 ## Getting an icon out
 

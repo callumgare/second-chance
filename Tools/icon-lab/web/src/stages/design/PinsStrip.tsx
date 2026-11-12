@@ -1,11 +1,13 @@
 // Pinned designs, then "Current" when the doc being edited looks like none of them. A pin is a frozen
 // snapshot: clicking one opens it, the first edit continues on a copy (parent = the pin), and Update pin saves
-// the copy back to it. Pins are dragged into the order Review shows and saving follows.
+// the copy back to it. Pins are dragged into the order Review shows and saving follows. An Icon Composer .icon
+// dropped on the strip is brought in as a pin (lib/iconImport).
 import { IconArt } from "../../components/IconArt";
 import { pinnedMatch, updatablePin, useDesign } from "../../state/design";
 import { Menu, usePopup } from "../../components/Popup";
 import { useReorder } from "../../lib/reorder";
 import { useState } from "react";
+import { dropIconsOnPins, mayBeIcons } from "../../lib/iconImport";
 
 export function PinsStrip() {
   const doc = useDesign((s) => s.doc);
@@ -16,11 +18,17 @@ export function PinsStrip() {
   const updatable = useDesign((s) => updatablePin(s));
   const menu = usePopup();
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const slug = useDesign((s) => s.slug);
+  const [dropping, setDropping] = useState(false);
   const r = useReorder("pins", (from, to) => void useDesign.getState().movePin(from, to), true);
   if (!doc) return null;
   const open = (id: string) => useDesign.getState().openPin(id);
   return (
-    <div className="pinsbar">
+    // An Icon Composer .icon dropped from the Finder is brought in as a new pin.
+    <div className={"pinsbar" + (dropping ? " dropping" : "")}
+      onDragOver={(e) => { if (slug && mayBeIcons(e.dataTransfer)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDropping(true); } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false); }}
+      onDrop={(e) => { setDropping(false); if (slug) dropIconsOnPins(slug, e); }}>
       <span className="sec" style={{ margin: 0 }}>Pinned</span>
       <div className="pins">
         {pins.map((id, i) => docs[id] && (
@@ -40,7 +48,7 @@ export function PinsStrip() {
             <span className="lbl">Current</span>
           </div>
         )}
-        {!pins.length && <span className="faint" style={{ fontSize: 11.5 }}>Pin designs worth keeping, then review them side by side.</span>}
+        {!pins.length && <span className="faint" style={{ fontSize: 11.5 }}>Pin designs worth keeping, then review them side by side. Drop an Icon Composer .icon here to bring it in.</span>}
       </div>
       {updatable && <>
         <button className="btn" onClick={() => useDesign.getState().resetToPin()} title={`Drop your changes: back to the pin “${docs[updatable]?.name}” (undoable)`}>
