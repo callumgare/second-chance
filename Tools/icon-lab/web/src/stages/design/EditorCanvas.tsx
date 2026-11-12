@@ -127,6 +127,14 @@ export function EditorCanvas() {
   const mstart = useRef<{ x: number; y: number; w: number; h: number; layers: Map<string, { x: number; y: number; width: number }> } | null>(null);
   const tr = useRef<Konva.Transformer>(null);
   const pendingDrag = useRef(false);
+  // A press on a layer not yet selected starts its drag only once its box is drawn, a frame or a render later. A
+  // trackpad's tap-to-click lets go before then, and a drag started after the release never sees one, so the layer
+  // would follow the pointer until the next click: a release first cancels it.
+  useEffect(() => {
+    const up = () => { pendingDrag.current = false; };
+    window.addEventListener("pointerup", up, true); window.addEventListener("mouseup", up, true); window.addEventListener("pointercancel", up, true);
+    return () => { window.removeEventListener("pointerup", up, true); window.removeEventListener("mouseup", up, true); window.removeEventListener("pointercancel", up, true); };
+  }, []);
   const [guides, setGuides] = useState<Guide>({});
   // ⌥ or ⌘ held turns snapping off, for a resize as for a drag (the resize's bound function sees no event).
   const noSnap = useRef(false);
