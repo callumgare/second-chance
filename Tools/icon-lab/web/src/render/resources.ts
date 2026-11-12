@@ -50,11 +50,51 @@ class Resources {
     return list.find((e) => e.size >= size) ?? list[list.length - 1];
   }
 
-  private load(kind: Kind, program: string, what: any, base: string, size: number): Promise<void> {
+  // A layer's content changes many times a second while a slider is dragged: asking for every value queued them all
+  // (160 renders for a two-second blur drag, measured), so the preview stepped through stale values long after the
+  // slider stopped, each render slowed from about 0.1 s to most of a second by the others of the same picture, and
+  // in the app, where the engine shares the process, the window was held up too. So each picture has one render in
+  // flight at a time, the largest size waiting going next (the canvas before the small previews), and only the
+  // latest request for each size waits; different pictures still render side by side. A request dropped for a
+  // newer one is asked again by the next draw if it's still wanted. (After: 21 renders for the same drag, the
+  // canvas's about 0.12 s each, the last done within 0.1 s of letting go.)
+  private static readonly MAX_RENDERS = 3;
+  private running = 0;
+  private inFlight = new Set<string>();   // pictures (family keys) with a render in flight
+  private waiting = new Map<string, { family: string; size: number; run(): void }>();   // slot → its latest request
+
+  private load(kind: Kind, program: string, what: any, base: string, size: number, now = false): Promise<void> {
     const key = base + "@" + size;
     if (this.failed.has(key)) return Promise.resolve();
     const existing = this.pending.get(key);
     if (existing) return existing;
+    if (kind !== "content" || now) return this.start(kind, program, what, base, size);
+    const family = this.familyKey(kind, program, what);
+    this.waiting.set(family + "@" + size, { family, size, run: () => {
+      this.inFlight.add(family);
+      this.running++;
+      void this.start(kind, program, what, base, size).finally(() => {
+        this.inFlight.delete(family);
+        this.running--;
+        this.pump();
+      });
+    } });
+    this.pump();
+    return Promise.resolve();
+  }
+
+  private pump() {
+    while (this.running < Resources.MAX_RENDERS) {
+      let next: [string, { family: string; size: number; run(): void }] | null = null;
+      for (const w of this.waiting) if (!this.inFlight.has(w[1].family) && (!next || w[1].size > next[1].size)) next = w;
+      if (!next) return;
+      this.waiting.delete(next[0]);
+      next[1].run();
+    }
+  }
+
+  private start(kind: Kind, program: string, what: any, base: string, size: number): Promise<void> {
+    const key = base + "@" + size;
     const p = (async () => {
       try {
         let url: string;
@@ -127,7 +167,7 @@ class Resources {
       const size = bucket(Math.max(16, r.px));
       const base = this.base(r.kind, r.program, r.what);
       const have = this.best(base, size);
-      return have && have.size >= size ? Promise.resolve() : this.load(r.kind, r.program, r.what, base, size);
+      return have && have.size >= size ? Promise.resolve() : this.load(r.kind, r.program, r.what, base, size, true);
     }));
   }
 
