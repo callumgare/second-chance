@@ -54,5 +54,5 @@ tests:
 
 notes:
   quirks:
-    - "Her's Mac download hasn't been looked inside: it is taken to be a Cider build, as Trail of the Twister's is."
+    - "Her's Mac download (cider-Nancy…-iso-…dmg) is an image of its Windows and Mac disc, seen only in failure reports: it builds as the disc does, from the Windows installer on it."
     - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."
