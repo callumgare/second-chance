@@ -1,0 +1,151 @@
+{
+ "files": [
+  {
+   "name": "Logical Journey of the Zoombinis.iso",
+   "source": "original",
+   "mtime": "1644097226",
+   "size": "101449728",
+   "md5": "03677a482a0d1db5b70f14cb0d341e56",
+   "crc32": "8a6c90c8",
+   "sha1": "68791dc7f203d6b95d32c43d4580c1952e7f1acf",
+   "format": "ISO Image",
+   "filecount": "127"
+  },
+  {
+   "name": "LogicalJourneyOfTheZoombinisCover.png",
+   "source": "original",
+   "mtime": "1644097263",
+   "size": "1079607",
+   "md5": "56e488ea95ceebc34aaac623dfe60d74",
+   "crc32": "47bb0a42",
+   "sha1": "375f0fad26ed7cd9dff764c7ee6717f130908e2e",
+   "format": "PNG"
+  },
+  {
+   "name": "LogicalJourneyOfTheZoombinisCover_thumb.jpg",
+   "source": "derivative",
+   "format": "JPEG Thumb",
+   "original": "LogicalJourneyOfTheZoombinisCover.png",
+   "mtime": "1644097423",
+   "size": "11129",
+   "md5": "0101f9dbf7d800dcd18864e36b26e3b8",
+   "crc32": "9d90beb7",
+   "sha1": "daf8aff6294226548d31b970217c81e3afd00f4e"
+  },
+  {
+   "name": "Zoombinis.jpg",
+   "source": "original",
+   "mtime": "1644097271",
+   "size": "172788",
+   "md5": "b2b84474b27196311ff35b3f0850a11e",
+   "crc32": "7b6654f6",
+   "sha1": "4990ea4b2d88549c2faecc8f2da5105771a61309",
+   "format": "JPEG",
+   "rotation": "0"
+  },
+  {
+   "name": "Zoombinis_thumb.jpg",
+   "source": "derivative",
+   "format": "JPEG Thumb",
+   "original": "Zoombinis.jpg",
+   "mtime": "1644097434",
+   "size": "10383",
+   "md5": "798f65d2884ec0df42abc9b6ab726e32",
+   "crc32": "3ccb7917",
+   "sha1": "1661091287bcbffbdad8d5c3ceb74ca93371a210"
+  },
+  {
+   "name": "__ia_thumb.jpg",
+   "source": "original",
+   "mtime": "1644097286",
+   "size": "20092",
+   "md5": "0f68303225a3f125224c016da7907a23",
+   "crc32": "fdce55b0",
+   "sha1": "0ba3fddbc793b77fda29bcd1cd7066e02d1c4a7d",
+   "format": "Item Tile",
+   "rotation": "0"
+  },
+  {
+   "name": "download 24.jpg",
+   "source": "original",
+   "mtime": "1644097267",
+   "size": "12763",
+   "md5": "06f2f05d1c236f8a9e28bbf89017867e",
+   "crc32": "f78429f0",
+   "sha1": "11cba6f4c4b1a83a8f08eb02593c44b0b2e72fc8",
+   "format": "JPEG",
+   "rotation": "0"
+  },
+  {
+   "name": "download 24_thumb.jpg",
+   "source": "derivative",
+   "format": "JPEG Thumb",
+   "original": "download 24.jpg",
+   "mtime": "1644097426",
+   "size": "9842",
+   "md5": "df9b19b2aedfb78557267c035fe25062",
+   "crc32": "1d88f877",
+   "sha1": "8fe080c35c875e741223d93755c5a1ee456f7f19"
+  },
+  {
+   "name": "download.jpg",
+   "source": "original",
+   "mtime": "1644097269",
+   "size": "13250",
+   "md5": "b97444b888135bea479aaaba62d013b6",
+   "crc32": "5b639584",
+   "sha1": "ef0171d911bcf0b01ddf51464094087392829607",
+   "format": "JPEG",
+   "rotation": "0"
+  },
+  {
+   "name": "download_thumb.jpg",
+   "source": "derivative",
+   "format": "JPEG Thumb",
+   "original": "download.jpg",
+   "mtime": "1644097428",
+   "size": "8827",
+   "md5": "1cb0d1d921ac263af038d8037be8451b",
+   "crc32": "fba6da54",
+   "sha1": "6e36e01438d49c3b9982cc5f21483496620c2b56"
+  },
+  {
+   "name": "logical-journey-of-the-zoombinis_archive.torrent",
+   "source": "metadata",
+   "btih": "861085e3cdb9005aef9918fbc77966c173f653bc",
+   "mtime": "1736170740",
+   "size": "7355",
+   "md5": "3b2c19b5100b5b8a04476409fcd30274",
+   "crc32": "8c2834a7",
+   "sha1": "32d0cb8ae1018c20694556faa1327fa03743e18e",
+   "format": "Archive BitTorrent"
+  },
+  {
+   "name": "logical-journey-of-the-zoombinis_files.xml",
+   "source": "original",
+   "format": "Metadata",
+   "md5": "62d63771447ad99477203afac37c8019",
+   "summation": "md5"
+  },
+  {
+   "name": "logical-journey-of-the-zoombinis_meta.sqlite",
+   "source": "original",
+   "mtime": "1644097278",
+   "size": "81920",
+   "md5": "4533caa014e826237eba1b8cc32a39d6",
+   "crc32": "49cd717e",
+   "sha1": "384544da878fd981730c24117b023a67766212fa",
+   "format": "Metadata"
+  },
+  {
+   "name": "logical-journey-of-the-zoombinis_meta.xml",
+   "source": "original",
+   "mtime": "1751269119",
+   "size": "6434",
+   "md5": "38c84779969bc40b81de6bd87a2edafa",
+   "crc32": "300b2552",
+   "sha1": "34559e5e572581655fb451bde1feaa5c61855e11",
+   "format": "Metadata"
+  }
+ ]
+}

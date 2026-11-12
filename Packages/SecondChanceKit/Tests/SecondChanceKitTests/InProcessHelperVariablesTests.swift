@@ -116,6 +116,21 @@ struct InProcessHelperVariablesTests {
                                               environment: ["SECOND_CHANCE_MODE_SCALING": "0"])["EMULATED_MODE_SCALING_EXE"] == nil)
     }
 
+    @Test("--wine.colors arms the screen depth helper at that depth, and only then")
+    func theLaunchAsksForFewerColors() {
+        func variables(_ options: [String: String]) -> [String: String] {
+            let launch = RecordedLaunch(program: "wine:C:/Webmaster.exe", options: options, format: RecordedLaunch.currentFormat)
+            return Wine.inProcessHelperVariables(gameExe: "Webmaster.exe", graphicsAPI: .unknown, launch: launch, environment: [:])
+        }
+        #expect(variables(["wine.colors": "256"])["SCREEN_DEPTH"] == "8")
+        #expect(variables(["wine.colors": "256"])["SCREEN_DEPTH_EXE"] == "Webmaster.exe")
+        #expect(variables(["wine.colors": "65536"])["SCREEN_DEPTH"] == "16")
+        #expect(variables([:])["SCREEN_DEPTH"] == nil)
+        #expect(variables([:])["SCREEN_DEPTH_EXE"] == nil)
+        // The session's variable is the same one, for explorer.exe's sake.
+        #expect(Wine.screenDepthVariables(8) == ["SCREEN_DEPTH": "8"])
+    }
+
     @Test("--wine.quit-key gives the quit watch its keys in canonical form, as written")
     func theLaunchNamesAQuitKey() {
         func key(_ options: [String: String]) -> String? {

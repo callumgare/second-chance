@@ -111,9 +111,12 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/wrapp-launch.md](docs/wrapp-launch.md) | You are touching what a wrapp does between being opened and the game's window appearing — its loading window's stages and when it says a launch is slow or may have failed, the signs of progress it watches, what starts behind the save warning, or the launch timings and load experiments behind those numbers; or what the wrapp's Dock icon does while the game runs, or its window while it quits; or Wine's desktop (`WineDesktop`) and ending a Wine session, how Wine behaves under load, a launch's diagnostics bundles, or scripting a launch past the save warning |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `Packages/Modules/wine/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
 | [docs/failure-reports.md](docs/failure-reports.md) | You are touching failure or crash reporting — `Packages/SecondChanceKit/Sources/SecondChanceReporting/`, Sentry and its set-up, the report-level setting, what a basic or detailed report contains and how it is redacted, the error screens' report callout, adding a failure that should be reported, or the success reports that count builds and launches |
+| [docs/program-images.md](docs/program-images.md) | You are touching how images are found in a program, its installer, disc or wrapp — `ProgramImages` (`Packages/WrappKit/Sources/ProgramImages/`), `icon-extract` and its JSON lines (`records.jsonl`, the events), its handlers, filter table, ranking, or the sandboxed outside tools it runs — or the readers it added: PE/NE resources, icon groups, `.lnk`, `autorun.inf` and MSI streams in `WindowsFormats`, and `ClassicMacFormats` (resource forks, MacBinary, BinHex, AppleSingle, HFS volumes) |
+| [docs/icon-lab.md](docs/icon-lab.md) | You are touching Icon Lab — Debug ▸ Icon Lab…, `Packages/IconLab` (`IconLabKit`, `IconLabAPI`), its page or dev server in `Tools/icon-lab/` (`sc icon-lab serve`, `build`, `WebBuildTests`), the window's scheme handler and events bridge (`SecondChance/IconLab/`), where its data, keys and models are, or trying a design on a built app and saving designs to a bundle |
 | [docs/plans-for-consideration/](docs/plans-for-consideration/) | You are about to build something a program needs and want to know whether it was already thought through. Designs worked out but deliberately not built yet — never cite one as current behaviour |
 | [docs/historical-plans/](docs/historical-plans/) | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour |
 | [docs/historical-plans/2026-11-11-installed-copies-from-bundles.md](docs/historical-plans/2026-11-11-installed-copies-from-bundles.md) | You want to know why a folder holding a program already installed is turned down by its bundle's `installed` signs rather than by every game's program name, why every bundle states them, why the ScummVM games accept an installed copy, or why discs' layouts are kept in the bundles |
+| [docs/historical-plans/2026-11-08-icon-lab-in-second-chance.md](docs/historical-plans/2026-11-08-icon-lab-in-second-chance.md) | You want to know why Icon Lab is a web page in a window with no server on a port, why its API is free of any web server and has two hosts, why its page is built into the package and checked in, or how its data, keys and Second Chance's programs reach it |
 | [docs/historical-plans/2026-11-07-ingenious-port.md](docs/historical-plans/2026-11-07-ingenious-port.md) | You want to know why classic Mac programs run as they do — Basilisk II and System 7.5.3 fetched on the Mac, the ROM the person gives (a Debug build downloads one), the Mac's startup disk as the person's store, why a build drives the Mac from inside Basilisk II by a key script that waits on text, why a restart is told by the disk, or why the window isn't pictured continually |
 | [docs/historical-plans/2026-11-06-puppet-toolkit.md](docs/historical-plans/2026-11-06-puppet-toolkit.md) | You want to know why `sc puppet` drives a program as it does — rich replies over pictures, Peekaboo for Mac windows and the in-process helper for games — why test sessions (several GUI logins on one Mac, kept drawing by a keep-alive) replaced rationing one screen, how integration runs shard across Macs, or how many game launches a Mac took at once before Wine slowed |
 | [docs/historical-plans/2026-11-05-builders-into-modules.md](docs/historical-plans/2026-11-05-builders-into-modules.md) | You want to know why every source builds through one runner, why stages are trees, why each instruction is its module's executor's and a module someone adds can bring a program, how layers are keyed at every expensive step, why stores replaced volumes and caches, what signals are, or how an update is built from the old app's tree |
@@ -273,6 +276,13 @@ is written against `WrappKit`'s `WrappModuleKit` ([docs/modules.md](docs/modules
 `GameInfoProvider`, with nothing but Foundation. Every app links it, and
 `SecondChanceKit` depends on it, as does `sc` (`Tools/sc`), which a package
 needing swift-log and Sentry would have made fetch both.
+
+`Packages/IconLab/` is Icon Lab, the Debug menu's tool for designing the
+icons bundles ship ([docs/icon-lab.md](docs/icon-lab.md)): its engine
+(`IconLabKit`) and its API (`IconLabAPI`). Only the Second Chance app links
+it, never the builder or WrappTemplate. Its page's source and dev server are
+in `Tools/icon-lab/`, a package of its own so Hummingbird never reaches the
+app.
 
 The rules that keep it working:
 
@@ -683,8 +693,10 @@ direct assignment.
   Code hangs beyond `kill -9` until VS Code quits
   ([docs/failure-reports.md](docs/failure-reports.md#testing-a-crash-from-a-terminal-in-vs-code)).
 - **Second Chance has an Info.plist file; the other targets don't.**
-  `SecondChance/Info.plist` holds only Sparkle's keys, which `INFOPLIST_KEY_`
-  build settings can't express, and Xcode merges it with the generated keys.
+  `SecondChance/Info.plist` holds only the keys `INFOPLIST_KEY_` build
+  settings can't express — Sparkle's, and `SourceCheckout`, the checkout a
+  Debug build came from (`$(SECOND_CHANCE_SOURCE_CHECKOUT)`, set for Debug
+  only; Icon Lab reads it) — and Xcode merges it with the generated keys.
   Other keys still go in build settings. The file is excluded from the
   target's synchronized folder, so it isn't copied in as a resource.
 - **Bundled resources**: the `WrappTemplate.app` template (the launcher alone), `winetricks` (the wine module's package's resource, `WineModule_WineExecutor.bundle`) and AutoIt are bundled. Test

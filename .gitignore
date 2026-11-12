@@ -24,6 +24,10 @@ xcuserdata/
 /Tools/sc/.build
 /Tools/sc/.swiftpm
 /Tools/sc/.run
+# Icon Lab's dev server (Tools/icon-lab/server) build output, and its page's packages
+/Tools/icon-lab/server/.build
+/Tools/icon-lab/server/.swiftpm
+/Tools/icon-lab/web/node_modules
 
 # Local settings: the Sentry DSN and slugs (.env.example)
 /.env

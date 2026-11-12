@@ -209,37 +209,93 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     /// fullscreen whether or not it asks to be.
     public var forcesFullscreen: Bool { options["wine.window"] == "fullscreen" }
 
-    /// `--wine.display-mode=<width>x<height>`: the display mode the wrapp
-    /// sets in the program's Wine session before starting it, which Wine
-    /// emulates (the prefix's `EmulateModeset`) and scales the program's
-    /// windows up from, for a program made for that screen that never sets
-    /// the mode itself (Bioscopia's Director projector). Nil without one, or
-    /// with one that isn't two sizes (planning refuses that).
-    public var displayMode: DisplayMode? { options["wine.display-mode"].flatMap(DisplayMode.init(parsing:)) }
+    /// `--wine.display-mode=<width>x<height>[x<depth>]`: the display mode
+    /// the wrapp sets in the program's Wine session before starting it,
+    /// which Wine emulates (the prefix's `EmulateModeset`) and scales the
+    /// program's windows up from, for a program made for that screen that
+    /// never sets the mode itself (Bioscopia's Director projector). Nil
+    /// without one, or with one that isn't a mode (planning refuses that).
+    public var displayMode: DisplayMode? { Self.displayMode(options) }
 
-    /// A display mode's size, `800x600`.
+    /// `--wine.display-mode` from a step's options, which `RUN` takes too.
+    public static func displayMode(_ options: [String: String]) -> DisplayMode? {
+        options["wine.display-mode"].flatMap(DisplayMode.init(parsing:))
+    }
+
+    /// `--wine.clear=<path>[;<path>…]`: files or folders on Wine's C: the
+    /// wrapp removes before every launch, as paths from C:'s root
+    /// (`/users/crossover/AppData/Local/Temp/wmLaunch.tmp`), for a program
+    /// that leaves a mark of itself that stops its next start (Webmaster's
+    /// `wmLaunch.tmp`). Empty without one; nil for one that names a path
+    /// not on C:, C: itself or one with `..` in it (planning refuses that).
+    public var clearedAtLaunch: [String]? { Self.clearedPaths(options["wine.clear"]) }
+
+    /// `--wine.clear`'s value as paths from C:'s root, or nil if one isn't
+    /// a file or folder on C:.
+    public static func clearedPaths(_ value: String?) -> [String]? {
+        guard let value else { return [] }
+        var paths: [String] = []
+        for part in value.split(separator: ";") {
+            let path = part.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "\\", with: "/")
+            guard path.uppercased().hasPrefix("C:/") else { return nil }
+            let components = path.dropFirst(3).split(separator: "/")
+            guard !components.isEmpty, !components.contains(where: { $0 == ".." || $0 == "." }) else { return nil }
+            paths.append("/" + components.joined(separator: "/"))
+        }
+        return paths.isEmpty ? nil : paths
+    }
+
+    /// `--wine.colors=<count>`: how many colours Wine shows the program's
+    /// screen as having, for a program that won't run on more (Webmaster's
+    /// installer insists on 256): the colour depth, 8 for 256 and 16 for
+    /// 65536 (docs/wine-in-process-helpers.md#screen-depth). Nil without
+    /// one, or with a count it can't show (planning refuses that).
+    public var screenDepth: Int? { Self.screenDepth(options) }
+
+    /// `--wine.colors` from a step's options, which `RUN` takes too.
+    public static func screenDepth(_ options: [String: String]) -> Int? {
+        options["wine.colors"].flatMap { colorDepths[$0] }
+    }
+
+    /// The colour counts `--wine.colors` takes, and the depth each is.
+    public static let colorDepths = ["256": 8, "65536": 16]
+
+    /// A display mode's size, and its colour depth when it names one:
+    /// `800x600`, `800x600x8`.
     public struct DisplayMode: Sendable, Equatable, CustomStringConvertible {
         public var width: Int
         public var height: Int
+        /// Bits a pixel, when it names one; nil keeps the session's.
+        public var depth: Int?
 
         /// The sizes planning accepts: the smallest screen of any Windows
         /// program, up to the largest a display has.
         public static let sizes = 320...8192
 
-        public init(width: Int, height: Int) {
+        /// The depths a mode may name, all of which Wine emulates.
+        public static let depths = [8, 16, 32]
+
+        public init(width: Int, height: Int, depth: Int? = nil) {
             self.width = width
             self.height = height
+            self.depth = depth
         }
 
-        /// `<width>x<height>`, each in `sizes`; nil for anything else.
+        /// `<width>x<height>`, each in `sizes`, then optionally `x<depth>`,
+        /// one of `depths`; nil for anything else.
         public init?(parsing text: String) {
             let parts = text.split(separator: "x", omittingEmptySubsequences: false)
-            guard parts.count == 2, let width = Int(parts[0]), let height = Int(parts[1]),
+            guard parts.count == 2 || parts.count == 3, let width = Int(parts[0]), let height = Int(parts[1]),
                   Self.sizes.contains(width), Self.sizes.contains(height) else { return nil }
-            self.init(width: width, height: height)
+            var depth: Int?
+            if parts.count == 3 {
+                guard let named = Int(parts[2]), Self.depths.contains(named) else { return nil }
+                depth = named
+            }
+            self.init(width: width, height: height, depth: depth)
         }
 
-        public var description: String { "\(width)x\(height)" }
+        public var description: String { depth.map { "\(width)x\(height)x\($0)" } ?? "\(width)x\(height)" }
     }
 
     /// `--wine.quit-key=<keys>`, as written: the keys the app's Quit

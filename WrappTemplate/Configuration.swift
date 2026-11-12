@@ -57,7 +57,8 @@ struct GameConfig {
     /// What every Wine program of the game's session runs with
     /// (`Wine.sessionVariables`): an owned Big Fish game's in-process
     /// helpers (`BigFishRuntime.sessionVariables`), as a Windows service
-    /// starts it. Empty for every other game.
+    /// starts it, and the screen depth a launch's `--wine.colors` asks for.
+    /// Empty for every other game.
     var wineSessionVariables: [String: String] = [:]
 
     /// The wrapp's Wine, running in the prefix the game runs in.
@@ -311,6 +312,12 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
         bigFishTrial: settings.bigFishTrial ?? false
     )
     config.wineSessionVariables = BigFishRuntime.sessionVariables(config)
+    // A launch that says --wine.colors has every Wine program of the session
+    // see a screen of that depth, explorer.exe among them, which registers
+    // the display's modes (docs/wine-in-process-helpers.md#screen-depth).
+    if let depth = config.launch.screenDepth {
+        config.wineSessionVariables.merge(Wine.screenDepthVariables(depth)) { _, new in new }
+    }
     return config
 }
 

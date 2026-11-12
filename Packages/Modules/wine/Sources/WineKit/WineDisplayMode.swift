@@ -2,8 +2,8 @@
 //  WineDisplayMode.swift
 //  WineKit
 //
-//  Setting the display mode a launch says (`--wine.display-mode`) in the
-//  game's Wine session, before the game starts.
+//  Setting the display mode a launch or a build step says
+//  (`--wine.display-mode`) in the program's Wine session, before it starts.
 
 import Foundation
 import Logging
@@ -38,7 +38,7 @@ nonisolated public enum WineDisplayMode {
     @discardableResult
     public static func set(_ mode: RecordedLaunch.DisplayMode, in wine: Wine, logger: Logger) async -> Bool {
         guard let program = Data(base64Encoded: programBase64, options: .ignoreUnknownCharacters) else {
-            logger.error("[Display mode] The program that sets it can't be read; the game starts at the display's own size")
+            logger.error("[Display mode] The program that sets it can't be read; the program starts at the display's own size")
             return false
         }
         let file = FileManager.default.temporaryDirectory
@@ -52,13 +52,14 @@ nonisolated public enum WineDisplayMode {
         }
         do {
             try program.write(to: file)
-            let said = try await wine.output(of: .program(file.path, [String(mode.width), String(mode.height)]),
+            let arguments = [String(mode.width), String(mode.height)] + (mode.depth.map { [String($0)] } ?? [])
+            let said = try await wine.output(of: .program(file.path, arguments),
                                              timeout: timeout, onTimeout: .stopProgram)
             let line = said.split(separator: "\n").last.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
-            logger.notice("[Display mode] Set to \(mode) for the game (\(line))")
+            logger.notice("[Display mode] Set to \(mode) for the program (\(line))")
             return true
         } catch {
-            logger.warning("[Display mode] Couldn't set \(mode), so the game starts at the display's own size: \(error)")
+            logger.warning("[Display mode] Couldn't set \(mode), so the program starts at the display's own size: \(error)")
             return false
         }
     }

@@ -33,7 +33,8 @@ copy does.
 
 ## The feed
 
-`SecondChance/Info.plist` holds Sparkle's settings. The rest of the app's
+`SecondChance/Info.plist` holds Sparkle's settings (and `SourceCheckout`, the
+checkout a Debug build came from, for Icon Lab). The rest of the app's
 Info.plist is generated from `INFOPLIST_KEY_` build settings, which can't carry
 Sparkle's keys. The file is excluded from the target's synchronized folder,
 since it isn't a resource.

@@ -1,0 +1,46 @@
+# Webmaster: a Macromedia Director 7 title on one hybrid Mac/PC disc, played
+# from the disc, which must be in the drive while it runs.
+INPUT disc-1
+# The saved games: files the player names in its save dialog, which starts in
+# Documents (webmaster.dat).
+STORE saves
+CONST disc-dir = "C:/webmaster-cd/disk-1"
+
+# The Windows projector under Wine.
+# Wine 10: on 11.21 it stops after the intro's first frame, Rosetta saying
+# "LDT … not supported".
+FROM --module=wine@10 prefix AS disc
+# Director's QuickTime Xtra (QT3Asset) needs QuickTime 4 or later, and the
+# game won't start without it. Apple's QuickTime 7.6 (winetricks quicktime76)
+# installs, but its QuickTime.qts fails to initialise under Wine (its DllMain
+# returns 0, and the game asks for QuickTime 4), and its installer's msiexec
+# crashes at the end. The disc's own QuickTime 4 works: its setup clicked
+# through by AutoIt, with its defaults.
+COPY --from=${input.disc-1} "QuickTime Installer" C:/quicktime-setup/
+RUN --mount=type=bind,source=quicktime/setup.au3,target=C:/quicktime-setup.au3 \
+    --mount=type=bind,source=module:installer:/autoit,target=C:/autoit \
+    C:/autoit/AutoIt3.exe /ErrorStdOut C:/quicktime-setup.au3 C:/quicktime-setup/QuickTimeInstaller.exe
+REMOVE C:/quicktime-setup
+
+# Played from the disc, in a CD drive (D:). Webmaster.exe would install the
+# game too (its setup movie, Data/setup.dxr, can copy it to the hard disc),
+# but only from a screen its start never reaches: with QuickTime installed it
+# asks for a screen size and then plays from wherever it was started.
+WINE.KEEP-DISCS ${input.disc-1} --into=C:/webmaster-cd
+
+# It draws with GDI (Dirapi.dll imports neither ddraw nor d3d). The projector
+# never sets a display mode: its window covers whatever screen it finds, its
+# 800x600 stage drawn small in the middle. Started in an 640x480 mode, which
+# Wine emulates, its window is the stage, and Wine scales it up to fill the
+# display, which native fullscreen puts in a Space. If a different resolution
+# is used the game will ask if you want to change it to 640x480 or play in the
+# current resolution which doesn't enlarge the game graphics but instead fills
+# in the extra space with black. It insists on a  256-colour screen, which
+# Wine 10's Mac driver never reports unless told
+# (--wine.colors). Started by its C: path, the same folder D: is: a wrapp
+# starts a Wine program only from C:. It leaves wmLaunch.tmp in Temp, naming
+# its window, and quits at once if it finds one naming an open window, which
+# every later Wine session's first is: --wine.clear removes it at each start.
+LAUNCH --mount=type=store,source=saves,target=C:/users/crossover/Documents \
+    --wine.clear=C:/users/crossover/AppData/Local/Temp/wmLaunch.tmp \
+    --wine.graphics=unknown --wine.colors=256 --wine.display-mode=640x480x8 ${const.disc-dir}/Webmaster.exe

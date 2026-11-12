@@ -79,6 +79,14 @@ nonisolated extension GameInfoProvider {
             displayName: "Bioscopia"
         ),
         GameInfo(
+            id: "webmaster",
+            title: "Webmaster",
+            diskCount: 1,
+            internalGameExePath: "/webmaster-cd/disk-1/Webmaster.exe",
+            program: "tivola/webmaster",
+            displayName: "Webmaster"
+        ),
+        GameInfo(
             id: "secrets-can-kill",
             title: "Secrets Can Kill",
             diskCount: 2,

@@ -1,5 +1,6 @@
-// display_mode.exe <width> <height>: sets the display mode for the rest of the
-// Wine session (no CDS_FULLSCREEN, so nothing puts it back when this exits),
+// display_mode.exe <width> <height> [<depth>]: sets the display mode (and its
+// colour depth, when given) for the rest of the Wine session (no
+// CDS_FULLSCREEN, so nothing puts it back when this exits),
 // prints the mode the session then has, and exits 0 if the change was made.
 #include <windows.h>
 
@@ -29,8 +30,8 @@ void start(void) {
     // Skip the program's own name, quoted or not.
     if (*line == L'"') { line++; while (*line && *line != L'"') line++; if (*line) line++; }
     else { while (*line && *line != L' ' && *line != L'\t') line++; }
-    unsigned width = parse(&line), height = parse(&line);
-    if (!width || !height) { say("usage: display_mode <width> <height>\n"); ExitProcess(2); }
+    unsigned width = parse(&line), height = parse(&line), depth = parse(&line);
+    if (!width || !height) { say("usage: display_mode <width> <height> [<depth>]\n"); ExitProcess(2); }
 
     DEVMODEW mode;
     for (unsigned i = 0; i < sizeof(mode); i++) ((char *)&mode)[i] = 0;
@@ -38,6 +39,9 @@ void start(void) {
     mode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
     mode.dmPelsWidth = width;
     mode.dmPelsHeight = height;
+    // A depth keeps the mode's own refresh rate out of it: Wine's emulated
+    // modes are all 60 Hz, and one filled in from a 120 Hz display matches none.
+    if (depth) { mode.dmFields |= DM_BITSPERPEL; mode.dmBitsPerPel = depth; }
     LONG result = ChangeDisplaySettingsExW(NULL, &mode, NULL, 0, NULL);
 
     char text[96], *at = text;
@@ -49,6 +53,10 @@ void start(void) {
     at = number(at, (unsigned)GetSystemMetrics(SM_CXSCREEN));
     *at++ = 'x';
     at = number(at, (unsigned)GetSystemMetrics(SM_CYSCREEN));
+    HDC screen = GetDC(NULL);
+    *at++ = 'x';
+    at = number(at, (unsigned)GetDeviceCaps(screen, BITSPIXEL));
+    ReleaseDC(NULL, screen);
     *at++ = '\n';
     *at = 0;
     say(text);

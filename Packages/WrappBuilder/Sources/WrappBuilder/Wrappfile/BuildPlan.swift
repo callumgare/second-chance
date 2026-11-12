@@ -858,6 +858,9 @@ public nonisolated struct BuildPlanner {
                     }
                     arguments.append(role == .input ? value : try fullForm(value, role: role, scope: scope, modules: stageModules, origin: at))
                 }
+                if module == nil, instruction.keyword == "RUN" {
+                    try checkScreenOptions(options.compactMapValues(\.first), origin: at)
+                }
                 var step = PlannedStep(instruction: instruction.name, module: module, options: options,
                                        arguments: arguments, name: options["name"]?.first, origin: at)
                 step.tables = recorder.tablesRead
@@ -1058,11 +1061,7 @@ public nonisolated struct BuildPlanner {
                 if let window = options["wine.window"], !["fullscreen", "windowed"].contains(window) {
                     throw PlanError(description: "\(origin): --wine.window=\(window): it's fullscreen or windowed, or left out for what the program asks for")
                 }
-                if let mode = options["wine.display-mode"], RecordedLaunch.DisplayMode(parsing: mode) == nil {
-                    let sizes = RecordedLaunch.DisplayMode.sizes
-                    throw PlanError(description: "\(origin): --wine.display-mode=\(mode): it's a width and height, each "
-                                    + "\(sizes.lowerBound) to \(sizes.upperBound): 800x600")
-                }
+                try checkScreenOptions(options, origin: origin)
                 if options["wine.quit-confirm-key"] != nil, options["wine.quit-key"] == nil {
                     throw PlanError(description: "\(origin): --wine.quit-confirm-key is pressed on a second Quit after --wine.quit-key's: name the quit key too")
                 }
@@ -1246,6 +1245,23 @@ public nonisolated struct BuildPlanner {
         }
 
         /// What a launch must say for the module that starts it.
+        /// The screen a `LAUNCH` or a `RUN` asks Wine to show its program:
+        /// `--wine.display-mode` a size, with a depth Wine emulates when it
+        /// names one, and `--wine.colors` a count the screen depth helper can
+        /// show.
+        func checkScreenOptions(_ options: [String: String], origin: String) throws(PlanError) {
+            if let mode = options["wine.display-mode"], RecordedLaunch.DisplayMode(parsing: mode) == nil {
+                let sizes = RecordedLaunch.DisplayMode.sizes
+                let depths = RecordedLaunch.DisplayMode.depths.map(String.init).joined(separator: ", ")
+                throw PlanError(description: "\(origin): --wine.display-mode=\(mode): it's a width and height, each "
+                                + "\(sizes.lowerBound) to \(sizes.upperBound), and optionally a colour depth (\(depths)): 800x600 or 800x600x8")
+            }
+            if let colors = options["wine.colors"], RecordedLaunch.colorDepths[colors] == nil {
+                let counts = RecordedLaunch.colorDepths.sorted { $0.value < $1.value }.map(\.key).joined(separator: " or ")
+                throw PlanError(description: "\(origin): --wine.colors=\(colors): it's how many colours the screen has, \(counts)")
+            }
+        }
+
         func checkLaunch(_ launch: RecordedLaunch, origin: String) throws(PlanError) {
             func checkGraphics(_ what: String) throws(PlanError) {
                 let graphics = launch.options["wine.graphics"]
@@ -1256,6 +1272,15 @@ public nonisolated struct BuildPlanner {
             switch launch.launcher() {
             case .wine?:
                 try checkGraphics("a Wine launch")
+                // The app starts a Wine program from its folder on C: (a
+                // folder another drive letter is can be named through C:).
+                guard launch.program.uppercased().hasPrefix("WINE:C:") else {
+                    throw PlanError(description: "\(origin): a Wine launch starts a program on C:, not \(launch.program.dropFirst(5))")
+                }
+                if launch.clearedAtLaunch == nil {
+                    throw PlanError(description: "\(origin): --wine.clear names files or folders on C:, split by ;, "
+                                    + "with no . or .. in them: C:/users/crossover/AppData/Local/Temp/wmLaunch.tmp")
+                }
             case .steam?, .bigFish?:
                 // Steam, or Big Fish's DRM, starts a Windows game in the app's
                 // Wine, so the launch says what it draws with too, and the

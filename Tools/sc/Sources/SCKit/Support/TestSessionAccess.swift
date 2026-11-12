@@ -56,13 +56,7 @@ enum TestSessionAccess {
     /// closes: ssh runs a command that outlasts Screen Sharing connecting,
     /// then waits only for the connections still forwarded.
     static func openScreenSharing(_ user: String, on mac: String?, tunnelEndsWithWindow: Bool = false) async throws {
-        let script = inGUISession(["/usr/bin/security", "find-generic-password", "-s", SessionPool.keychainService, "-a", user, "-w"])
-        let result = try await asConsoleUser(mac, "bash -s", input: script)
-        let password = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard result.succeeded, !password.isEmpty, !password.contains("\n") else {
-            throw SCError("Couldn't read \(user)'s password from \(mac ?? "this Mac")'s keychain.",
-                          hints: ["sc session add stores it there; someone must be logged in at its console."])
-        }
+        let password = try await password(of: user, on: mac)
         var server = mac ?? "localhost"
         if mac == nil {
             let port = try Network.freePort()
@@ -83,6 +77,33 @@ enum TestSessionAccess {
             + "\(password.addingPercentEncoding(withAllowedCharacters: allowed) ?? password)@\(server)"
         let opened = try await Proc.collect("/usr/bin/osascript", ["-"], input: "open location \"\(address)\"\n")
         guard opened.succeeded else { throw SCError("Couldn't open Screen Sharing: \(opened.error)") }
+    }
+
+    /// A test user's Screen Sharing password, from the keychain of `mac`'s
+    /// (or this Mac's) own user. That keychain is locked over SSH, so it's
+    /// read in the GUI session and comes back through a pipe, never written
+    /// anywhere.
+    static func password(of user: String, on mac: String?) async throws -> String {
+        let script = inGUISession(["/usr/bin/security", "find-generic-password", "-s", SessionPool.keychainService, "-a", user, "-w"])
+        let result = try await asConsoleUser(mac, "bash -s", input: script)
+        let password = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard result.succeeded, !password.isEmpty, !password.contains("\n") else {
+            throw SCError("Couldn't read \(user)'s password from \(mac ?? "this Mac")'s keychain.",
+                          hints: ["sc session add stores it there; someone must be logged in at its console."])
+        }
+        return password
+    }
+
+    /// Waits until a tunnel `ssh` is making listens on `port` here, for up
+    /// to 15 s, or fails once `ssh` has ended (its forward refused).
+    static func untilListening(port: Int, while ssh: Process) async throws {
+        let deadline = Date().addingTimeInterval(15)
+        while Date() < deadline {
+            guard ssh.isRunning else { throw SCError("Couldn't make the SSH tunnel to Screen Sharing (on port \(port)).") }
+            if Network.isListening(port: port) { return }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        throw SCError("The SSH tunnel to Screen Sharing (on port \(port)) didn't open within 15 s.")
     }
 
     /// Tunnels this run opened, ended when it's done.
@@ -173,9 +194,10 @@ extension Remote {
 
     /// Commands that take `--on` but run here and reach the other Mac
     /// themselves: `session setup` opens Screen Sharing on this Mac,
-    /// `session screenshot` brings its picture back here, and `session view`
-    /// opens its Screen Sharing window here.
+    /// `session screenshot` brings its picture back here, `session view`
+    /// opens its Screen Sharing window here, and `session do` reaches its
+    /// Screen Sharing from here.
     static func runsHere(_ arguments: [String]) -> Bool {
-        arguments.first == "session" && ["setup", "screenshot", "view"].contains(arguments.dropFirst().first)
+        arguments.first == "session" && ["setup", "screenshot", "view", "do"].contains(arguments.dropFirst().first)
     }
 }

@@ -81,7 +81,7 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
 | `STORE <name> [--retention=keep\|cache\|session] [--scope=app\|global] [--exclusive[=<lock>]]`, `LOCK <name> [--scope=app\|global]` | Declares a store, data kept outside the app, and a lock stores are used under, before the first `FROM` ([Stores](#stores)). |
 | `CONST <name> = <value>`, `VAR <name> [= <value>]`, `SET <name> = <value>` | A fixed value; a value worked out in the Wrappfile; and a new value for a `VAR`. |
 | `USE <module>[@<constraint>] [AS <name>]` | Adds a module, and what it depends on: its instructions are then `<NAME>.INSTRUCTION`, its functions `DO <name>.<function>`, and its path types, options and mount fields are the stage's ([below](#what-modules-add)). |
-| `RUN [--mount=…]… [--env NAME=<value>]… <program> <args>` | Runs a program inside an engine: its path type says which. Mounts: `store` ([Stores](#stores)), `bind` (a file of the bundle's or a module's) and `fetch` (a download, by its hash). `--env` is the only way a value reaches a program's environment. |
+| `RUN [--mount=…]… [--env NAME=<value>]… <program> <args>` | Runs a program inside an engine: its path type says which. Mounts: `store` ([Stores](#stores)), `bind` (a file of the bundle's or a module's) and `fetch` (a download, by its hash). `--env` is the only way a value reaches a program's environment. A Wine program's takes `--wine.colors` and `--wine.display-mode` ([A build step's screen](#a-build-steps-screen)). |
 | `COPY [--from=<stage or ${input.<name>}>] <src> <dest>` | Copies files: from another stage or an input, or without `--from`, a bundle's or module's file. |
 | `ADD --checksum=sha256:<hash> [--unpack=zip --member=<file> [--extract]] <url> <dest>` | A download, found in the download cache first. |
 | `MOVE`, `REMOVE`, `EDIT <file> --ini=<section>.<key>=<value>… [--keys-must-exist] [--create]` | File changes the builder makes itself. `EDIT` changes each setting in its section, or adds it; with `--keys-must-exist`, each setting must already be in the file, or the step fails naming those that aren't. The file must exist unless the step says `--create`. The older `--must-exist` is refused, with a message saying so; `--from-data` is gone, replaced by `NANCY-DREW.CONFIGURE-INI`. |
@@ -477,7 +477,7 @@ app keeps no Wine.
   DirectDraw game setting a display mode) and stays a window otherwise. Any
   other value is refused when planning. ScummVM and DOSBox games are always
   fullscreen.
-- **`--wine.display-mode=<width>x<height>`** has the app set that display
+- **`--wine.display-mode=<width>x<height>[x<depth>]`** has the app set that display
   mode in the program's Wine session before starting it (`800x600`), for a
   program made for that screen that never sets the mode itself: Wine emulates
   the mode, leaving the Mac's display alone, and scales the program's windows
@@ -486,8 +486,36 @@ app keeps no Wine.
   in the middle; started in 800x600, its window is the stage, scaled up and
   put in a fullscreen Space
   ([wine-in-process-helpers.md](wine-in-process-helpers.md#a-display-mode-the-launch-sets)).
-  Each size is 320 to 8192; anything else is refused when planning. Only a
-  game the wine module starts gets it, not one Steam or Big Fish starts.
+  Each size is 320 to 8192, and a mode may name its colour depth too, 8, 16
+  or 32 (`800x600x8`); anything else is refused when planning. A depth also
+  keeps the display's refresh rate out of the request: Wine's emulated
+  modes are all 60 Hz, so on a 120 Hz display a mode filled in from the
+  display's own matches none. Only a game the wine module starts gets it,
+  not one Steam or Big Fish starts. A `RUN` takes it too, for its program's
+  session ([below](#a-build-steps-screen)).
+- **`--wine.colors=256` or `65536`** shows the program a screen of that
+  many colours, for one that won't run on more: Webmaster's installer
+  checks for 256 and quits on anything else. The wine module's screen
+  depth helper answers the program's `GetDeviceCaps` with that depth (8 or
+  16 bits a pixel), and at 8 bits gives it the system palette a 256-colour
+  screen would have; Wine itself keeps drawing in full colour, so the
+  program's pictures keep their colours
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#screen-depth)).
+  Pair it with `--wine.display-mode=<w>x<h>x8` so the display mode says the
+  same.
+  Any other count is refused when planning. A `RUN` takes it too
+  ([below](#a-build-steps-screen)).
+- **`--wine.clear=<path>[;<path>…]`** has the app remove those files or
+  folders on Wine's C: before every launch, for a program that leaves a
+  mark of itself that stops its next start: Webmaster writes
+  `wmLaunch.tmp` in its Temp folder, naming its window, and quits at once
+  when it finds one naming a window that's open, which a new Wine session's
+  first window always is, so every start after the first failed. Paths are
+  split by `;`; one not on C:, C: itself, or one with `.` or `..` in it is
+  refused when planning.
+- **A Wine launch starts a program on C:**, and planning refuses one on
+  another drive: name a program on a drive `WINE.MOUNT` or
+  `WINE.KEEP-DISCS` made through the folder on C: that drive is.
 - **`--wine.quit-key=<keys>`** makes the app's Quit press those keys in the
   program, written in the [key notation](#key-sequences), for one that
   ignores Wine's quit but quits on a key of its own: Iji's is
@@ -597,6 +625,24 @@ app keeps no Wine.
   which the app reads ([wrapp-launch.md](wrapp-launch.md)). A launch records
   its format, 2 now (`RecordedLaunch.format`), so the app can tell one
   recorded before an option it reads.
+
+### A build step's screen
+
+A `RUN` of a Wine program takes the two screen options a launch does, so an
+installer that checks the screen as its program does sees the same one:
+
+```dockerfile
+RUN --wine.colors=256 --wine.display-mode=800x600x8 D:/Webmaster.exe
+```
+
+- **`--wine.colors`** tells every program of the step's Wine session the
+  screen has that many colours (the screen depth helper, armed through the
+  session's variables).
+- **`--wine.display-mode`** sets the mode once Wine's desktop is up and
+  before the program starts, as a launch's is.
+
+Both are checked when planning as a launch's are, and, being in the step's
+text, in its key: a step that adds one makes what follows it fresh.
 
 ### Key sequences
 

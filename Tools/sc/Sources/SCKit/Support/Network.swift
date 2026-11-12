@@ -22,4 +22,17 @@ enum Network {
         guard bound else { throw SCError("Couldn't find a free port for the tunnel: \(String(cString: strerror(errno))).") }
         return Int(UInt16(bigEndian: address.sin_port))
     }
+    /// Whether something here accepts connections on `port`.
+    static func isListening(port: Int) -> Bool {
+        let socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        guard socket >= 0 else { return false }
+        defer { close(socket) }
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        address.sin_port = UInt16(port).bigEndian
+        return withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(socket, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 }
+        }
+    }
 }

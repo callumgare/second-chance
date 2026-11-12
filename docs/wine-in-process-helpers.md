@@ -10,7 +10,7 @@ wrapp does not have:
 | Native fullscreen | `Packages/Modules/wine/InProcessHelpers/native_fullscreen.m`, with `ddraw_mode_watch.m` | Puts the game window into a real macOS fullscreen Space when the game asks for fullscreen, and takes it out when it asks for a window | `NATIVE_MACOS_FULLSCREEN_EXE`, unless the launch says `--wine.window=windowed` ([below](#when-the-launch-says)) | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Display below the notch | `Packages/Modules/wine/InProcessHelpers/display_below_notch.m` | On a display with a notch, shows Wine only the part below it, so a game in a fullscreen Space gets mouse positions that match its picture | `NATIVE_FULLSCREEN_BELOW_NOTCH=1`, in every Wine process of a wrapp | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Cursor lock | `Packages/Modules/wine/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, when the launch asks for it (`--wine.mouse=grab-early`, [below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
-| Mode scaling | `Packages/Modules/wine/InProcessHelpers/emulated_mode_scaling.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to, and puts a GDI program's picture, which Wine scales itself, where the mouse is | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw and its launch sets no display mode ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
+| Mode scaling | `Packages/Modules/wine/InProcessHelpers/emulated_mode_scaling.m`, with `scaled_picture_window.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to, and puts a GDI program's picture, which Wine scales itself, where the mouse is | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw and its launch sets no display mode ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
 | Quit watch | `Packages/Modules/wine/InProcessHelpers/quit_watch.m` | Tells the wrapp when the game first put a frame on screen and whether anything asked it to quit, so a game that quits before it has started reads as a failure | `QUIT_WATCH_EXE`, for every Wine game ([below](#quit-watch)) | — (it only reports) |
 | Cocoa start wait | `Packages/Modules/wine/InProcessHelpers/cocoa_start_wait.m` | Lets each Wine program's Mac driver wait for its main thread to start Cocoa beyond Wine's 5 s, which a fully loaded Mac runs out, leaving the program with no display driver for good | Nothing: every Wine process ([below](#cocoa-start-wait)) | `SECOND_CHANCE_COCOA_START_WAIT=0` |
 | Hidden windows | `Packages/Modules/wine/InProcessHelpers/hidden_windows.m` | Keeps Big Fish's Game Manager's windows and Dock icon off the screen, but while the person signs in | `HIDDEN_WINDOWS_EXE`, set on the Game Manager; `*` for everything it runs during a build ([below](#hidden-windows)) | — |
@@ -233,6 +233,15 @@ the Water's Edge, from Steam, stopped drawing for good more often than not
 when their frame timer's tick landed between the two, leaving the Space
 black. The window is the size of the screen before and after the move, so
 the game misses nothing.
+
+It also replaces one of `WineContentView`'s, `mouseDown:`, which Wine's view
+passes on up the responder chain to the window's frame view. In a Space
+that frame view (`NSThemeFrame`) starts dragging the window on every click,
+however the window is set up, and the drag sets the Mac's arrow cursor:
+Webmaster's glove, which it sets as the cursor, then showed with the arrow
+beside it after any click (2026-11-12). In a Space the click goes no
+further than Wine's view. Wine has taken it for the game already, before
+views see it.
 
 Every other window keeps Wine's behaviour. The helper checks these methods
 exist before replacing them. If Wine has changed and they don't, it reports
@@ -663,7 +672,7 @@ mode lasts the session: explorer.exe puts back only a fullscreen change, as
 its program exits, and win32u keeps the current mode in the session's
 volatile registry, so the next session starts from the display's own. With
 `EmulateModeset` the Mac's display is never touched. The wrapp's log says
-`[Display mode] Set to 800x600 for the game (result 0, now 800x600)`, or why
+`[Display mode] Set to 800x600 for the program (result 0, now 800x600x32)`, or why
 not, and the game then starts at the display's own size.
 
 The projector then sees an 800x600 screen, makes its window 800x600, and Wine
@@ -706,7 +715,129 @@ crop is to the client view as before. The wrapp's log says
 `[Helpers] Mode scaling: placing the program's scaled picture at 240,0, 1440x1080 (1440x1080 painted), in its 1920x1080 window`,
 once with the client view's size and again with the painted size once the
 mode is known.
+
+A program can also set a mode smaller than the window it keeps. Webmaster
+opens an 800x600 window in an 800x600 mode, and choosing "Full screen (640 x
+480)" on its start screen then sets 640x480 without shrinking the window, so
+win32u paints all 800x600 of it at the new scale, a picture bigger than the
+display, and the client view runs past the window's edge. The helper only
+needs the client view to overlap the window, not lie inside it, and crops
+what's shown to the emulated screen, the mode scaled to fit the display and
+centred, so what lay off the 640x480 screen is left off as it would have been
+on a 640x480 monitor (2026-11-12). The log then says
+`[Helpers] Mode scaling: placing the program's scaled picture at 240,0, 1800x1350 (1800x1350 painted), showing its 1440x1080 at 240,0 on the emulated screen, in its 1920x1080 window`.
+A borderless window whose picture the helper can't place logs why, once for
+each reason (`not placing a borderless window's picture: …`).
 Native fullscreen takes such a window into a Space (`windowShowsScaledPicture`).
+
+#### Out of fullscreen, a window of its own
+
+Such a program has no window of its own: its window is the emulated
+screen, so taken out of its Space by the player (the green button, ⌃⌘F,
+or the button on its Space in Mission Control) it came back as Wine shows it, a borderless window covering the display, above
+everything, not the window with a title bar leaving fullscreen gives in any
+other Mac app. Giving it a title bar and a smaller frame for real would tell
+the program its window had shrunk, and its picture would be cut short.
+
+So `scaled_picture_window.m` shows it smaller while Wine and the program go
+on seeing it cover the screen:
+
+- **The window** gets a title bar with a close button, and a frame of the
+  picture's shape at three quarters of the screen, centred, or where the
+  player last left it. The player can move it and resize it, the picture
+  keeping its shape (`contentAspectRatio`). Wine sets the program's
+  borderless style again whenever the program opens or closes a dialog,
+  which costs the window its title bar's height, so the title bar is put
+  back at the frame the window had, and its aspect ratio, which a change
+  of style forgets, set again: without them the window came out of the
+  program's save dialog shorter, off its shape, and was resized freely or
+  jittered. Wine's live-resize handlers
+  (`-windowWillStartLiveResize:`, `-windowWillResize:toSize:`,
+  `-windowDidEndLiveResize:`, `-preventResizing`), which would ask the
+  program about a window it thinks covers the screen and hold it to that
+  size, are kept out of it. Wine's record
+  of the frame (`-wine_fractionalFrame`) keeps the one it had, and the frame
+  changes AppKit reports (`-postWindowFrameChanged:…`) are kept from it, so
+  the window can be moved without the program hearing of it. A frame Wine
+  sets that isn't the one it has ends this first; a style it sets keeps the
+  title bar. It can't be minimised: Wine would read the smaller frame back
+  as the program's when it came back.
+- **Mission Control's button** takes the window out of its Space without
+  `-toggleFullScreen:`, so native fullscreen sees it go with no cause, as
+  when Wine takes out a window that no longer qualifies or the program
+  quits. A window still visible and showing a scaled picture once it's out
+  is shown smaller all the same. Such a move isn't reported as the
+  player's, so the game's fullscreen setting isn't changed by it.
+- **The picture** is cut from Wine's whole window surface, as in the Space
+  (Wine's `-updateLayer` cuts the surface to the smaller window), and the
+  layer fits it in the window (`kCAGravityResizeAspect`).
+- **The mouse.** Wine works out where a click or move is from the pointer's
+  position on the screen, after checking it's in the window, so the position
+  can't be changed before then. The events it posts for the window
+  (`-[WineEventQueue postEvent:]`) have it moved from the smaller window to
+  where the picture is on the screen Wine sees; which kind an event is comes
+  from the handler posting it (`-handleMouseMove:` and the others), since
+  the number of its type differs between Wine versions. The pointer Wine
+  reads for `GetCursorPos` (`+[NSEvent mouseLocation]` from `winemac.so`) is
+  moved the same way, through [virtual pointer](#virtual-pointer)'s wrapper
+  when that's armed, and a warp of the program's (`-setCursorPosition:`) the
+  other way.
+
+Going back into a Space puts the window back as Wine has it first. Checked
+on Webmaster (2026-11-12, a test session): out of its Space it showed in a
+929x729 window on a 1920x1080 screen, its help mode's tips followed the
+pointer over the toolbar's buttons, a click on "easy" started the game, the
+window could be dragged with clicks still landing, and back into its Space
+the picture was placed as before. Later the same day, through `sc session
+do`: the window resized from its corner, the picture filling it, tips and
+clicks still landing; Mission Control's button brought it out at the
+size it had been left; and it kept its size and shape through the save
+dialog opening and closing. The wrapp's log says
+`[Helpers] Mode scaling: showing the program's 1440x1080 picture in its 929x697 window`,
+and the helper's own lines `out of fullscreen: showing the program's …` and
+`the program's window covers the screen again: going into fullscreen`.
+
+#### Beside the picture in a Space
+
+A window in a Space covers the screen, so where the picture is narrower
+than the screen the pointer never leaves Wine's window: Wine shows the
+game's cursor over the black bars too, and moves the game's cursor there.
+Out of a Space the Mac's arrow comes back as the pointer leaves the window,
+because Wine looks for
+the window under the pointer (`+[NSWindow windowNumberAtPoint:…]` in
+`-handleMouseMove:`) and leaves the pointer to the Mac when it isn't one of
+Wine's. Wine's window can't be made the picture's size instead: in a Space
+AppKit sizes it to the screen. So once the window is in its Space,
+`scaled_picture_window.m` covers the bars with black windows of its own,
+children of Wine's window (`scaledPictureBarsShow`, which mode scaling calls
+each time it places the picture). Over them the pointer is the Mac's, as
+beside a window. They take no clicks and never become key, and they go
+when the window starts to leave its Space, starts to enter one, or is shown
+smaller. The log says
+`in its Space: the bars beside the program's 1440x1080 picture are windows of their own`.
+
+Wine also holds the pointer in such a window: win32u clips the cursor to a
+foreground window covering its monitor, and the Mac driver does that with
+`-[NSWindow setMouseConfinementRect:]` (private) on its window, a rect
+relative to the window that macOS joins with the key window's children's.
+The bars alone left the Mac's pointer held to the picture. So the helper
+follows Wine's calls (`setMouseConfinementRect:` on `WineWindow`, replaced),
+and while Wine holds its window each bar is given its own bounds, and the
+pointer may go over them. The program's own cursor isn't kept at the
+picture's edge: Webmaster's goes on past it, out of sight under the bars,
+while the Mac's arrow shows where the pointer is.
+Shown smaller, the window is given no hold at all: Wine, which still sees
+it cover the screen, goes on clipping, and its rect, kept relative to the
+window, held the Mac's pointer in the smaller window. What Wine last asked
+for is set again when the window covers the screen again. The log says
+`the pointer is free of the program's window` and
+`the pointer is held in the program's window again, as Wine asked`.
+Checked on Webmaster (2026-11-12, a test session, by the cursor AppKit and
+Wine set, as Screen Sharing's pictures leave the pointer out): over a bar
+Wine set the Mac's arrow, and clicks on the picture no longer set it. By
+eye, the same day: the Mac's arrow shows over the bars and the game's glove
+over the picture, alone after a click, and the smaller window lets the
+pointer go.
 
 What the scaling costs was measured on Bioscopia (2026-11-07, a test session
 on an M1 Max): the time from moving the pointer to the game drawing its
@@ -715,11 +846,27 @@ scaled up in a Space (66 ms), and the game used about 6–8% of a core idle
 either way. Its cursor's lag is its own: it draws the cursor as a sprite,
 once a frame, at the movies' tempo of 10 frames a second.
 
+A mode may name its colour depth, `--wine.display-mode=800x600x8`, which
+`display_mode.exe` passes on as `dmBitsPerPel` (its third argument), and
+the line then ends with the depth the screen reports (`now 800x600x8`). Naming
+the depth also keeps the display's own refresh rate out of the request:
+Wine fills in what a program leaves out from the current mode, and every
+mode it emulates is 60 Hz, so on a 120 Hz display a request for 8-bit
+colour alone matches none (`ChangeDisplaySettings … returned -2`). A `RUN`
+takes the option too, set in its session the same way once Wine's desktop
+is up ([wrappfile.md](wrappfile.md#a-build-steps-screen)). Wine 10's Mac
+driver still tells a program the screen is 32-bit after an 8-bit mode is
+set; [screen depth](#screen-depth) is what tells it otherwise.
+
 ### Which games get it
 
 `EmulateModeset` is on for the whole prefix, but the helper arms only in a
 game that may draw with Direct3D (`GameGraphicsAPI.mayUseDirect3D`), or whose
-launch sets a display mode. A game that draws through cnc-ddraw never
+launch sets a display mode. A build step's `RUN` that sets one
+(`--wine.display-mode`) arms it in that step's program too, by its `.exe`'s
+name (`WineExecutor.modeScalingVariables`): Webmaster's installer is its
+game's own projector, and without it its 800x600 screen showed at the left,
+white beside it, and its clicks missed. A game that draws through cnc-ddraw never
 switches the real display, since cnc-ddraw runs windowed. `SECOND_CHANCE_MODE_SCALING=0` (`--debug no-mode-scaling`)
 leaves the helper unarmed but `EmulateModeset` on, so the frame lands in the
 corner again, for comparison.
@@ -752,6 +899,99 @@ same refusal as Wine's desktop starts, before the game's window appears, as
 `Changing (null) display settings returned -2`; a game refused its own mode
 names the display instead (`Changing L"\\.\DISPLAY1" …`), which is how
 [quit watch](#quit-watch)'s check tells the two apart.
+
+## Screen depth
+
+### The problem it solves
+
+Some old programs refuse to run on a screen of more than 256 colours.
+Webmaster's installer, a Director projector, says "Your screen is not set to
+256 colors" and offers to change it; its change fails and it quits. Such a
+program asks `GetDeviceCaps(BITSPIXEL)` of the screen. The prefix's
+`EmulateModeset` lets a session switch to an 8-bit mode, and Wine 10 offers
+one at every size it emulates, but Wine 10's Mac driver answers `BITSPIXEL`
+itself (`macdrv_GetDeviceCaps`, `dlls/winemac.drv/gdi.c`), with the depth
+of the Mac display's own mode, read once: always 32, whatever mode the
+session is in. Upstream stopped overriding it in Wine 10.20 (commit
+`1907a5b039`), so there `BITSPIXEL` follows the emulated mode, but
+Director's projector dies at once under Rosetta on every later Wine the wine
+module has (`rosetta error: LDT … not supported`), so a program like it
+runs on Wine 10.
+
+### What it does
+
+`screen_depth.m` tells the program the screen has fewer colours, and keeps
+Wine itself drawing in full colour. The answer can't change for Wine as a
+whole: win32u asks `BITSPIXEL` of the screen for itself too, and
+`CreateCompatibleBitmap` of an 8-bit screen makes an 8-bit bitmap whose
+colour table is Wine's fixed one (a coarse colour cube,
+`get_default_color_table` in `dlls/win32u/dib.c`), never the program's
+palette. An earlier version of this helper did show Wine's Mac driver an
+8-bit display, and every picture drawn through such a bitmap came out in
+the cube's colours, speckled.
+
+So only the program is told. Its `GetDeviceCaps` reaches `win32u.so` as a
+system call, dispatched through win32u's table of them (`syscalls` in
+`dlls/win32u/syscall.c`, which ntdll keeps a pointer to and reads on every
+call), while win32u's own questions call the function directly. The helper
+finds `NtGdiGetDeviceCaps` (an export of `win32u.so`) in that table, which
+must hold it exactly once, and points the entry at a wrapper that answers
+`BITSPIXEL` for a screen (a `DT_RASDISPLAY` device) with the depth asked
+for whenever the real one is more. Everything else gets Wine's answer, so
+the bitmaps Wine makes for the screen stay 32-bit and the program's 8-bit
+pictures keep their own colours on the way to Wine's 32-bit surfaces. The
+dispatcher calls the table's entries with the Mac's calling convention, not
+Windows': a wrapper declared `ms_abi` reads its arguments from the wrong
+registers and every answer comes back 0.
+
+At 8 bits a program also reads the screen's palette. On a 256-colour
+screen it selects its palette, realizes it, which puts its colours in the
+system palette, and reads that back (`GetSystemPaletteEntries`) to know
+what each of its pixels will show as: Director does, asking for all 256
+entries and then for 8, 9, 246 and 247 (the four standard colours Windows
+lets a program change). Wine's Mac driver has no system palette, answers
+with nothing and realizes 0 colours, and Director dithers its pictures to
+that. So at 8 bits the helper also replaces two more entries:
+`NtUserSelectPalette`, to note the palette the program last selected for
+the foreground (one of more than the default palette's 20 entries), and
+`NtGdiDoPalette`, to answer `GetSystemPaletteEntries` for a screen as
+Windows would once that palette was realized: the 20 colours Windows keeps
+at either end, and the palette's own entries, at their own indices, between
+them. The palette is read again at each question, so a palette the program
+changes or animates is followed. `RealizePalette` itself isn't replaced:
+its call number (`NtUserCallOneParam_RealizePalette`) is Wine's own and
+changes between versions, where the three replaced are fixed system calls.
+
+The display modes aren't changed: `EmulateModeset` already offers 8 and
+16-bit modes at every size (win32u's virtual modes are 8-bit, 16-bit and the
+display's own), so a launch that also sets one (`--wine.display-mode=800x600x8`)
+has `EnumDisplaySettings` agree with `GetDeviceCaps`.
+
+It is armed in every Wine process of the session, which costs the others
+nothing, by `SCREEN_DEPTH` (8 or 16), which `--wine.colors=256` or `65536`
+([wrappfile.md](wrappfile.md#the-launch-volumes-and-app)) sets:
+
+- **for a launch**, as the session's variables (`GameConfig.wineSessionVariables`,
+  `Wine.sessionVariables`), so Wine's desktop has it as well as the game,
+  and among the game's own variables with `SCREEN_DEPTH_EXE`, the game's
+  `.exe`, which says which process reports arming (`Wine.inProcessHelperVariables`);
+- **for a build step's `RUN`**, as its Wine session's variables (the wine
+  module's executor), its desktop's and its program's alike
+  ([wrappfile.md](wrappfile.md#a-build-steps-screen)).
+
+### Checking it
+
+The process that reports logs
+`second-chance-helper[ScreenDepth] notice: armed: the screen has 8-bit colour`,
+which the wrapp logs as `[Helpers] Screen depth armed`; in a build step,
+with no game to name, every process of the session reports. It reports an
+error, and changes nothing, when it can't find each system call it replaces
+in `win32u.so`'s table exactly once (a Wine it wasn't written for), and does
+nothing in a process without `winemac.so` (ScummVM loads the same dylib) or
+on the dylib's arm64 slice, as Wine's unix side is x86_64. A probe that
+asks `GetDeviceCaps(BITSPIXEL)`, draws a colour into
+`CreateCompatibleBitmap(screen)` and reads it back should see the depth asked
+for, a 32-bit bitmap and the same colour.
 
 ## Quit watch
 
@@ -1267,7 +1507,13 @@ real pointer as before. In a Wine process:
   click puppet control posted, which puppet control marks with
   `kPuppetEventTag` in the event's user data — the one field
   `-[NSApplication postEvent:atStart:]` keeps (it renumbers events);
-- every other mouse event is given its pointer as its position: the window
+- so does the real pointer when it moves: only a Screen Sharing viewer can
+  move it here, so an event carrying it anywhere other than where it was
+  last seen is the viewer's — `sc session do`'s clicks — and the pointer
+  follows (before 2026-11-12 these too were given its pointer, and `session
+  do` couldn't click in a game `sc puppet` started);
+- every other mouse event, which carries the real pointer where it was, is
+  given its pointer as its position: the window
   server's, the moves AppKit makes up when the app is activated (as a click
   activates it), which even carry the game's own process id, and cursor
   lock's middle clicks, which aim at the real pointer. Any of them would

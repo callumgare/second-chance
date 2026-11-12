@@ -247,6 +247,49 @@ CGSize wineMainDisplaySize(void);
 /// emulated_mode_scaling.m isn't armed.
 int windowShowsScaledPicture(NSWindow *window);
 
+// ## Such a picture in a window of its own (scaled_picture_window.m)
+//
+// Out of its Space at the player's asking, a window that shows a scaled GDI
+// picture is shown smaller, with a title bar, while Wine and the program go
+// on seeing it cover the screen. Main thread only, but
+// scaledPictureWindowMouseLocation.
+
+/// Show `window`, just taken out of its Space by the player, smaller with a
+/// title bar. 0 if it isn't (it's already so, or Wine isn't as expected).
+int scaledPictureWindowBegin(NSWindow *window);
+
+/// Put `window` back as Wine has it, covering the screen, before it goes
+/// back into a Space.
+void scaledPictureWindowEnd(NSWindow *window);
+
+/// Whether `window` is shown smaller so.
+int windowIsScaledPictureWindow(NSWindow *window);
+
+/// In a Space, cover the screen beside `picture` (screen coordinates) with
+/// windows of the helper's own, so the pointer leaves Wine's window there;
+/// out of one, or while it moves, take them away.
+void scaledPictureBarsShow(NSWindow *window, NSRect picture);
+
+/// Take those windows away.
+void scaledPictureBarsRemove(NSWindow *window);
+
+/// The content view's bounds as Wine and the program see them: the whole
+/// screen's while the window is shown smaller, else its own.
+NSRect scaledPictureWindowTrueBounds(NSWindow *window);
+
+/// Where the picture emulated_mode_scaling.m shows is, on the emulated
+/// screen, in the content view's coordinates as Wine has them.
+void scaledPictureWindowNoteShown(NSWindow *window, NSRect shown);
+
+/// The pointer Wine reads (+[NSEvent mouseLocation], AppKit's coordinates)
+/// moved from the smaller window to where it points on the screen Wine sees;
+/// as it is when no window is shown smaller. Any thread.
+NSPoint scaledPictureWindowMouseLocation(NSPoint location);
+
+/// Whether virtual_pointer.m wraps +[NSEvent mouseLocation] for winemac.so,
+/// passing what it gives through scaledPictureWindowMouseLocation.
+int virtualPointerWrapsMouseLocation(void);
+
 // ## Redirecting what winemac.so imports
 //
 // display_below_notch.m and virtual_pointer.m both wrap winemac.so's

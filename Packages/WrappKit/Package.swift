@@ -38,6 +38,11 @@ let package = Package(
         .library(name: "WrappModules", targets: ["WrappModules"]),
         .library(name: "WrappModuleKit", targets: ["WrappModuleKit"]),
         .library(name: "KeyNotation", targets: ["KeyNotation"]),
+        .library(name: "ClassicMacFormats", targets: ["ClassicMacFormats"]),
+        .library(name: "ProgramImages", targets: ["ProgramImages"]),
+        // Every image in a program, its installer or its disc, as PNGs and
+        // JSON lines (docs/program-images.md).
+        .executable(name: "icon-extract", targets: ["icon-extract"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),
@@ -103,10 +108,34 @@ let package = Package(
             name: "KeyNotation",
             swiftSettings: swiftSettings
         ),
+        // Readers of classic Mac files: resource forks, MacBinary, BinHex,
+        // AppleSingle/Double, HFS volumes and the partition maps they sit in.
+        .target(
+            name: "ClassicMacFormats",
+            swiftSettings: swiftSettings
+        ),
+        // Finding every image in a program, its installer or its disc,
+        // where each came from, and which are likeliest its icon
+        // (docs/program-images.md).
+        .target(
+            name: "ProgramImages",
+            dependencies: [
+                "WindowsFormats", "ClassicMacFormats", "WrappFormat", "WrappLogging", "ProcessKit",
+                .product(name: "Logging", package: "swift-log"),
+            ],
+            resources: [.copy("Resources/filters.json")],
+            swiftSettings: swiftSettings
+        ),
+        .executableTarget(
+            name: "icon-extract",
+            dependencies: ["ProgramImages", .product(name: "Logging", package: "swift-log")],
+            swiftSettings: swiftSettings
+        ),
         .testTarget(
             name: "WrappKitTests",
             dependencies: [
                 "WrappLogging", "ProcessKit", "WindowsFormats", "WrappFormat", "WrappModules", "WrappModuleKit", "KeyNotation",
+                "ClassicMacFormats", "ProgramImages",
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "Logging", package: "swift-log"),
             ],

@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "tivola/webmaster"
+version: 1
+title: "Webmaster"
+display-name: "Webmaster"
+allow-paths: ["quicktime/"]  # QuickTime 4's setup script
+
+volumes:
+  saves:
+    display-name: "saved games"   # Documents, where its save dialog starts
+
+editions:
+  - id: "cd"
+    source: "disc"
+    build:
+      target: "disc"   # the Windows projector under Wine
+      inputs:
+        disc-1: { type: "disc" }
+    detect:
+      matchers:
+        - { file-exists: "Webmaster.exe" }   # the Windows projector, at the disc's root
+        - { volume-name: "WEBMASTER" }
+
+# Not known yet: its installed folder hasn't been looked at, and the disc's
+# root has Webmaster.exe too, so that alone would turn the disc down. Once a
+# file only the installed folder has is found, name it here (with
+# Webmaster.exe, as an all-of), as the build can't install from one.
+installed: []
+
+tests:
+  scenario: "wine/starts-and-quits"
+  window: "fullscreen"   # its 800x600 window, scaled up from the display mode its launch sets, in a Space
+  layouts: # the top level of real discs and installed copies, which its installed signs are checked against
+    - disc: "cd/disc-1" # no installer: the game is played from the disc
+      files: ["Acrobat Installer.exe", "Data/", "QuickTime Installer/", "Webmaster Help.pdf", "Webmaster.exe", "Xtras/", "ZDAT/", "msvcrt.dll problem/"]

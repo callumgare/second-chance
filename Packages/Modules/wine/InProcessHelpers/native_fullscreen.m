@@ -437,6 +437,8 @@ static void reportChange(ToggleCause cause, BOOL fullscreen, const char *how) {
 
 /// This file's own move of `window` into or out of its Space.
 static void helperToggle(NSWindow *window, ToggleCause cause) {
+    // A window shown smaller goes back to how Wine has it before its Space.
+    if (!(window.styleMask & NSWindowStyleMaskFullScreen)) scaledPictureWindowEnd(window);
     ToggleCause was = gToggling;
     gToggling = cause;
     [window toggleFullScreen:nil];
@@ -485,6 +487,9 @@ static void playerAwareToggleFullScreen(NSWindow *self, SEL _cmd, id sender) {
     BOOL entering = !(self.styleMask & NSWindowStyleMaskFullScreen);
     debugLog("the player asks to %s fullscreen: window %ld", entering ? "enter" : "leave", (long)self.windowNumber);
     if (entering) {
+        // Shown smaller, it goes back to how Wine has it first, the frame its
+        // Space starts from and the one it's brought back out at.
+        scaledPictureWindowEnd(self);
         objc_setAssociatedObject(self, &kFrameBeforeKey, [NSValue valueWithRect:self.frame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     gToggling = kTogglePlayer;
@@ -504,6 +509,21 @@ static BOOL validateMenuItemForMaximized(NSWindow *self, SEL _cmd, NSMenuItem *i
     return !disabled && wineMaximized(self);
 }
 
+static IMP gWineContentMouseDown;
+
+/// A click on a window in a Space stops at Wine's view. Wine takes clicks
+/// before they're sent to a view (-[WineApplicationController handleEvent:]),
+/// so its views leave -mouseDown: to NSResponder, which passes it up to the
+/// window's frame; in a Space that starts dragging the window
+/// (-[NSThemeFrame handleMouseDown:]), wherever the click is and though Wine
+/// says the window can't be moved, and the drag sets the Mac's arrow, over
+/// the game's own cursor until the game next changes it (Webmaster's glove,
+/// 2026-11-12).
+static void contentMouseDownNotDragging(NSView *self, SEL _cmd, NSEvent *event) {
+    if (self.window.styleMask & NSWindowStyleMaskFullScreen) return;
+    ((void (*)(id, SEL, NSEvent *))gWineContentMouseDown)(self, _cmd, event);
+}
+
 /// Watch for the player's -toggleFullScreen: on Wine's windows. Main thread.
 static void installToggleWatch(void) {
     static BOOL attempted = NO;
@@ -513,6 +533,10 @@ static void installToggleWatch(void) {
     gWineToggleFullScreen = replaceOwnMethod(wineWindow, @selector(toggleFullScreen:), (IMP)playerAwareToggleFullScreen);
     if (!gWineToggleFullScreen) {
         helperReport("NativeFullscreen", "warning", "WineWindow has no -toggleFullScreen:; the player's fullscreen changes go unreported");
+    }
+    gWineContentMouseDown = replaceOwnMethod(NSClassFromString(@"WineContentView"), @selector(mouseDown:), (IMP)contentMouseDownNotDragging);
+    if (!gWineContentMouseDown) {
+        helperReport("NativeFullscreen", "warning", "Wine has no WineContentView; a click in a Space may show the Mac's arrow");
     }
     if (classDefinesMethod(wineWindow, @selector(validateMenuItem:))) {
         gWineValidateMenuItem = replaceOwnMethod(wineWindow, @selector(validateMenuItem:), (IMP)validateMenuItemForMaximized);
@@ -771,6 +795,22 @@ static void noteTransitionEnded(NSWindow *window, BOOL entered) {
         objc_setAssociatedObject(window, &kPlayerSpaceKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     if (!entered) noteWindowLeftSpace(window, cause);
+    // The player took a program's scaled picture out of its Space: Wine
+    // brings the window back covering the screen (once its own handling of
+    // the move is done, so after this), and it's shown in a window instead.
+    // Mission Control's button on the Space takes it out without
+    // -toggleFullScreen:, so with no cause; so does Wine, taking out a
+    // window that no longer shows such a picture, and the window going as
+    // the program quits, which the checks below turn away.
+    if (!entered && (cause == kTogglePlayer || cause == kToggleNone) && windowFlag(window, &kCoversScreenKey)) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (window.isVisible && !windowFlag(window, &kReenterKey) &&
+                !(window.styleMask & NSWindowStyleMaskFullScreen) && !windowIsMovingSpaces(window) &&
+                windowShowsScaledPicture(window)) {
+                scaledPictureWindowBegin(window);
+            }
+        });
+    }
     if (cause == kTogglePlayer || cause == kToggleGame) {
         reportChange(cause, entered, "");
     } else {
@@ -884,6 +924,7 @@ void watchFullscreenTransitions(void) {
             [center addObserverForName:NSWindowWillEnterFullScreenNotification object:nil queue:nil
                             usingBlock:^(NSNotification *notification) {
                 [gEnteringWindows addObject:notification.object];
+                scaledPictureBarsRemove(notification.object);
                 noteTransitionCause(notification.object);
                 transitionLog("window %ld will enter fullscreen", (long)[notification.object windowNumber]);
             }];
@@ -897,6 +938,7 @@ void watchFullscreenTransitions(void) {
             [center addObserverForName:NSWindowWillExitFullScreenNotification object:nil queue:nil
                             usingBlock:^(NSNotification *notification) {
                 [gExitingWindows addObject:notification.object];
+                scaledPictureBarsRemove(notification.object);
                 noteTransitionCause(notification.object);
             }];
             [center addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:nil

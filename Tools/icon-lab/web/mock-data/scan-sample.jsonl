@@ -1,0 +1,105 @@
+{"depth":0,"display":"LaserTank.app","event":"node","id":1,"kind":"directory","name":"LaserTank.app","size":0}
+{"event":"skip","name":"LaserTank.app › Contents/_CodeSignature/","reason":"code signature"}
+{"event":"skip","name":"LaserTank.app › Contents/MacOS/","reason":"the wrapp's launcher"}
+{"event":"skip","name":"LaserTank.app › Contents/Resources/engines/","reason":"the wrapp's engines"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/dosdevices/","reason":"Wine's drive links"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/Program Files (x86)/Common Files/","reason":"shared components"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/Program Files (x86)/Windows Media Player/","reason":"Wine's own"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/Program Files (x86)/Windows NT/","reason":"Wine's own"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/Program Files (x86)/Internet Explorer/","reason":"Wine's own"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/Program Files/Common Files/","reason":"shared components"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/Program Files/Windows Media Player/","reason":"Wine's own"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/Program Files/Windows NT/","reason":"Wine's own"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/Program Files/Internet Explorer/","reason":"Wine's own"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/users/crossover/AppData/Local/Temp/","reason":"temporary files"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/windows/","reason":"Wine's own Windows"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/wine/","reason":"the wrapp's engine"}
+{"event":"skip","name":"LaserTank.app › Contents/Frameworks/","reason":"the wrapp's frameworks"}
+{"bytesExtracted":0,"event":"progress","images":0,"nodes":1,"queued":24}
+{"depth":1,"display":"LaserTank.app › Contents/Info.plist","event":"node","id":2,"kind":"unknown","name":"Info.plist","parent":1,"size":2360}
+{"depth":1,"display":"LaserTank.app › Contents/PkgInfo","event":"node","id":3,"kind":"unknown","name":"PkgInfo","parent":1,"size":8}
+{"depth":1,"display":"LaserTank.app › Contents/Resources/AppSettings.plist","event":"node","id":4,"kind":"unknown","name":"AppSettings.plist","parent":1,"size":1111}
+{"depth":1,"display":"LaserTank.app › Contents/Resources/Assets.car","event":"node","id":5,"kind":"unknown","name":"Assets.car","parent":1,"size":2006744}
+{"event":"skip","name":"LaserTank.app › Contents/Resources/GenericWrappIcon.icns","node":6,"reason":"Second Chance's own icon"}
+{"event":"skip","name":"LaserTank.app › Contents/Resources/Licence.txt","node":7,"reason":"text"}
+{"event":"skip","name":"LaserTank.app › Contents/Resources/scummvm.ini","node":8,"reason":"settings"}
+{"depth":1,"display":"LaserTank.app › Contents/Resources/WrappLock.json","event":"node","id":9,"kind":"unknown","name":"WrappLock.json","parent":1,"size":1262}
+{"event":"skip","name":"LaserTank.app › Contents/Resources/WrappTemplateIcon.icns","node":10,"reason":"Second Chance's own icon"}
+{"depth":1,"display":"LaserTank.app › Contents/SharedSupport/prefix/.update-timestamp","event":"node","id":11,"kind":"unknown","name":".update-timestamp","parent":1,"size":8}
+{"depth":1,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/Eye_Saver+Grid.ltg","event":"node","id":12,"kind":"unknown","name":"Eye_Saver+Grid.ltg","parent":1,"size":192440}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/Eye_Saver+Grid.ltg › bmp @0x144 › 320×192 24-bit","event":"image","height":192,"new":true,"node":12,"sha256":"ff313346e628d3d11ebb69d998c915c4faf19040392eaffcaccfd8f02cb337e4","width":320}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/Eye_Saver+Grid.ltg › bmp @0x2d17a › 320×192 24-bit","event":"image","height":192,"new":true,"node":12,"sha256":"e51d9bc85fcb4b65005f2ec6fe86fddda41b8b14c1341d27ee969761be0b9433","width":320}
+{"depth":1,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/Lasertank_Comix.ltg","event":"node","id":13,"kind":"unknown","name":"Lasertank_Comix.ltg","parent":1,"size":192440}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/Lasertank_Comix.ltg › bmp @0x144 › 320×192 24-bit","event":"image","height":192,"new":true,"node":13,"sha256":"ecb43738d43d4d811070b9f42c7ec7ae8e7fe967c7dc4834150c21cc9e347257","width":320}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/Lasertank_Comix.ltg › bmp @0x2d17a › 320×192 24-bit","event":"image","height":192,"new":true,"node":13,"sha256":"aa75ffd82361a63c9045fbc22281790339c362868749b19fd25a61649832797f","width":320}
+{"depth":1,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/lasertank.exe","event":"node","id":14,"kind":"pe","name":"lasertank.exe","parent":1,"size":148512}
+{"bitDepth":4,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/lasertank.exe › RT_GROUP_ICON ICON1 › 32×32 4-bit","event":"image","height":32,"new":true,"node":14,"sha256":"33649da740a058b1a24fa4d87f367d5f73bbab7debb5b518f9e4339189e56b64","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/lasertank.exe › lasertank.exe","event":"node","id":43,"kind":"pe","name":"lasertank.exe","parent":14,"size":280096}
+{"bitDepth":4,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/lasertank.exe › lasertank.exe › RT_GROUP_ICON ICON1 › 32×32 4-bit","event":"image","height":32,"new":false,"node":43,"sha256":"33649da740a058b1a24fa4d87f367d5f73bbab7debb5b518f9e4339189e56b64","width":32}
+{"bitDepth":4,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/lasertank.exe › lasertank.exe › RT_GROUP_ICON JEK › 32×32 4-bit","event":"image","height":32,"new":true,"node":43,"sha256":"d02ce350753ff59669e5c3738893798b125b7c75e2542b6923cd232fa4e774b7","width":32}
+{"bitDepth":4,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/lasertank.exe › lasertank.exe › RT_BITMAP CONTROLBM › 180×245 4-bit","event":"image","height":245,"new":true,"node":43,"sha256":"92f3a4297d886b2777f05ef06d7fca643807a5bb43a08505106deda33a1dbeea","width":180}
+{"bitDepth":8,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/lasertank.exe › lasertank.exe › RT_BITMAP GAMEBM › 320×192 8-bit","event":"image","height":192,"new":true,"node":43,"sha256":"39bc5eae9f363600aea62e1663001f825b14a01783bf231d725ac6ac5acb53bc","width":320}
+{"bitDepth":4,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/lasertank.exe › lasertank.exe › RT_BITMAP MASKBM › 320×192 4-bit","event":"image","height":192,"new":true,"node":43,"sha256":"48c8086adc2c3350559b302ff5d512145595cd3b280be862adf4e6ea899bcdcc","width":320}
+{"bitDepth":4,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/lasertank.exe › lasertank.exe › RT_BITMAP OPENING › 384×384 4-bit","event":"image","height":384,"new":true,"node":43,"sha256":"b4c7bca846b3ea61f9aa29268509001d307fc375f7f452babbbc6030df69afca","width":384}
+{"depth":1,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.ghs","event":"node","id":15,"kind":"unknown","name":"LaserTank.ghs","parent":1,"size":20300}
+{"depth":1,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp","event":"node","id":16,"kind":"hlp","name":"LaserTank.hlp","parent":1,"size":38477}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.000.shg","event":"node","id":61,"kind":"shg","name":"out.000.shg","parent":16,"size":1743}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.000.shg › out.000.bmp","event":"node","id":77,"kind":"bmp","name":"out.000.bmp","parent":61,"size":9374}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.000.shg › out.000.bmp › 206×89 24-bit","event":"image","height":89,"new":true,"node":77,"sha256":"368d0d03d4b01f850223b6a231086933c460fb0f1f877f93aa37319131325723","width":206}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.001.shg","event":"node","id":62,"kind":"shg","name":"out.001.shg","parent":16,"size":289}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.001.shg › out.000.bmp","event":"node","id":78,"kind":"bmp","name":"out.000.bmp","parent":62,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.001.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":78,"sha256":"d053c4573bbc9349bd210dff2bd1fac855d45643a5ec9a3888f2396ee5890ab8","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.002.shg","event":"node","id":63,"kind":"shg","name":"out.002.shg","parent":16,"size":393}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.002.shg › out.000.bmp","event":"node","id":79,"kind":"bmp","name":"out.000.bmp","parent":63,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.002.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":79,"sha256":"3b366ad1ce3ed3cfb5b6a589eb23defc6ad0c99a178396e7f4d02b0aa07a6072","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.003.shg","event":"node","id":64,"kind":"shg","name":"out.003.shg","parent":16,"size":382}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.003.shg › out.000.bmp","event":"node","id":80,"kind":"bmp","name":"out.000.bmp","parent":64,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.003.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":80,"sha256":"d294f1ff6bab46a665d952cf8ea42adb4d765445ff106b71bde898c17e985f76","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.004.shg","event":"node","id":65,"kind":"shg","name":"out.004.shg","parent":16,"size":255}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.004.shg › out.000.bmp","event":"node","id":81,"kind":"bmp","name":"out.000.bmp","parent":65,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.004.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":81,"sha256":"7bd725f28745544adb29f13b21fb846aea61a37bf37756b24bce4dc54cf2bcdd","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.005.shg","event":"node","id":66,"kind":"shg","name":"out.005.shg","parent":16,"size":317}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.005.shg › out.000.bmp","event":"node","id":82,"kind":"bmp","name":"out.000.bmp","parent":66,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.005.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":82,"sha256":"543680f1c116f11d08fb82c4cb31a2b5c2666bb90c5c6508d0e1e6b76acc7111","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.006.shg","event":"node","id":67,"kind":"shg","name":"out.006.shg","parent":16,"size":402}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.006.shg › out.000.bmp","event":"node","id":83,"kind":"bmp","name":"out.000.bmp","parent":67,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.006.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":83,"sha256":"76e02c18c5e9c95b1ddeefc464606dcd3706593f249a74655df9a14243a083ad","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.007.shg","event":"node","id":68,"kind":"shg","name":"out.007.shg","parent":16,"size":475}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.007.shg › out.000.bmp","event":"node","id":84,"kind":"bmp","name":"out.000.bmp","parent":68,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.007.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":84,"sha256":"6d62eb555bef3f823f9c108556cbf035a5bbc2aa89385ca78da10786000a62ee","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.008.shg","event":"node","id":69,"kind":"shg","name":"out.008.shg","parent":16,"size":429}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.008.shg › out.000.bmp","event":"node","id":85,"kind":"bmp","name":"out.000.bmp","parent":69,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.008.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":85,"sha256":"02c1dd14b40bebc0b417a98b6a535b8a90d280d417e12105ea66063acdfaae48","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.009.shg","event":"node","id":70,"kind":"shg","name":"out.009.shg","parent":16,"size":397}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.009.shg › out.000.bmp","event":"node","id":86,"kind":"bmp","name":"out.000.bmp","parent":70,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.009.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":86,"sha256":"a523b3adb4e506995cdf4a7dea93e08b555968f13053821e3fee55f8674a24ad","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.010.shg","event":"node","id":71,"kind":"shg","name":"out.010.shg","parent":16,"size":204}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.010.shg › out.000.bmp","event":"node","id":87,"kind":"bmp","name":"out.000.bmp","parent":71,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.010.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":87,"sha256":"3a75f0e8e29bf3c6c302a87a65897bb7900ced744029e61eeb77a9309ff7831e","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.011.shg","event":"node","id":72,"kind":"shg","name":"out.011.shg","parent":16,"size":200}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.011.shg › out.000.bmp","event":"node","id":88,"kind":"bmp","name":"out.000.bmp","parent":72,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.011.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":88,"sha256":"c7f498e4a5275d100f33db6000627f9f3af84b0efc9a722b070cff72baf14869","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.012.shg","event":"node","id":73,"kind":"shg","name":"out.012.shg","parent":16,"size":226}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.012.shg › out.000.bmp","event":"node","id":89,"kind":"bmp","name":"out.000.bmp","parent":73,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.012.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":89,"sha256":"f79ddd22f6c27bc6db5327c1a63e8777eaf28629e59d74d6c49d409741a1898f","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.013.shg","event":"node","id":74,"kind":"shg","name":"out.013.shg","parent":16,"size":217}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.013.shg › out.000.bmp","event":"node","id":90,"kind":"bmp","name":"out.000.bmp","parent":74,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.013.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":90,"sha256":"bb8a6b1b9bbfd41b934bb0a568eae860043143878d914552d2e0f3abce46d18f","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.014.shg","event":"node","id":75,"kind":"shg","name":"out.014.shg","parent":16,"size":320}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.014.shg › out.000.bmp","event":"node","id":91,"kind":"bmp","name":"out.000.bmp","parent":75,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.014.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":91,"sha256":"9a815bc12289b16e91adf94d187adca8bc6ae5d1fc10fba9098f0825d51987f4","width":32}
+{"depth":2,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.015.shg","event":"node","id":76,"kind":"shg","name":"out.015.shg","parent":16,"size":321}
+{"depth":3,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.015.shg › out.000.bmp","event":"node","id":92,"kind":"bmp","name":"out.000.bmp","parent":76,"size":630}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.hlp › out.015.shg › out.000.bmp › 32×32 24-bit","event":"image","height":32,"new":true,"node":92,"sha256":"f54cc1366d3bf3f269aff8aecdf696336f03dfefcb2871ea93c320e1b77a39f3","width":32}
+{"depth":1,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/LaserTank.lvl","event":"node","id":17,"kind":"unknown","name":"LaserTank.lvl","parent":1,"size":1169280}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/Tutor-ReadMe.txt","node":18,"reason":"text"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/Tutor-ReadMe2.txt","node":19,"reason":"text"}
+{"depth":1,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/Tutor.LVL","event":"node","id":20,"kind":"unknown","name":"Tutor.LVL","parent":1,"size":52992}
+{"depth":1,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/Warcraft_II.ltg","event":"node","id":21,"kind":"unknown","name":"Warcraft_II.ltg","parent":1,"size":70584}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/Warcraft_II.ltg › bmp @0x144 › 320×192 24-bit","event":"image","height":192,"new":true,"node":21,"sha256":"0c5c2286ad1b1fdf01ef4489f1d6942c4dd4c1c46e7e1fa441840a307dbd9b76","width":320}
+{"bitDepth":24,"display":"LaserTank.app › Contents/SharedSupport/prefix/drive_c/LaserTank/Warcraft_II.ltg › bmp @0xf57a › 320×192 24-bit","event":"image","height":192,"new":true,"node":21,"sha256":"ea9d4a6a711f7f5c9f5053b8a4ae52f8ba367b0d1f39c599e15240a6ca63f433","width":320}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/system.reg","node":22,"reason":"text"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/user.reg","node":23,"reason":"text"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/userdef.reg","node":24,"reason":"text"}
+{"event":"skip","name":"LaserTank.app › Contents/SharedSupport/prefix/winetricks.log","node":25,"reason":"text"}
+{"event":"done","families":28,"images":28,"nodes":58,"records":"records.jsonl","seconds":1,"skipped":26}

@@ -40,4 +40,15 @@ struct VolumesIntoStoresTests {
         #expect(try String(contentsOf: former.appendingPathComponent("game.sav"), encoding: .utf8) == "save")
         #expect(try !layout.moveVolumesIntoStores())
     }
+    @Test("--wine.clear reads as paths from C:'s root, and anything not a file or folder on C: as nil")
+    func clearedPaths() {
+        #expect(RecordedLaunch.clearedPaths(nil) == [])
+        #expect(RecordedLaunch.clearedPaths("C:/users/crossover/AppData/Local/Temp/wmLaunch.tmp")
+                == ["/users/crossover/AppData/Local/Temp/wmLaunch.tmp"])
+        #expect(RecordedLaunch.clearedPaths(#"c:\Temp\a.tmp; C:/Temp/b/"#) == ["/Temp/a.tmp", "/Temp/b"])
+        #expect(RecordedLaunch.clearedPaths("D:/x") == nil)
+        #expect(RecordedLaunch.clearedPaths("C:/") == nil)
+        #expect(RecordedLaunch.clearedPaths("C:/Temp/../windows") == nil)
+        #expect(RecordedLaunch.clearedPaths("") == nil)
+    }
 }

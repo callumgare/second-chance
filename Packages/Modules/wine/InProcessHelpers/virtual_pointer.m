@@ -62,6 +62,10 @@ static WarpFunction gWarp;
 static os_unfair_lock gLock = OS_UNFAIR_LOCK_INIT;
 static CGPoint gPointer;
 static BOOL gHasPointer;
+// Where the real pointer was last seen. Nothing in this login can move it
+// but a Screen Sharing viewer (sc session do), so an event carrying it
+// anywhere else is the viewer's move, which the pointer here follows.
+static CGPoint gLastReal;
 // Decided once, on the first read: whether the pointer here can be moved.
 static BOOL gStuck;
 
@@ -97,6 +101,9 @@ static void decideOnce(void) {
         gStuck = !pointerMoves();
         if (gStuck) {
             CGPoint at = realPointer();
+            os_unfair_lock_lock(&gLock);
+            gLastReal = at;
+            os_unfair_lock_unlock(&gLock);
             helperReport("PuppetControl", "notice",
                          "the pointer can't be moved in this login (it stays at %.0f,%.0f); showing the game one that can",
                          at.x, at.y);
@@ -125,12 +132,14 @@ static BOOL isMouseEvent(CGEventType type) {
 }
 
 /// Where Wine is told an event happened. The pointer follows the moves and
-/// clicks puppet control posts, and only those, told by their mark
-/// (kPuppetEventTag, in the event's user data). Everything else here carries the stuck pointer: the
-/// window server's events, the moves AppKit makes up itself when the app is
-/// activated (which a click does) -- those even carry this process's id --
-/// and cursor_lock.m's middle clicks, aimed at the real pointer. Each would
-/// drag the game's cursor back to the corner, so they are given the pointer.
+/// clicks puppet control posts, told by their mark (kPuppetEventTag, in the
+/// event's user data), and the real pointer when it moves, which only a
+/// Screen Sharing viewer can make it do (sc session do's clicks). Everything
+/// else here carries the stuck pointer where it was: the window server's
+/// events, the moves AppKit makes up itself when the app is activated (which
+/// a click does) -- those even carry this process's id -- and cursor_lock.m's
+/// middle clicks, aimed at the real pointer. Each would drag the game's
+/// cursor back to the corner, so they are given the pointer.
 static CGPoint virtualEventGetLocation(CGEventRef event) {
     CGPoint location = gGetLocation(event);
     decideOnce();
@@ -142,7 +151,13 @@ static CGPoint virtualEventGetLocation(CGEventRef event) {
         return location;
     }
     os_unfair_lock_lock(&gLock);
-    if (gHasPointer) location = gPointer;
+    if (location.x != gLastReal.x || location.y != gLastReal.y) {
+        gLastReal = location;
+        gPointer = location;
+        gHasPointer = YES;
+    } else if (gHasPointer) {
+        location = gPointer;
+    }
     os_unfair_lock_unlock(&gLock);
     return location;
 }
@@ -188,17 +203,26 @@ void virtualPointerNotePuppetMove(CGPoint point) {
 // AppKit's coordinates, from the bottom of the main display, which Wine turns
 // over with the display's height as it sees it. objc_msgSend tail-calls this,
 // so the return address is in its caller.
+// What it gives is then moved to where the pointer is on the screen Wine
+// sees, if a program's picture is shown in a smaller window
+// (scaled_picture_window.m), which can't wrap this itself: called from here,
+// its own check of its caller would never find winemac.so.
 static NSPoint virtualMouseLocation(id self, SEL _cmd) {
     NSPoint location = ((NSPoint (*)(id, SEL))gMouseLocation)(self, _cmd);
     if (!calledFromTarget(__builtin_return_address(0))) return location;
     decideOnce();
-    if (!gStuck) return location;
-    os_unfair_lock_lock(&gLock);
-    BOOL has = gHasPointer;
-    CGPoint pointer = gPointer;
-    os_unfair_lock_unlock(&gLock);
-    if (!has) return location;
-    return NSMakePoint(pointer.x, wineMainDisplaySize().height - pointer.y);
+    if (gStuck) {
+        os_unfair_lock_lock(&gLock);
+        BOOL has = gHasPointer;
+        CGPoint pointer = gPointer;
+        os_unfair_lock_unlock(&gLock);
+        if (has) location = NSMakePoint(pointer.x, wineMainDisplaySize().height - pointer.y);
+    }
+    return scaledPictureWindowMouseLocation(location);
+}
+
+int virtualPointerWrapsMouseLocation(void) {
+    return gArmed && gMouseLocation != NULL;
 }
 
 /// Point every import of `symbol` ("_CGWarpMouseCursorPosition") the main

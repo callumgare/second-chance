@@ -107,8 +107,10 @@ shell quoting. The wine module's package's `WineKitTests`
 wrapp's settings; the nancy-drew module's `NancyDrewExecutorTests`: its
 `.ini` settings ([modules.md](modules.md#executors)). `SecondChanceKitTests`:
 the VDF reader, the quit check, the in-process helpers' variables and loading
-stages. They run with `swift test --package-path Packages/<package>`, which
-needs no Xcode build, in well under a second; `sc test unit` runs them as a
+stages. Icon Lab's `IconLabKitTests` (`Packages/IconLab/Tests/`): its catalogue
+parsers, documents, imaging and API routes; its live model tests run only with
+`ICONLAB_MODELS_LIVE=1`. They run with
+`swift test --package-path Packages/<package>`, which needs no Xcode build, in well under a second; `sc test unit` runs them as a
 step of its own, and CI with it.
 
 `Packages/WrappBuilder/Tests/` are the same kind: every program bundle checked

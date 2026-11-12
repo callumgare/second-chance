@@ -18,6 +18,8 @@ IFS=$'\n\t'
 # cursor_lock.m (cnc-ddraw's cursor lock), emulated_mode_scaling.m (scales a
 # Direct3D game's picture up when Wine emulates the display mode it asked for,
 # and puts a GDI program's picture Wine scaled where the mouse is),
+# scaled_picture_window.m (shows such a picture in a smaller window with a
+# title bar once the player takes it out of fullscreen),
 # quit_watch.m (tells the wrapp when the game first drew and whether it was
 # asked to quit, so an exit before then reads as a failure),
 # cocoa_start_wait.m (lets every Wine process's driver wait for Cocoa to
@@ -29,7 +31,8 @@ IFS=$'\n\t'
 # wrappers, so it is linked after it) and audio_levels.m (measures the game's
 # sound for puppet control's `audio`), basilisk_mac.m (Basilisk II's first
 # picture, shutting its Mac down when the wrapp quits, and hiding the Mac's own
-# screens from the player), with key_names.m, the keys puppet control and
+# screens from the player), screen_depth.m (shows Wine a display of fewer
+# colours, for a program that won't run on more), with key_names.m, the keys puppet control and
 # the quit watch press by name, and helper_common.m, the code they share. ScummVM wrapps load the same dylib into scummvm, for
 # puppet_control.m alone. ScreenCaptureKit is weak-linked: puppet_control.m
 # needs macOS 14.4 and checks for it.
@@ -50,6 +53,7 @@ clang -dynamiclib \
     "${HELPERS_DIR}/display_below_notch.m" \
     "${HELPERS_DIR}/cursor_lock.m" \
     "${HELPERS_DIR}/emulated_mode_scaling.m" \
+    "${HELPERS_DIR}/scaled_picture_window.m" \
     "${HELPERS_DIR}/puppet_control.m" \
     "${HELPERS_DIR}/quit_watch.m" \
     "${HELPERS_DIR}/cocoa_start_wait.m" \
@@ -58,8 +62,10 @@ clang -dynamiclib \
     "${HELPERS_DIR}/key_names.m" \
     "${HELPERS_DIR}/audio_levels.m" \
     "${HELPERS_DIR}/basilisk_mac.m" \
+    "${HELPERS_DIR}/screen_depth.m" \
     -framework Cocoa \
     -framework OpenGL \
+    -framework QuartzCore \
     -framework ImageIO \
     -framework AudioToolbox \
     -weak_framework ScreenCaptureKit \

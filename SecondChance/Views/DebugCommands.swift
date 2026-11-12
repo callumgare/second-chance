@@ -12,6 +12,7 @@ import SecondChanceKit
 import SecondChanceReporting
 
 struct DebugCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject var settings = DebugSettings.shared
     @ObservedObject var logWindow = LogWindow.shared
 
@@ -54,6 +55,11 @@ struct DebugCommands: Commands {
                 }
             }
             .disabled(LogStore.shared.diskMirrorPath == nil)
+
+            Divider()
+
+            // Designing the icons the program bundles ship (Packages/IconLab).
+            Button("Icon Lab…") { openWindow(id: IconLabWindow.id) }
 
             Divider()
 

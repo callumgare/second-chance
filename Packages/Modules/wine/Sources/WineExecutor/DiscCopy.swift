@@ -68,8 +68,15 @@ public nonisolated enum DiscCopy {
     /// still succeeding, and a disc image's read now and then fails: Sea of
     /// Darkness's installer then stopped at the missing file (error 2) as
     /// though the disc were broken. A file that fails again fails the copy.
+    /// The `._` files a hybrid Mac and PC disc's associated files show as
+    /// when its ISO 9660 side is mounted by hand (`ISOMounter`), which the
+    /// copy leaves out, are let go too.
     private static func copyAgain(_ failures: [(source: String, destination: String, errno: Int32)]) throws {
         for failure in failures {
+            if isUnreadableAssociatedFile(failure.source, errno: failure.errno) {
+                logger.notice("Leaving out \(failure.source): a Mac file's associated file, which can't be read and Windows never sees")
+                continue
+            }
             logger.warning("Copying \(failure.source) failed (\(String(cString: strerror(failure.errno)))): copying it again")
             var lastErrno = failure.errno
             var copied = false
@@ -92,6 +99,15 @@ public nonisolated enum DiscCopy {
                 ])
             }
         }
+    }
+
+    /// Whether a file the copy couldn't read is a Mac file's associated
+    /// file on a hybrid disc. Each Mac file there has a second ISO 9660
+    /// entry holding its Finder info and resource fork, which macOS's
+    /// cd9660 driver lists as `._<name>` beside it but fails to read
+    /// (`EINVAL`). Windows never sees one, so the copy is whole without it.
+    static func isUnreadableAssociatedFile(_ path: String, errno: Int32) -> Bool {
+        errno == EINVAL && (path as NSString).lastPathComponent.hasPrefix("._")
     }
 
     /// A path's mode, owner, flags and whether it has an ACL, for the log:

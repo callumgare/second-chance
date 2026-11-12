@@ -1,0 +1,163 @@
+/* ---------- A: workbench */
+.wb { display: flex; flex-direction: column; height: 100%; overflow: hidden }
+.wb > .wb-top { flex: 1 1 auto; overflow: hidden; transition: padding .25s ease }
+.wb > .wb-top.folded { padding-top: 0; padding-bottom: 0 }
+@media (prefers-reduced-motion: reduce) { .wb > .wb-top { transition: none } }
+.wb-dock { position: relative; flex: none; display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; border-top: 1px solid var(--line); background: var(--panel); transition: height .25s ease }
+@media (prefers-reduced-motion: reduce) { .wb-dock { transition: none } }
+.sbar { display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-bottom: 1px solid var(--line); min-width: 0; font-size: 12px }
+.sbar .muted { font-size: 11.5px }
+.sbar-toggle .chev { display: inline-block; transition: transform .25s ease; line-height: 1; font-size: 13px; transform: translateY(2px) }
+.sbar-toggle .chev.down { transform: rotate(180deg) translateY(1px) }
+.wb-top { display: grid; grid-template-columns: minmax(380px, 1fr) 260px 268px; gap: 10px; padding: 10px; min-height: 0 }
+.wb-bottom { display: grid; grid-template-columns: minmax(0, 1fr) 560px; min-height: 0; background: var(--panel) }
+@media (max-width: 1360px) { .wb-top { grid-template-columns: minmax(340px, 1fr) 236px 250px } .wb-bottom { grid-template-columns: minmax(0, 1fr) 470px } }
+.loading-cover { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--win) 70%, transparent); z-index: 10; gap: 8px; grid-auto-flow: column; align-content: center; justify-content: center; color: var(--muted) }
+
+/* media drawer */
+.drawer { display: grid; grid-template-rows: auto minmax(0, 1fr) }
+.drawer .thumbs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; padding: 8px; align-content: start }
+.drawer .thumbs button { aspect-ratio: 1; border: 1px solid var(--line); border-radius: 6px; padding: 3px; display: grid; place-items: center; overflow: hidden; cursor: grab; position: relative }
+.drawer .thumbs button:hover { border-color: var(--accent) }
+.drawer .thumbs img { max-width: 100%; max-height: 100%; object-fit: contain }
+.drawer .thumbs .k { position: absolute; left: 2px; right: 2px; bottom: 2px; font-size: 9.5px; background: rgba(0,0,0,.55); color: #fff; border-radius: 3px; padding: 0 3px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity .15s }
+.drawer .thumbs button:hover .k { opacity: 1 }
+.drawer .hint { font-size: 10.5px; padding: 0 8px 8px; margin: 0 }
+
+/* canvas */
+.canvasarea { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; min-height: 0; min-width: 0 }
+.bar2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap }
+.stage { border-radius: 10px; position: relative; min-height: 0; overflow: hidden; border: 1px solid var(--line) }
+.stage > div:first-child { position: absolute; inset: 0 }
+.stage .empty { position: absolute; inset: 0; display: grid; place-items: center }
+.sizes { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 10px; align-items: flex-end; background: rgba(0,0,0,.28); padding: 6px 9px 4px; border-radius: 9px; color: rgba(255,255,255,.8); font-size: 9.5px; backdrop-filter: blur(8px) }
+.render-note { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; align-items: center; background: rgba(0,0,0,.45); color: #fff; padding: 4px 9px; border-radius: 7px; font-size: 11.5px; backdrop-filter: blur(8px) }
+.render-note.bad { background: var(--bad) }
+
+/* pins */
+.pinsbar { display: flex; gap: 8px; align-items: center; min-width: 0; height: 84px }
+.pins { display: flex; gap: 6px; align-items: center; overflow-x: auto; padding: 2px; flex: 1; min-width: 0; height: 100% }
+.pins .tile { width: 84px; flex: none }
+.pins .tile.cur { outline: 2px solid var(--accent); outline-offset: -2px }
+.pins .star { color: var(--pin) }
+.pins .unpin { position: absolute; top: 1px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line-strong); font-size: 9px; display: grid; place-items: center; opacity: 0; color: var(--muted) }
+.pins .tile:hover .unpin { opacity: 1 }
+
+/* layers */
+.layers { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto auto; overflow: hidden }
+.layers .scroll { padding: 4px 0 8px }
+.lr { display: grid; grid-template-columns: 22px 30px minmax(0, 1fr) 22px; gap: 6px; align-items: center; padding: 3px 6px; font-size: 12px; border-radius: 6px; margin: 0 4px; min-height: 38px; touch-action: none; user-select: none }
+.lr:hover { background: var(--sunk) }
+.lr.on, .lr.on:hover { background: var(--accent); color: var(--accent-fg) }
+.lr.on .icon-btn, .lr.on .faint { color: var(--accent-fg) }
+.lr.on .tag { background: rgba(255,255,255,.18); border-color: transparent; color: var(--accent-fg) }
+.lr.hidden .lname, .lr.hidden .mini { opacity: .45 }
+.lr.g { grid-template-columns: 22px minmax(0, 1fr) auto 22px 22px; font-weight: 650; margin-top: 6px; min-height: 28px; font-size: 11.5px }
+.lr.g .gbadge { font-weight: 400; font-size: 10.5px }
+.lr.in { padding-left: 14px }
+.lr input.text { width: 100%; height: 20px }
+.lr .lname { display: grid; min-width: 0; gap: 1px }
+.lr .badges { display: flex; gap: 3px }
+.lr .badges:empty { display: none }
+.lr.fill { margin-top: 8px; border-top: 1px dashed var(--line); border-radius: 0 0 6px 6px; padding-top: 6px }
+.lr .mini { width: 30px; height: 30px; border-radius: 5px; border: 1px solid var(--line); display: grid; place-items: center; overflow: hidden; flex: none }
+.lr.empty-group { min-height: 24px; font-size: 11px; grid-template-columns: minmax(0, 1fr); padding-left: 50px }
+.lgroup.over { background: var(--accent-soft); border-radius: 6px }
+.drag-overlay { background: var(--panel); box-shadow: var(--shadow); border: 1px solid var(--accent); cursor: grabbing }
+
+/* inspector */
+.inspector { overflow: auto }
+.insp { padding: 10px 12px 16px; display: grid; gap: 4px; align-content: start }
+.insp a { color: var(--accent); text-decoration: none }
+.insp a:hover { text-decoration: underline }
+.insp select.text { max-width: 100% }
+.insp .note { font-size: 11px; line-height: 1.45; margin: 4px 0 }
+.fx { border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px 6px; display: grid; gap: 2px; background: var(--sunk) }
+.fx-h { display: flex; align-items: center; gap: 2px; font-size: 11.5px; min-height: 22px }
+.media-pick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px }
+.media-pick button { aspect-ratio: 1; border: 1px solid var(--line); border-radius: 5px; padding: 2px; display: grid; place-items: center; overflow: hidden }
+.media-pick button.on { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent) }
+.media-pick img { max-width: 100%; max-height: 100%; object-fit: contain }
+.facts { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 4px 8px; font-size: 11.5px; margin: 0 }
+.facts dt { color: var(--muted) } .facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere }
+
+/* suggestions */
+.sugg { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; min-width: 0 }
+.sugg .strip { padding-top: 8px !important; display: grid; grid-auto-flow: column; grid-auto-columns: 108px; gap: 4px; overflow-x: auto; padding: 0 12px 8px; align-items: start }
+.tweak { border-left: 1px solid var(--line); padding: 8px 12px }
+.adjust .lbl2 { font-size: 11px; color: var(--muted); margin: 4px 0 3px }
+.adjust-cols { display: grid; grid-template-columns: 1.15fr minmax(0, 1fr) minmax(0, 1fr); gap: 0 14px }
+.adjust-cols .span-all { grid-column: 1 / -1 }
+.adjust-cols .sws .swatch { width: 18px; height: 18px }
+.adjust-cols .kv { grid-template-columns: 54px minmax(0, 1fr) 40px }
+
+/* B: gallery */
+.gal { display: grid; grid-template-columns: minmax(0, 1fr) 290px; height: 100% }
+.gal .side { grid-column: 2; grid-row: 1; border-left: 1px solid var(--line); background: var(--panel); padding: 10px 12px }
+.gal .body { grid-column: 1; grid-row: 1; display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0 }
+.tray { display: flex; gap: 10px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel) }
+.galgrid { padding: 12px 16px }
+.galgrid .gg { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 18px }
+.groupt { font-size: 12px; font-weight: 650; margin: 4px 0 8px; display: flex; gap: 8px; align-items: center }
+.groupt small { font-weight: 400; color: var(--muted) }
+.groupt .uses { display: flex; gap: 3px }
+.groupt .uses img { width: 24px; height: 24px; object-fit: contain; border-radius: 4px; background: var(--sunk); border: 1px solid var(--line) }
+.warnbox { margin: 8px 0 2px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); font-size: 12px; line-height: 1.4 }
+.ba { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 4px }
+.ba figure { margin: 0; display: grid; gap: 4px; font-size: 11px; color: var(--muted) }
+.ba .crop { display: block; aspect-ratio: 1; border-radius: 6px; border: 1px solid var(--line); background-size: 260%; background-position: center; background-repeat: no-repeat }
+.render-wait { position: absolute; inset: 0; background: rgba(20,24,32,.18); pointer-events: none }
+
+/* Add section (bottom of the Layers panel) */
+.addsec { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0 }
+.addtabs { display: flex; gap: 2px; align-items: center; padding: 0 6px 4px; flex-wrap: wrap }
+.addtabs .addh { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); font-weight: 600; margin-right: 4px }
+.addtabs button { border: 0; background: transparent; border-radius: 6px; padding: 2px 7px; font-size: 11.5px; color: var(--muted) }
+.addtabs button:hover { background: var(--sunk) }
+.addtabs button.on { background: var(--accent-soft); color: var(--fg); font-weight: 600 }
+.addbody { padding: 2px 6px 8px }
+.addgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px }
+.addtile { aspect-ratio: 1; border: 1px solid var(--line); border-radius: 6px; padding: 3px; display: grid; place-items: center; overflow: hidden; cursor: grab; position: relative; min-width: 0 }
+.addtile:hover { border-color: var(--accent) }
+.addtile img, .addtile canvas { max-width: 100%; max-height: 100%; object-fit: contain }
+.addtile canvas { width: 100%; height: 100% }
+.addtile .k { position: absolute; left: 2px; right: 2px; bottom: 2px; font-size: 9.5px; background: rgba(0,0,0,.55); color: #fff; border-radius: 3px; padding: 0 3px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity .15s }
+.addtile:hover .k, .addtile:focus-visible .k { opacity: 1 }
+.addfilter { margin: 0 0 6px; gap: 4px }
+.addfilter input { flex: 1; min-width: 0 }
+.addgroup { margin-bottom: 8px }
+.addgh { font-size: 11px; font-weight: 600; margin: 4px 0 3px }
+.adjust .xy { flex-wrap: wrap; gap: 6px }
+.addctl { gap: 6px; margin: 0 0 6px; flex-wrap: wrap }
+.addctl select { flex: 1; min-width: 0 }
+.addctl .seg button { padding: 2px 9px }
+.addsearch { width: 100%; margin: 0 0 6px }
+.wb-dock.resizing, .wb-dock.resizing ~ * { transition: none }
+.sugg .strip { grid-auto-flow: row !important; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); grid-auto-columns: auto !important; overflow-x: hidden !important; overflow-y: auto; align-content: start }
+/* The Add section gives way when the panel is short, so the layers list always keeps some room. */
+.layers.panel { display: flex; flex-direction: column }
+.layers > .ph, .layers > .resize-handle { flex: none }
+.layers > .ltree { flex: 1 1 0; min-height: 70px; position: relative; display: grid }
+.ltree > .scroll { min-height: 0; padding-bottom: 44px }
+.add-group { position: absolute; right: 10px; bottom: 10px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); border-radius: 999px; padding: 4px 12px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.14); z-index: 2 }
+.add-group:hover:not(:disabled) { background: var(--sunk) }
+.add-group:disabled { opacity: .5; box-shadow: none }
+.addwrap { display: grid; flex: 0 1 auto; min-height: 110px }
+.dock-handle { position: absolute; left: 0; right: 0; top: -1px; z-index: 3; background: var(--panel) }
+.wb-dock { padding-top: 9px }
+/* inspector sub-pages */
+.subpage { display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100%; min-height: 0 }
+.subpage-h { padding: 6px 6px 0; border-bottom: 0 }
+.subpage-title { font-weight: 650; font-size: 12.5px; padding: 4px 12px 8px; border-bottom: 1px solid var(--line) }
+.subpage-body { padding: 8px 10px 14px }
+.inspector:has(.subpage) { display: grid; overflow: hidden }
+.addtile.chosen { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) }
+.curpart { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px }
+.curpart .th { width: 44px; height: 44px; border-radius: 6px; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--line) }
+.curpart .th img { max-width: 100%; max-height: 100%; object-fit: contain }
+.padrow { display: grid; gap: 4px; font-size: 11.5px; color: var(--muted); padding: 3px 0 }
+.zoomctl { display: inline-flex; align-items: center; gap: 3px }
+.zoomctl input[type=range] { width: 90px }
+.zoomctl .zoom-pct { font-size: 11px; color: var(--muted); min-width: 36px; text-align: right; font-variant-numeric: tabular-nums }
+.lr.in.ingroup:not(.on) { background: color-mix(in srgb, var(--accent) 12%, transparent) }
+.layers .lr { user-select: none }

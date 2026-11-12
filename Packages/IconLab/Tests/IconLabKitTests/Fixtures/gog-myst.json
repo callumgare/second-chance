@@ -1,0 +1,626 @@
+{
+ "products": [
+  {
+   "id": "1216902049",
+   "slug": "myst",
+   "features": [
+    {
+     "name": "Achievements",
+     "slug": "achievements"
+    },
+    {
+     "name": "Cloud saves",
+     "slug": "cloud_saves"
+    },
+    {
+     "name": "Controller support",
+     "slug": "controller_support"
+    },
+    {
+     "name": "Single-player",
+     "slug": "single"
+    }
+   ],
+   "screenshots": [
+    "https://images.gog-statics.com/2bd7b8df217908126c9c38f0ca92f8bf530b21d8bf0a3c6601392efaba898544_{formatter}.jpg",
+    "https://images.gog-statics.com/7399cbec433183213b0af07f5560cf92a6a008b0981876f18e2399577148aabb_{formatter}.jpg",
+    "https://images.gog-statics.com/4a1af17c79017794d17614f0b11706956cd1bb5c55ff83244d224fb27522201d_{formatter}.jpg",
+    "https://images.gog-statics.com/126c18243991d6da570d381e7c3fbc521e10ef904e1e928c63aade8ba35db3e1_{formatter}.jpg",
+    "https://images.gog-statics.com/7ee7f31670d572794d7263154f8a99de1c14c014adcebc29ed8d35ec97b67ab9_{formatter}.jpg"
+   ],
+   "userPreferredLanguage": {
+    "code": "en",
+    "inAudio": true,
+    "inText": true
+   },
+   "releaseDate": "2021.08.26",
+   "storeReleaseDate": "2021.08.26",
+   "productType": "pack",
+   "title": "Myst",
+   "coverHorizontal": "https://images.gog-statics.com/6eabdc67b804bf700e65c653bda0a7df934386741660845f7dd61c08a6f7bd3b.png",
+   "coverVertical": "https://images.gog-statics.com/7f34a911097646572c4ffef1ec326139459b15978c70051db2d6a25d4f801339.jpg",
+   "logo": "https://images.gog-statics.com/dded0c6de1a0cd5d6a8b9db3aeca86c9ed0d0045dad8952bdc31e4326d0e7b0c.png",
+   "galaxyBackgroundImage": "https://images.gog-statics.com/4dd7677c420f7551e53830e85b7a7701e446e8cdb088487c1943f12c2db73c53.jpg",
+   "developers": [
+    "Cyan Worlds"
+   ],
+   "publishers": [
+    "Cyan Worlds"
+   ],
+   "operatingSystems": [
+    "windows",
+    "osx"
+   ],
+   "price": {
+    "final": "$20.99",
+    "base": "$34.99",
+    "discount": "-40%",
+    "finalMoney": {
+     "amount": "20.99",
+     "currency": "USD",
+     "discount": "14.00"
+    },
+    "baseMoney": {
+     "amount": "34.99",
+     "currency": "USD"
+    }
+   },
+   "productState": "default",
+   "genres": [
+    {
+     "name": "FPP",
+     "slug": "fpp"
+    },
+    {
+     "name": "Adventure",
+     "slug": "adventure"
+    },
+    {
+     "name": "Puzzle",
+     "slug": "puzzle"
+    }
+   ],
+   "tags": [
+    {
+     "name": "Adventure",
+     "slug": "adventure"
+    },
+    {
+     "name": "Indie",
+     "slug": "indie"
+    },
+    {
+     "name": "Story Rich",
+     "slug": "story-rich"
+    },
+    {
+     "name": "Atmospheric",
+     "slug": "atmospheric"
+    },
+    {
+     "name": "Exploration",
+     "slug": "exploration"
+    },
+    {
+     "name": "Puzzle",
+     "slug": "puzzle"
+    },
+    {
+     "name": "Casual",
+     "slug": "casual"
+    },
+    {
+     "name": "First-Person",
+     "slug": "first-person"
+    },
+    {
+     "name": "Choices Matter",
+     "slug": "choices-matter"
+    },
+    {
+     "name": "Mystery",
+     "slug": "mystery"
+    },
+    {
+     "name": "Point&Click",
+     "slug": "point-and-click"
+    },
+    {
+     "name": "Multiple Endings",
+     "slug": "multiple-endings"
+    },
+    {
+     "name": "Logic",
+     "slug": "logic"
+    },
+    {
+     "name": "Realistic",
+     "slug": "realistic"
+    },
+    {
+     "name": "VR",
+     "slug": "vr"
+    }
+   ],
+   "reviewsRating": 39,
+   "reviewsCount": 136,
+   "editions": [],
+   "ratings": [
+    {
+     "name": "esrbRating",
+     "ageRating": "6"
+    }
+   ],
+   "storeLink": "https://www.gog.com/en/game/myst"
+  },
+  {
+   "id": "1956555724",
+   "slug": "myst_4",
+   "features": [
+    {
+     "name": "Cloud saves",
+     "slug": "cloud_saves"
+    },
+    {
+     "name": "Single-player",
+     "slug": "single"
+    }
+   ],
+   "screenshots": [
+    "https://images.gog-statics.com/8a1337f4e753ecddcce7e43103c1a081e477e11b273cfb593a42864ee2dc60e2_{formatter}.jpg",
+    "https://images.gog-statics.com/c9356945722c5ceafd976b94686ea2f5c43e494a835a1996217ceafef83ae7a6_{formatter}.jpg",
+    "https://images.gog-statics.com/cdb3ad234f85cae3d22e6fbafcd0a670510541357d8bb2de9ce1f067ab26267d_{formatter}.jpg",
+    "https://images.gog-statics.com/ce16b0ab587c831223e74e1254c073db6db5890b6bff1d91c31cf40779156259_{formatter}.jpg",
+    "https://images.gog-statics.com/2ed056b2048f6aa7abbc92fc214733788ca4ec8f8bdb129850b53196de851ca0_{formatter}.jpg",
+    "https://images.gog-statics.com/0b0d02d883b17571583145762c17c93985dab6d6517a224b0972a9f6ab42128e_{formatter}.jpg",
+    "https://images.gog-statics.com/815354035b4aa44875fee2e69ff49408ad7485f2d28344fc3a62fac12c325d49_{formatter}.jpg",
+    "https://images.gog-statics.com/05dbfffcca36c56a0f384d85e407ff777c0698ca78278dbecaacaca96f395441_{formatter}.jpg",
+    "https://images.gog-statics.com/c79683e81a31b04d5f4674e011d3980472769e4fae4773483e4e54219847a8d2_{formatter}.jpg",
+    "https://images.gog-statics.com/23d55d11502b8e568bb164328afd4d66a8b99ed36001d7c6d166919df960c9a5_{formatter}.jpg",
+    "https://images.gog-statics.com/2803b96f2f85483a57dbc81afdd6b641cb8df98ef6fdacbf0a950088505b2ee4_{formatter}.jpg",
+    "https://images.gog-statics.com/871e0edd3e357b9849f68d36172d99494337595c2038845b12a3627e05f6ddb7_{formatter}.jpg"
+   ],
+   "userPreferredLanguage": {
+    "code": "en",
+    "inAudio": true,
+    "inText": true
+   },
+   "releaseDate": "2004.09.10",
+   "storeReleaseDate": "2018.06.29",
+   "productType": "game",
+   "title": "Myst IV: Revelation",
+   "coverHorizontal": "https://images.gog-statics.com/e6212679c21b27b54acf1b649c8b160c9d70740f7219aae755e4e40dddd9aa8b.png",
+   "coverVertical": "https://images.gog-statics.com/c897b0aae3fe2a24daff6ab2a8a2e8fa3b5782fa57143287dec634151518226c.jpg",
+   "logo": "https://images.gog-statics.com/a121ae124cef258550612d4282d11762e85cab1005f1e928af6549c71d6cc74b.png",
+   "galaxyBackgroundImage": "https://images.gog-statics.com/af45b29aa879f74c57c1699ea2b965644b3db041b1cf097c0d157e40d5c94a63.jpg",
+   "developers": [
+    "Ubisoft Montreal"
+   ],
+   "publishers": [
+    "Cyan Worlds"
+   ],
+   "operatingSystems": [
+    "windows",
+    "osx"
+   ],
+   "price": {
+    "final": "$5.99",
+    "base": "$14.99",
+    "discount": "-60%",
+    "finalMoney": {
+     "amount": "5.99",
+     "currency": "USD",
+     "discount": "9.00"
+    },
+    "baseMoney": {
+     "amount": "14.99",
+     "currency": "USD"
+    }
+   },
+   "productState": "default",
+   "genres": [
+    {
+     "name": "FPP",
+     "slug": "fpp"
+    },
+    {
+     "name": "Adventure",
+     "slug": "adventure"
+    },
+    {
+     "name": "Puzzle",
+     "slug": "puzzle"
+    }
+   ],
+   "tags": [
+    {
+     "name": "Adventure",
+     "slug": "adventure"
+    },
+    {
+     "name": "Indie",
+     "slug": "indie"
+    },
+    {
+     "name": "Story Rich",
+     "slug": "story-rich"
+    },
+    {
+     "name": "Atmospheric",
+     "slug": "atmospheric"
+    },
+    {
+     "name": "Exploration",
+     "slug": "exploration"
+    },
+    {
+     "name": "Puzzle",
+     "slug": "puzzle"
+    },
+    {
+     "name": "Classic",
+     "slug": "classic"
+    },
+    {
+     "name": "Casual",
+     "slug": "casual"
+    },
+    {
+     "name": "First-Person",
+     "slug": "first-person"
+    },
+    {
+     "name": "Mystery",
+     "slug": "mystery"
+    },
+    {
+     "name": "Point&Click",
+     "slug": "point-and-click"
+    },
+    {
+     "name": "Logic",
+     "slug": "logic"
+    }
+   ],
+   "reviewsRating": 39,
+   "reviewsCount": 160,
+   "editions": [],
+   "ratings": [
+    {
+     "name": "pegiRating",
+     "ageRating": "7"
+    },
+    {
+     "name": "brRating",
+     "ageRating": "16"
+    }
+   ],
+   "storeLink": "https://www.gog.com/en/game/myst_4"
+  },
+  {
+   "id": "1766899243",
+   "slug": "myst_3_exile",
+   "features": [
+    {
+     "name": "Cloud saves",
+     "slug": "cloud_saves"
+    },
+    {
+     "name": "Controller support",
+     "slug": "controller_support"
+    },
+    {
+     "name": "Single-player",
+     "slug": "single"
+    }
+   ],
+   "screenshots": [
+    "https://images.gog-statics.com/a9a71c83dd8221c934dcf4ab569575943edfa51c84c8feb1e5bb2e5437b34702_{formatter}.jpg",
+    "https://images.gog-statics.com/945ddf6d0b4f329f82f052db7dde35d9426ac139067d8dd38bd9c631da9bcd36_{formatter}.jpg",
+    "https://images.gog-statics.com/528e23f22188cd65ae2b7b811678e04d207a5b284cfc63397ba0b8f1eea2b8de_{formatter}.jpg",
+    "https://images.gog-statics.com/917846366db0e4b0fab1748b172a44934fad8c53e0953ef6eb0437949b23306a_{formatter}.jpg",
+    "https://images.gog-statics.com/7fcf725a58fc92ee31ecec02f0a8aebcefed6eae6c39badd4a1f95212725d9b9_{formatter}.jpg",
+    "https://images.gog-statics.com/928810d956b35dabde7306b83596e8657cb3e3ed60d05496ab1d754fef6c5313_{formatter}.jpg",
+    "https://images.gog-statics.com/2807a834406e45c54970ee173593566305402e88b8b65af5cc7ad2a12688e1d3_{formatter}.jpg",
+    "https://images.gog-statics.com/5c7ed53f46c04bf51cc875ffa62e2cb5139c84a1a358423ea4b925c978608dbc_{formatter}.jpg",
+    "https://images.gog-statics.com/0de747cd17c8e60b1c07410c8cacda14dc46a2db9135db27c2d08a12cf357bd7_{formatter}.jpg",
+    "https://images.gog-statics.com/5901fb9511f817744a5cb1e8bf312c42d41438f138ef2065b52975bf6391ed06_{formatter}.jpg",
+    "https://images.gog-statics.com/828ef3e87643bef542e3699bdc7abdef3e8fc8d89aad0e7bf3b2374bebc22e93_{formatter}.jpg",
+    "https://images.gog-statics.com/f71607565a32eb4153e5515899b9e44caf5b1d46c1d4be54a2beddc7512a3cc6_{formatter}.jpg"
+   ],
+   "userPreferredLanguage": {
+    "code": "en",
+    "inAudio": true,
+    "inText": true
+   },
+   "releaseDate": "2001.05.08",
+   "storeReleaseDate": "2018.06.29",
+   "productType": "game",
+   "title": "Myst III: Exile",
+   "coverHorizontal": "https://images.gog-statics.com/6c424621b7fc2b7e7dd1a761b7a0273d77f4606a963bb50beee8a5c021534988.png",
+   "coverVertical": "https://images.gog-statics.com/e48ecea002ed779a14ae39244e0360efadef63d43de6768f2a6f2d0ac3f876ae.jpg",
+   "logo": "https://images.gog-statics.com/9e63e9b4411ea22f5524d8944e50cb28fd249b02dda2766310b113d83ae5b404.png",
+   "galaxyBackgroundImage": "https://images.gog-statics.com/259fb9f258291fe6bd7cd0e0d65113997e37dd47279cca70a363f89340ff08c1.jpg",
+   "developers": [
+    "Presto Studios"
+   ],
+   "publishers": [
+    "Cyan Worlds"
+   ],
+   "operatingSystems": [
+    "windows",
+    "osx"
+   ],
+   "price": {
+    "final": "$5.99",
+    "base": "$14.99",
+    "discount": "-60%",
+    "finalMoney": {
+     "amount": "5.99",
+     "currency": "USD",
+     "discount": "9.00"
+    },
+    "baseMoney": {
+     "amount": "14.99",
+     "currency": "USD"
+    }
+   },
+   "productState": "default",
+   "genres": [
+    {
+     "name": "FPP",
+     "slug": "fpp"
+    },
+    {
+     "name": "Adventure",
+     "slug": "adventure"
+    },
+    {
+     "name": "Puzzle",
+     "slug": "puzzle"
+    }
+   ],
+   "tags": [
+    {
+     "name": "Adventure",
+     "slug": "adventure"
+    },
+    {
+     "name": "Indie",
+     "slug": "indie"
+    },
+    {
+     "name": "Story Rich",
+     "slug": "story-rich"
+    },
+    {
+     "name": "Atmospheric",
+     "slug": "atmospheric"
+    },
+    {
+     "name": "Exploration",
+     "slug": "exploration"
+    },
+    {
+     "name": "Puzzle",
+     "slug": "puzzle"
+    },
+    {
+     "name": "Classic",
+     "slug": "classic"
+    },
+    {
+     "name": "Casual",
+     "slug": "casual"
+    },
+    {
+     "name": "First-Person",
+     "slug": "first-person"
+    },
+    {
+     "name": "Mystery",
+     "slug": "mystery"
+    },
+    {
+     "name": "Point&Click",
+     "slug": "point-and-click"
+    },
+    {
+     "name": "Logic",
+     "slug": "logic"
+    },
+    {
+     "name": "FMV",
+     "slug": "fmv"
+    }
+   ],
+   "reviewsRating": 45,
+   "reviewsCount": 199,
+   "editions": [],
+   "ratings": [
+    {
+     "name": "pegiRating",
+     "ageRating": "3"
+    },
+    {
+     "name": "brRating",
+     "ageRating": "16"
+    }
+   ],
+   "storeLink": "https://www.gog.com/en/game/myst_3_exile"
+  },
+  {
+   "id": "1207658818",
+   "slug": "myst_masterpiece_edition",
+   "features": [
+    {
+     "name": "Cloud saves",
+     "slug": "cloud_saves"
+    },
+    {
+     "name": "Controller support",
+     "slug": "controller_support"
+    },
+    {
+     "name": "Single-player",
+     "slug": "single"
+    }
+   ],
+   "screenshots": [
+    "https://images.gog-statics.com/addb1e06325be5d486c892349edac686e8f77b845826c4f8debf1fb6703fa9f1_{formatter}.jpg",
+    "https://images.gog-statics.com/3da79f110514e0f05df3f557d824001a85af1980177d7ae3dcaa7405029ba48f_{formatter}.jpg",
+    "https://images.gog-statics.com/7f24fe764ce0397d1a58fcecdcee2e0bae6dbe242a7d0c60d185e65c29e9bced_{formatter}.jpg",
+    "https://images.gog-statics.com/b1844958bb8b1f03000bc41ee0fd13a4227f312d3b4b4d37f10925930b62840f_{formatter}.jpg",
+    "https://images.gog-statics.com/371b43c06526759850a235608accca3f8720654dd6d33210e60bcf577beba871_{formatter}.jpg",
+    "https://images.gog-statics.com/95e4ca181ef2069af39613eb7c2c7ea0c7d463df29ea1a69f25490e7325f0297_{formatter}.jpg",
+    "https://images.gog-statics.com/42a769662612694f026714ad9d03041d71498f4a83b9d37407769c9e90b96d72_{formatter}.jpg",
+    "https://images.gog-statics.com/76b709c49187cc8ccd3fc90be172713e7823c76e9fedb41213f64de0112db638_{formatter}.jpg",
+    "https://images.gog-statics.com/da1c222d35893264ad9a5620252decc3c1dd9895e442acfd3b7e2b0be2684b36_{formatter}.jpg",
+    "https://images.gog-statics.com/5b78c254f7f96c035b93f807cbf81488c738e7df44be690adce1ca9f1e7c3b8e_{formatter}.jpg",
+    "https://images.gog-statics.com/86cdcf71e80083a686b9c942e7ccb428b91743d6bfab2215f6433c25f3e69bf9_{formatter}.jpg",
+    "https://images.gog-statics.com/0e9f1e3dc34eb67da8ed72b0958e49d0c8ae5c70612d36837b9f50b14712e192_{formatter}.jpg",
+    "https://images.gog-statics.com/28f7240a4b6e566406093e08dec73609625f8fb047e00c03665b6448860b67d5_{formatter}.jpg"
+   ],
+   "userPreferredLanguage": {
+    "code": "en",
+    "inAudio": true,
+    "inText": true
+   },
+   "releaseDate": "1999.01.02",
+   "storeReleaseDate": "2009.12.03",
+   "productType": "game",
+   "title": "Myst: Masterpiece Edition",
+   "coverHorizontal": "https://images.gog-statics.com/3c91ced5b0480b6c037da4fa1bd72d3fdbabc7db6c4fbac02720414db8602126.png",
+   "coverVertical": "https://images.gog-statics.com/053c9d233f037c0f17b6f658f62e6aa66be32a679da42a757a34b93789fa3255.jpg",
+   "logo": "https://images.gog-statics.com/9a45d50e491992e1a7b08f2f7b54ba0eb5d535620aeac1200ef9e2202a6ac33a.png",
+   "galaxyBackgroundImage": "https://images.gog-statics.com/a06f8b601a45cee12b90c9a4b6d0bd307b0ad4c851cc17a65643472dbb1a2898.jpg",
+   "developers": [
+    "Cyan Worlds"
+   ],
+   "publishers": [
+    "Cyan Worlds"
+   ],
+   "operatingSystems": [
+    "windows",
+    "osx"
+   ],
+   "price": {
+    "final": "$5.99",
+    "base": "$5.99",
+    "discount": null,
+    "finalMoney": {
+     "amount": "5.99",
+     "currency": "USD",
+     "discount": "0.00"
+    },
+    "baseMoney": {
+     "amount": "5.99",
+     "currency": "USD"
+    }
+   },
+   "productState": "default",
+   "genres": [
+    {
+     "name": "FPP",
+     "slug": "fpp"
+    },
+    {
+     "name": "Adventure",
+     "slug": "adventure"
+    },
+    {
+     "name": "Puzzle",
+     "slug": "puzzle"
+    }
+   ],
+   "tags": [
+    {
+     "name": "Adventure",
+     "slug": "adventure"
+    },
+    {
+     "name": "Indie",
+     "slug": "indie"
+    },
+    {
+     "name": "Story Rich",
+     "slug": "story-rich"
+    },
+    {
+     "name": "Atmospheric",
+     "slug": "atmospheric"
+    },
+    {
+     "name": "Exploration",
+     "slug": "exploration"
+    },
+    {
+     "name": "Puzzle",
+     "slug": "puzzle"
+    },
+    {
+     "name": "Classic",
+     "slug": "classic"
+    },
+    {
+     "name": "Casual",
+     "slug": "casual"
+    },
+    {
+     "name": "First-Person",
+     "slug": "first-person"
+    },
+    {
+     "name": "Mystery",
+     "slug": "mystery"
+    },
+    {
+     "name": "Point&Click",
+     "slug": "point-and-click"
+    },
+    {
+     "name": "Logic",
+     "slug": "logic"
+    },
+    {
+     "name": "Surreal",
+     "slug": "surreal"
+    },
+    {
+     "name": "Walking Simulator",
+     "slug": "walking-simulator"
+    },
+    {
+     "name": "Good Old Game",
+     "slug": "good-old-game"
+    },
+    {
+     "name": "Steampunk",
+     "slug": "steampunk"
+    },
+    {
+     "name": "FMV",
+     "slug": "fmv"
+    }
+   ],
+   "reviewsRating": 43,
+   "reviewsCount": 2006,
+   "editions": [],
+   "ratings": [
+    {
+     "name": "pegiRating",
+     "ageRating": "3"
+    },
+    {
+     "name": "uskRating",
+     "ageRating": "0"
+    },
+    {
+     "name": "brRating",
+     "ageRating": "12"
+    }
+   ],
+   "storeLink": "https://www.gog.com/en/game/myst_masterpiece_edition"
+  }
+ ]
+}

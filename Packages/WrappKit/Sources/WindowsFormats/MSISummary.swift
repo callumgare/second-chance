@@ -33,7 +33,7 @@ nonisolated public struct MSISummary: Sendable {
 /// An OLE compound file: a little FAT file system of fixed-size sectors.
 /// Streams under the mini stream cutoff live in the mini stream, in 64-byte
 /// sectors with a FAT of their own.
-private nonisolated struct CompoundFile {
+nonisolated struct CompoundFile {
     private let bytes: Data
     private let sectorSize: Int
     private let miniSectorSize: Int
@@ -103,10 +103,33 @@ private nonisolated struct CompoundFile {
     /// The contents of the stream called `name`, wherever it lives.
     func stream(named name: String) -> Data? {
         guard let entry = entries.first(where: { $0.type == 2 && $0.name == name }) else { return nil }
+        return stream(entry, mini: entry.size < miniStreamCutoff ? miniStream() : nil)
+    }
+
+    /// The names of every stream, in directory order.
+    var streamNames: [String] { entries.filter { $0.type == 2 }.map(\.name) }
+
+    /// Every stream with its contents, the mini stream read once for all
+    /// of them. Up to `limit` of them.
+    func allStreams(limit: Int = 10_000) -> [(name: String, data: Data)] {
+        let mini = miniStream()
+        return entries.filter { $0.type == 2 }.prefix(limit).compactMap { entry in
+            stream(entry, mini: entry.size < miniStreamCutoff ? mini : nil).map { (entry.name, $0) }
+        }
+    }
+
+    private func stream(_ entry: Entry, mini: (stream: Data, fat: [Int])?) -> Data? {
         guard entry.size < miniStreamCutoff else {
             return Self.read(chain: Self.chain(from: entry.start, in: fat), sectorSize: sectorSize, from: bytes)?
                 .prefix(entry.size)
         }
+        guard let mini else { return nil }
+        return Self.read(chain: Self.chain(from: entry.start, in: mini.fat),
+                         sectorSize: miniSectorSize, from: mini.stream, afterHeader: false)?.prefix(entry.size)
+    }
+
+    /// The mini stream (the root's own stream) and its FAT.
+    private func miniStream() -> (stream: Data, fat: [Int])? {
         guard let root = entries.first, root.type == 5,
               let miniStream = Self.read(chain: Self.chain(from: root.start, in: fat),
                                          sectorSize: sectorSize, from: bytes)?.prefix(root.size),
@@ -114,8 +137,7 @@ private nonisolated struct CompoundFile {
               let miniFATBytes = Self.read(chain: Self.chain(from: firstMiniFATSector, in: fat),
                                            sectorSize: sectorSize, from: bytes) else { return nil }
         let miniFAT = (0..<miniFATBytes.count / 4).map { miniFATBytes.u32(at: $0 * 4) ?? 0xFFFF_FFFF }
-        return Self.read(chain: Self.chain(from: entry.start, in: miniFAT),
-                         sectorSize: miniSectorSize, from: miniStream, afterHeader: false)?.prefix(entry.size)
+        return (Data(miniStream), miniFAT)
     }
 
     /// The sectors of a chain, in order. A chain that loops, or runs off the

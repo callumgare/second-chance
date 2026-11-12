@@ -1,0 +1,141 @@
+{
+ "batchcomplete": true,
+ "continue": {
+  "gsroffset": 10,
+  "continue": "gsroffset||"
+ },
+ "query": {
+  "pages": [
+   {
+    "pageid": 219731,
+    "ns": 0,
+    "title": "Myst",
+    "index": 1,
+    "pageprops": {
+     "wikibase_item": "Q6497116"
+    },
+    "description": "1993 video game",
+    "descriptionsource": "local"
+   },
+   {
+    "pageid": 334532,
+    "ns": 0,
+    "title": "Riven",
+    "index": 3,
+    "pageprops": {
+     "wikibase_item": "Q2265002"
+    },
+    "description": "1997 video game",
+    "descriptionsource": "local"
+   },
+   {
+    "pageid": 383712,
+    "ns": 0,
+    "title": "Uru: Ages Beyond Myst",
+    "index": 5,
+    "pageprops": {
+     "wikibase_item": "Q667073"
+    },
+    "description": "2003 video game",
+    "descriptionsource": "local"
+   },
+   {
+    "pageid": 383893,
+    "ns": 0,
+    "title": "Cyan Worlds",
+    "index": 6,
+    "pageprops": {
+     "wikibase_item": "Q1146905"
+    },
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f5/CyanIncLogo.svg/250px-CyanIncLogo.svg.png?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+     "width": 240,
+     "height": 240
+    },
+    "original": {
+     "source": "https://upload.wikimedia.org/wikipedia/commons/f/f5/CyanIncLogo.svg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=original",
+     "width": 332,
+     "height": 332
+    },
+    "description": "American video game developer",
+    "descriptionsource": "local"
+   },
+   {
+    "pageid": 654818,
+    "ns": 0,
+    "title": "Myst III: Exile",
+    "index": 4,
+    "pageprops": {
+     "wikibase_item": "Q2588591"
+    },
+    "description": "2001 video game",
+    "descriptionsource": "local"
+   },
+   {
+    "pageid": 662987,
+    "ns": 0,
+    "title": "Myst IV: Revelation",
+    "index": 7,
+    "pageprops": {
+     "wikibase_item": "Q2477674"
+    },
+    "description": "Adventure video game in the Myst series by Ubisoft",
+    "descriptionsource": "local"
+   },
+   {
+    "pageid": 760828,
+    "ns": 0,
+    "title": "Myst (series)",
+    "index": 2,
+    "pageprops": {
+     "wikibase_item": "Q474301"
+    },
+    "description": "Adventure video game series",
+    "descriptionsource": "local"
+   },
+   {
+    "pageid": 1387025,
+    "ns": 0,
+    "title": "Myst V: End of Ages",
+    "index": 9,
+    "pageprops": {
+     "wikibase_item": "Q1906639"
+    },
+    "description": "2005 video game",
+    "descriptionsource": "local"
+   },
+   {
+    "pageid": 1977293,
+    "ns": 0,
+    "title": "Kristi Myst",
+    "index": 10,
+    "pageprops": {
+     "wikibase_item": "Q1121067"
+    },
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d0/Kristi_Myst_1999_AVN_expo.jpg/250px-Kristi_Myst_1999_AVN_expo.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+     "width": 240,
+     "height": 369
+    },
+    "original": {
+     "source": "https://upload.wikimedia.org/wikipedia/commons/d/d0/Kristi_Myst_1999_AVN_expo.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=original",
+     "width": 312,
+     "height": 480
+    },
+    "description": "American pornographic actress (born 1973)",
+    "descriptionsource": "local"
+   },
+   {
+    "pageid": 17807289,
+    "ns": 0,
+    "title": "The Myst Reader",
+    "index": 8,
+    "pageprops": {
+     "wikibase_item": "Q56640925"
+    },
+    "description": "Collection of novels based on video game",
+    "descriptionsource": "local"
+   }
+  ]
+ }
+}

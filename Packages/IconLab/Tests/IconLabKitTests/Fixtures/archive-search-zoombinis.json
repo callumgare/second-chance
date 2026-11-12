@@ -1,0 +1,51 @@
+{
+ "response": {
+  "docs": [
+   {
+    "creator": "Zombeaver",
+    "date": "2018-02-18T00:00:00Z",
+    "downloads": 20896,
+    "identifier": "LogicalJourneyOfTheZoombinis-ZombsLair",
+    "mediatype": "software",
+    "title": "Logical Journey Of The Zoombinis (Zomb's Lair)",
+    "year": 2018
+   },
+   {
+    "creator": "The Learning Company",
+    "date": "2001-01-01T00:00:00Z",
+    "downloads": 16879,
+    "identifier": "Zoombini_201806",
+    "mediatype": "software",
+    "title": "Zoombinis Logical Journey",
+    "year": 2001
+   },
+   {
+    "creator": "Broderbund Software",
+    "date": "1996-01-01T00:00:00Z",
+    "downloads": 16203,
+    "identifier": "logical-journey-of-the-zoombinis",
+    "mediatype": "software",
+    "title": "Logical Journey Of The Zoombinis",
+    "year": 1996
+   },
+   {
+    "creator": "The Learning Company",
+    "date": "2002-10-30T00:00:00Z",
+    "downloads": 7389,
+    "identifier": "zoombinisislandodyssey",
+    "mediatype": "software",
+    "title": "Zoombinis Island Odyssey",
+    "year": 2002
+   },
+   {
+    "creator": "Broderbund",
+    "date": "1996-12-04T00:00:00Z",
+    "downloads": 6785,
+    "identifier": "zoombini_202003",
+    "mediatype": "software",
+    "title": "Logical Journey of the Zoombinis Deluxe",
+    "year": 1996
+   }
+  ]
+ }
+}

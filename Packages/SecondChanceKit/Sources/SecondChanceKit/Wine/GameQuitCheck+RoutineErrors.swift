@@ -35,6 +35,10 @@ nonisolated extension GameQuitCheck {
         // The synthesiser falling behind for a moment: a click in the sound, not
         // a failure.
         ":err:dmsynth:synth_sink_write_data Underrun detected",
+        // DirectDraw drawing to a window that's changing size or closing:
+        // Webmaster logs it as it starts, between screens and as it quits from
+        // its own menu.
+        ":err:ddraw:ddraw_surface_update_frontbuffer Failed to blit to/from screen",
     ]
 
     /// What Steam logs as it starts, as well, for a game launched through it (the steam module's).

@@ -1,0 +1,23 @@
+{
+ "total": 1,
+ "items": [
+  {
+   "type": "app",
+   "name": "Zoombinis",
+   "id": 397430,
+   "price": {
+    "currency": "USD",
+    "initial": 1199,
+    "final": 1199
+   },
+   "tiny_image": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/397430/2c435c55cf88a307019148c3a19c3a3bc895125b/capsule_231x87.jpg?t=1749361401",
+   "metascore": "",
+   "platforms": {
+    "windows": true,
+    "mac": true,
+    "linux": false
+   },
+   "streamingvideo": false
+  }
+ ]
+}

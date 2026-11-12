@@ -445,6 +445,12 @@
     "How should %@ start?" : {
 
     },
+    "Icon Lab" : {
+
+    },
+    "Icon Lab…" : {
+
+    },
     "If %@ won't quit, Second Chance can quit it for you, but anything you haven't saved in it will be lost." : {
 
     },
@@ -577,10 +583,19 @@
     "Message" : {
 
     },
+    "Move Icon Lab's data in?" : {
+
+    },
+    "Move It In" : {
+
+    },
     "Move Second Chance to your Applications folder" : {
 
     },
     "Move to Applications" : {
+
+    },
+    "Moving Icon Lab's data in from %@…" : {
 
     },
     "No" : {
@@ -869,6 +884,9 @@
     "Something went wrong while installing the game. Try again, and if it happens again, the failure report helps get it fixed." : {
 
     },
+    "Start Empty" : {
+
+    },
     "Start Over" : {
 
     },
@@ -1024,6 +1042,16 @@
     },
     "The people who made it now give it away. Second Chance will download it from their website. If their website doesn't have it any more, Second Chance gets the same file from the Internet Archive, a library that keeps copies of old websites. Either way, it checks it's the genuine file first." : {
 
+    },
+    "The standalone Icon Lab's data is in %@. Moving it to %@ keeps its programs, catalogue copies and models, with nothing to download again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The standalone Icon Lab's data is in %1$@. Moving it to %2$@ keeps its programs, catalogue copies and models, with nothing to download again."
+          }
+        }
+      }
     },
     "There isn't enough free space on your Mac to install the game. It needs about %@, and %@ is free. Free up some space, then try again." : {
       "localizations" : {
