@@ -501,8 +501,9 @@ export const api = {
   /** Adds a picture dropped in from the computer (its bytes): a Your files picture, picked, at the top of the scale. */
   uploadPicture: async (slug: string, file: File): Promise<Media> => {
     if (transport.kind === "mock") throw new ApiError(501, "Dropping pictures in needs the engine");
+    // The bytes, not the File: WebKit hands an app's scheme handler no body at all for a Blob or File.
     const res = await fetch(`/api/programs/${enc(slug)}/media/upload?${new URLSearchParams({ name: file.name })}`, {
-      method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file,
+      method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: await file.arrayBuffer(),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
