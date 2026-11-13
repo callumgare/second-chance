@@ -72,11 +72,13 @@ struct WineLauncherTests {
         // Wine's services inherit a program's stdout and stderr and hold
         // them open after it exits: the wait for its last lines gives up,
         // and what tracked the pipes is freed with them still open.
-        let fake = try FakeWine(wine: "sleep 20 & echo started")
+        // The child outlives the bound by far: the bound only has to show its
+        // end isn't waited for, and a CI runner takes 15 s for the 5 s wait.
+        let fake = try FakeWine(wine: "sleep 60 & echo started")
         defer { fake.remove() }
         let started = Date()
         try await fake.wine.run(.program("setup.exe"))
-        #expect(Date().timeIntervalSince(started) < 15)
+        #expect(Date().timeIntervalSince(started) < 40)
     }
 
     @Test("Output with bytes that aren't UTF-8 keeps the rest of what was said")
