@@ -33,14 +33,15 @@ import WebKit
         return false
     }
 
-    @Test func thePageLoadsAndItsAPIAnswers() async throws {
+    // A backstop: the page's load is waited on, not timed, so a load that never ends ends here.
+    @Test(.timeLimit(.minutes(2))) func thePageLoadsAndItsAPIAnswers() async throws {
         try await withScratch { dir in
             let host = IconLabHost(paths: IconLabPaths(data: dir.appendingPathComponent("data")))
             let page = IconLabPage(api: host.api)
             defer { page.close() }
             let web = page.webView
-            let loaded = await eventually { page.loaded }
-            #expect(loaded)
+            let loaded = await page.waitUntilLoaded()
+            try #require(loaded, "the page loaded")
             // the page's own script ran: it defines the host's event function as it loads
             let booted = await eventually {
                 (try? await web.evaluateJavaScript("typeof window.iconLabHost?.event") as? String) == "function"
@@ -58,14 +59,14 @@ import WebKit
         }
     }
 
-    @Test func eventsReachThePage() async throws {
+    @Test(.timeLimit(.minutes(2))) func eventsReachThePage() async throws {
         try await withScratch { dir in
             let host = IconLabHost(paths: IconLabPaths(data: dir.appendingPathComponent("data")))
             let page = IconLabPage(api: host.api)
             defer { page.close() }
             let web = page.webView
-            let loaded = await eventually { page.loaded }
-            #expect(loaded)
+            let loaded = await page.waitUntilLoaded()
+            try #require(loaded, "the page loaded")
             _ = try await web.callAsyncJavaScript(
                 "window.__seen = []; const e = window.iconLabHost.event; window.iconLabHost.event = (j) => { window.__seen.push(j); e(j) }",
                 arguments: [:], contentWorld: .page)

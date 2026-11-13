@@ -39,6 +39,9 @@ final class IconLabPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     private var events: Task<Void, Never>?
     /// Whether the page has loaded, so events reach it.
     private(set) var loaded = false
+    /// How the page's first load ended: nil until it has.
+    private var firstLoad: Bool?
+    private var firstLoadWaiters: [CheckedContinuation<Bool, Never>] = []
 
     init(api: IconLabAPI) {
         self.api = api
@@ -93,9 +96,40 @@ final class IconLabPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
 
     // MARK: Navigation
 
+    /// Waits for the page's first load to end: true once it has loaded,
+    /// false if it failed or WebKit's page process ended first.
+    func waitUntilLoaded() async -> Bool {
+        if let firstLoad { return firstLoad }
+        return await withCheckedContinuation { firstLoadWaiters.append($0) }
+    }
+
+    private func firstLoadEnded(_ loaded: Bool) {
+        guard firstLoad == nil else { return }
+        firstLoad = loaded
+        let waiters = firstLoadWaiters
+        firstLoadWaiters = []
+        waiters.forEach { $0.resume(returning: loaded) }
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
         loaded = true
         startEvents()
+        firstLoadEnded(true)
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation?, withError error: any Error) {
+        logger.error("Icon Lab's page failed to load: \(error)")
+        firstLoadEnded(false)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation?, withError error: any Error) {
+        logger.error("Icon Lab's page couldn't start loading: \(error)")
+        firstLoadEnded(false)
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        logger.error("Icon Lab's page process ended")
+        firstLoadEnded(false)
     }
 
     /// The page stays on `iconlab://`; a link anywhere else opens in the person's browser.
