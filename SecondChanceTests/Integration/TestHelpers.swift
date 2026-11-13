@@ -306,10 +306,12 @@ enum WrappInfo {
 /// by its bundle's `installed` signs. Run on a built wrapp before it is
 /// deleted, for every source: its installed game is what such a folder
 /// holds. A ScummVM wrapp holds only the copied disc, and its bundle turns
-/// no installed copy down, so it has nothing to check.
+/// no installed copy down, so it has nothing to check; nor has a program
+/// whose bundle names no installed signs yet (Webmaster, played from its
+/// disc, whose installed folder looks just like it).
 enum InstalledGameCheck {
     static func run(wrapp: URL, game: GameInfo, outcome: GameOutcome) async {
-        guard WrappInfo.gameEngine(at: wrapp) != .scummvm,
+        guard WrappInfo.gameEngine(at: wrapp) != .scummvm, hasInstalledSigns(game),
               let installedGame = WrappInfo.gameExe(at: wrapp)?.deletingLastPathComponent() else {
             return
         }
@@ -359,6 +361,14 @@ enum InstalledGameCheck {
         }
         outcome.expect(turnedDown,
                        "A build from \(game.id)'s installed game failed with \(String(describing: recorder.failedError)), not installedGameNotInstaller")
+    }
+
+    /// Whether the game's bundle says how to tell an installed copy of it.
+    /// A bundle that can't be read counts as saying so, so the check runs
+    /// and fails rather than going quiet.
+    private static func hasInstalledSigns(_ game: GameInfo) -> Bool {
+        guard let manifest = TestPaths.manifests.first(where: { $0.id == game.program }) else { return true }
+        return !manifest.installedSigns.isEmpty
     }
 }
 
