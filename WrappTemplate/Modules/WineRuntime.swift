@@ -86,8 +86,11 @@ final class WineRuntime: GameStarting {
         logger.notice("[Helpers] \(gameExe.lastPathComponent) draws with \(graphics.logDescription)\(said)\(lock ? "" : ", and cursor lock isn't armed: \(why)")")
         watchers.helperReport = InProcessHelperReport(
             armingVariables: Wine.inProcessHelperVariables(gameExe: gameExe, declared: graphics, launch: config.launch), logger: logger)
-        // Steam's launches are judged differently: Steam stays running.
-        watchers.quitCheck = GameQuitCheck(graphicsAPI: graphics, throughSteam: config.composition.has(.steam))
+        // Steam's launches are judged differently: Steam stays running. A
+        // launcher's routine errors come down the game's stream as well.
+        watchers.quitCheck = GameQuitCheck(
+            graphicsAPI: graphics, throughSteam: config.composition.has(.steam),
+            throughBigFish: config.composition.has(.bigFish))
         watchers.copyProtection = CopyProtection(exeAt: gameExe)
         if let copyProtection = watchers.copyProtection {
             logger.warning("[Game Launch] \(gameExe.lastPathComponent) is wrapped in \(copyProtection.name) copy protection, which may not run under Wine")

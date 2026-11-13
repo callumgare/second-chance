@@ -99,6 +99,27 @@ struct GameQuitCheckTests {
         #expect(direct.failure(exitedAt: start + 2) != nil)
     }
 
+    // From the free trial of White Wolf quit from its own menu (2026-11-13):
+    // the Game Manager's window redrew 0.6 s before the game exited.
+    @Test("The Game Manager's drawing errors count only outside Big Fish", arguments: [
+        "0224:err:d3d:wined3d_check_gl_call >>>>>>> GL_INVALID_FRAMEBUFFER_OPERATION (0x506) from glBlitFramebuffer() @ "
+            + "/Users/gcenx/Documents/GitHub/wine-private/dlls/wined3d/texture.c / 546.",
+        "0224:err:d3d:wined3d_context_gl_set_pixel_format wglSetPixelFormatWINE failed to set pixel format 21 on device context 2601005D.",
+        "0224:err:d3d:wined3d_context_gl_update_window Failed to get a device context for window 06DAFF08.",
+    ])
+    func bigFishErrors(_ line: String) {
+        let check = GameQuitCheck(graphicsAPI: .direct3D, throughSteam: false, throughBigFish: true)
+        check.observe(line: armed, at: start)
+        check.windowDidAppear()
+        check.observe(line: firstFrame, at: start + 1)
+        check.observe(line: line, at: start + 10)
+        #expect(check.failure(exitedAt: start + 10.6) == nil)
+        let direct = started()
+        direct.observe(line: firstFrame, at: start + 1)
+        direct.observe(line: line, at: start + 10)
+        #expect(direct.failure(exitedAt: start + 10.6) != nil)
+    }
+
     @Test("Nothing that was asked to quit failed", arguments: [true, false])
     func askedToQuit(fromInside: Bool) {
         let check = GameQuitCheck(graphicsAPI: .direct3D, throughSteam: false)

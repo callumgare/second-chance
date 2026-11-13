@@ -2,10 +2,10 @@
 //  GameQuitCheck+RoutineErrors.swift
 //  Shared
 //
-//  Generated from Modules/wine/routine-errors.yaml and
-//  Modules/steam/routine-errors.yaml by `sc generate`. Don't edit it:
-//  change the modules' data and run that again. A test fails when this
-//  file isn't what the data makes.
+//  Generated from Modules/wine/routine-errors.yaml,
+//  Modules/steam/routine-errors.yaml and Modules/big-fish/routine-errors.yaml
+//  by `sc generate`. Don't edit it: change the modules' data and run
+//  that again. A test fails when this file isn't what the data makes.
 
 nonisolated extension GameQuitCheck {
     /// Wine's err: lines that say nothing is wrong (the wine module's).
@@ -49,5 +49,18 @@ nonisolated extension GameQuitCheck {
         ":err:ole:",
         // Steam's graphics probe, which needs a DLL it doesn't ship
         "gldriverquery.exe",
+    ]
+
+    /// What Big Fish's Game Manager logs, as well, for a game it starts (the big-fish module's).
+    static let routineBigFishErrors = [
+        // the Game Manager's window (Chromium) redrawing, in bursts that come
+        // with a fullscreen game quitting: a free trial of White Wolf quit from
+        // its own menu 0.6 s after one, and was taken for a failure
+        "wined3d_check_gl_call >>>>>>> GL_INVALID_FRAMEBUFFER_OPERATION",
+        // the Game Manager's window (Chromium) setting up its drawing as it
+        // starts
+        "wined3d_context_gl_set_pixel_format",
+        // the Game Manager's window (Chromium) drawing to a window it has hidden
+        "wined3d_context_gl_update_window",
     ]
 }

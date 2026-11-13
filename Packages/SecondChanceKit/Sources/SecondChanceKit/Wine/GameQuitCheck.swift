@@ -55,9 +55,11 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
     /// its backtrace to the log: seconds, longer on a loaded Mac.
     static let crashWindow: TimeInterval = 30
 
-    // `routineErrors` and `routineSteamErrors`, the Wine errors healthy
-    // launches log that say nothing about why a game quit, are the wine and
-    // steam modules' data (GameQuitCheck+RoutineErrors.swift).
+    // `routineErrors`, `routineSteamErrors` and `routineBigFishErrors`, the
+    // Wine errors healthy launches log that say nothing about why a game
+    // quit, are the wine, steam and big-fish modules' data
+    // (GameQuitCheck+RoutineErrors.swift). A launcher's errors come down the
+    // game's own stream, so its routine ones count for its games.
 
     private let drawsWithDirect3D: Bool
     private let routine: [String]
@@ -70,9 +72,10 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
     /// Enough to explain an exit; a game logging errors all along doesn't grow it.
     private let errorLimit = 50
 
-    public init(graphicsAPI: GameGraphicsAPI, throughSteam: Bool) {
+    public init(graphicsAPI: GameGraphicsAPI, throughSteam: Bool, throughBigFish: Bool = false) {
         drawsWithDirect3D = graphicsAPI == .direct3D
         routine = Self.routineErrors + (throughSteam ? Self.routineSteamErrors : [])
+            + (throughBigFish ? Self.routineBigFishErrors : [])
     }
 
     /// Feed every line of Wine's output, quit watch's reports among them.

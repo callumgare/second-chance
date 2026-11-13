@@ -211,6 +211,27 @@
         "versions" : [
           "1"
         ]
+      },
+      {
+        "data" : [
+          "routine-errors.yaml"
+        ],
+        "files" : {
+          "functions/cnc-ddraw" : "45759de30e014534e387a6ee4fbec962b830a9a7521354ae7a7d0ae22efac2a3",
+          "functions/install" : "e6a53c1995676d5d57f4aea2787005c54651c264b7f0fb000fda96158772e618",
+          "module.yaml" : "290dbfac335b05e2bf7a475813039b090ba8d5834a46b53a619df875e54ab0ed",
+          "routine-errors.yaml" : "43a2864a770b64cab184956197179cf7fefb9a75efe5bbde5d0171c17ae332f8",
+          "stages/manager" : "464310766553362192c264b8693c6fd04ad34d1ba2a1b675f96c802ef76d1b4b",
+          "stores" : "0bbf70ffa45157ceb387a8d74a8eab30de2f305227f8150a0a6400173746f688"
+        },
+        "functions" : [
+          "functions/install",
+          "functions/cnc-ddraw"
+        ],
+        "release" : 8,
+        "versions" : [
+          "1"
+        ]
       }
     ],
     "disc" : [

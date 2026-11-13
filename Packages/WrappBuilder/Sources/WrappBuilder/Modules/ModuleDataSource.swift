@@ -19,8 +19,9 @@ public nonisolated enum ModuleDataSource {
     /// Where the routine errors' Swift lives, from the repo's root.
     public static let routineErrorsPath = "Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/GameQuitCheck+RoutineErrors.swift"
 
-    /// `GameQuitCheck`'s routine errors: the wine module's, and the steam
-    /// module's for a game launched through Steam.
+    /// `GameQuitCheck`'s routine errors: the wine module's, the steam
+    /// module's for a game launched through Steam, and the big-fish module's
+    /// for one started by Big Fish's Game Manager.
     public static func routineErrorsSource(modules loader: ModuleLoader) throws -> String {
         func errors(_ module: String) throws -> [RoutineError] {
             guard let folder = loader.module(module) else {
@@ -40,10 +41,10 @@ public nonisolated enum ModuleDataSource {
             "//  GameQuitCheck+RoutineErrors.swift",
             "//  Shared",
             "//",
-            "//  Generated from Modules/wine/routine-errors.yaml and",
-            "//  Modules/steam/routine-errors.yaml by `sc generate`. Don't edit it:",
-            "//  change the modules' data and run that again. A test fails when this",
-            "//  file isn't what the data makes.",
+            "//  Generated from Modules/wine/routine-errors.yaml,",
+            "//  Modules/steam/routine-errors.yaml and Modules/big-fish/routine-errors.yaml",
+            "//  by `sc generate`. Don't edit it: change the modules' data and run",
+            "//  that again. A test fails when this file isn't what the data makes.",
             "",
             "nonisolated extension GameQuitCheck {",
         ]
@@ -52,6 +53,9 @@ public nonisolated enum ModuleDataSource {
         lines.append("")
         lines += list("routineSteamErrors", try errors("steam"),
                       doc: "What Steam logs as it starts, as well, for a game launched through it (the steam module's).")
+        lines.append("")
+        lines += list("routineBigFishErrors", try errors("big-fish"),
+                      doc: "What Big Fish's Game Manager logs, as well, for a game it starts (the big-fish module's).")
         lines += ["}", ""]
         return lines.joined(separator: "\n")
     }

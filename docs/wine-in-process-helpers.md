@@ -1049,7 +1049,11 @@ failure if nothing asked the game to quit and the game:
   launch logs (`Modules/wine/routine-errors.yaml`: Vulkan, wow64, HID devices,
   NTLM and Kerberos, the desktop's `(null)` mode refusal, and for a game
   started through Steam, the COM lookups and graphics probe Steam does as it
-  starts);
+  starts, `Modules/steam/routine-errors.yaml`; for one started through Big
+  Fish, the Direct3D errors the Game Manager's window logs whenever it
+  redraws, as it does when a fullscreen game quits,
+  `Modules/big-fish/routine-errors.yaml`: a launcher's output comes down the
+  game's stream, so the check can't tell its errors from the game's);
 - quit within 30 s of an exception nothing handled (`Unhandled page fault`,
   `Unhandled exception`). The prefix has no Wine crash dialog (the wine
   module's `nocrashdialog`, in `functions/prefix-settings`), so a crashed

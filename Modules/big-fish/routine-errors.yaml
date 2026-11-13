@@ -1,0 +1,13 @@
+# What Big Fish's Game Manager logs, as well as Wine's routine errors, for a
+# game it starts: the game's output and the Game Manager's come down one
+# stream, and none of this says the game has failed (GameQuitCheck).
+# The wrapp has these compiled in (`sc generate`).
+- pattern: "wined3d_check_gl_call >>>>>>> GL_INVALID_FRAMEBUFFER_OPERATION"
+  why: >-
+    the Game Manager's window (Chromium) redrawing, in bursts that come with a
+    fullscreen game quitting: a free trial of White Wolf quit from its own menu
+    0.6 s after one, and was taken for a failure
+- pattern: "wined3d_context_gl_set_pixel_format"
+  why: "the Game Manager's window (Chromium) setting up its drawing as it starts"
+- pattern: "wined3d_context_gl_update_window"
+  why: "the Game Manager's window (Chromium) drawing to a window it has hidden"
