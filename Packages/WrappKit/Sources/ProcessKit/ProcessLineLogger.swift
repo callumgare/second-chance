@@ -62,11 +62,12 @@ nonisolated public enum ProcessLineLogger {
                     let line = String(decoding: pending.buffer, as: UTF8.self)
                         .trimmingCharacters(in: .newlines)
                     if !line.isEmpty {
-                        LogContext.$build.withValue(build) { logger.log(level: levelOf(line), "\(line)", metadata: metadata) }
+                        LogContext.$build.withValue(build) { pending.log(line, logger: logger, level: levelOf, metadata: metadata) }
                         onLine?(line)
                     }
                     pending.buffer.removeAll()
                 }
+                LogContext.$build.withValue(build) { pending.endRepeats(logger: logger, metadata: metadata) }
                 handle.readabilityHandler = nil
                 onEOF?()
                 return
@@ -95,7 +96,7 @@ nonisolated public enum ProcessLineLogger {
                 pending.buffer.removeSubrange(pending.buffer.startIndex..<lineStart)
             }
             for line in lines where !line.isEmpty {
-                LogContext.$build.withValue(build) { logger.log(level: levelOf(line), "\(line)", metadata: metadata) }
+                LogContext.$build.withValue(build) { pending.log(line, logger: logger, level: levelOf, metadata: metadata) }
                 onLine?(line)
             }
         }
@@ -111,10 +112,57 @@ nonisolated public enum ProcessLineLogger {
         String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .newlines)
     }
 
-    /// The bytes of a line still being read. Only the pipe's readability
-    /// handler touches it, and a file handle runs that handler one read at a
-    /// time, so it needs no lock.
-    private nonisolated final class PendingBytes: @unchecked Sendable {
+    /// How many copies of a line repeated back to back are logged before the
+    /// rest are only counted. A Wine process that lost its wineserver logged
+    /// the same msync error four million times in two minutes, pushing the
+    /// whole build out of the log (Ghost of Thornton Hall, 2026-11-13).
+    static let repeatsLogged = 3
+    /// While a line goes on repeating, how often the count so far is logged.
+    static let repeatsSummaryEvery = 100_000
+
+    /// The bytes of a line still being read, and the line last logged with
+    /// how often it has repeated since. Only the pipe's readability handler
+    /// touches it, and a file handle runs that handler one read at a time,
+    /// so it needs no lock.
+    nonisolated final class PendingBytes: @unchecked Sendable {
         var buffer = Data()
+        private var lastLine: String?
+        private var lastLevel: Logging.Logger.Level = .notice
+        /// Copies of `lastLine` since it was first logged.
+        private var repeats = 0
+        /// Of those, how many haven't been counted in the log yet.
+        private var uncounted = 0
+
+        /// Log `line`, unless it's the line before repeated more than
+        /// `repeatsLogged` times, when it's counted instead.
+        func log(_ line: String, logger: Logging.Logger, level levelOf: (String) -> Logging.Logger.Level,
+                 metadata: Logging.Logger.Metadata?) {
+            if line == lastLine {
+                repeats += 1
+                if repeats < ProcessLineLogger.repeatsLogged {
+                    logger.log(level: lastLevel, "\(line)", metadata: metadata)
+                    return
+                }
+                uncounted += 1
+                if uncounted >= ProcessLineLogger.repeatsSummaryEvery {
+                    logger.log(level: lastLevel, "(the line above repeated \(uncounted) more times, and goes on repeating)", metadata: metadata)
+                    uncounted = 0
+                }
+                return
+            }
+            endRepeats(logger: logger, metadata: metadata)
+            lastLine = line
+            lastLevel = levelOf(line)
+            repeats = 0
+            logger.log(level: lastLevel, "\(line)", metadata: metadata)
+        }
+
+        /// Log how often the last line repeated, if it did so uncounted.
+        func endRepeats(logger: Logging.Logger, metadata: Logging.Logger.Metadata?) {
+            if uncounted > 0 {
+                logger.log(level: lastLevel, "(the line above repeated \(uncounted) more times)", metadata: metadata)
+            }
+            uncounted = 0
+        }
     }
 }

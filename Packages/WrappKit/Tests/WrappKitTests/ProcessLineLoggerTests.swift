@@ -54,4 +54,37 @@ struct ProcessLineLoggerTests {
         #expect(lines.allSatisfy { $0.utf8.count <= ProcessLineLogger.maxLineBytes + 10 })
         #expect(lines.joined().utf8.count == long.count)
     }
+
+    @Test("A line repeated back to back is logged a few times, then counted")
+    func repeatedLines() {
+        let messages = Messages()
+        let logger = Logger(label: "au.gare.callum.second-chance.Test.Repeats") { _ in CapturingHandler(messages: messages) }
+        let pending = ProcessLineLogger.PendingBytes()
+        let flood = "02d0:err:msync:server_register_wait Failed to send server register wait: 0x10000003"
+        for line in ["start"] + Array(repeating: flood, count: 10) + ["end", "end"] {
+            pending.log(line, logger: logger, level: { _ in .notice }, metadata: nil)
+        }
+        pending.endRepeats(logger: logger, metadata: nil)
+        #expect(messages.all.withLock { $0 } == ["start", flood, flood, flood, "(the line above repeated 7 more times)", "end", "end"])
+    }
+}
+
+private nonisolated final class Messages: Sendable {
+    let all = Mutex<[String]>([])
+}
+
+/// Keeps every message logged through it.
+private nonisolated struct CapturingHandler: LogHandler {
+    let messages: Messages
+    var metadata: Logger.Metadata = [:]
+    var logLevel: Logger.Level = .trace
+
+    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
+        get { metadata[key] }
+        set { metadata[key] = newValue }
+    }
+
+    func log(event: LogEvent) {
+        messages.all.withLock { $0.append("\(event.message)") }
+    }
 }

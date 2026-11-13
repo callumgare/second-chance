@@ -128,6 +128,13 @@ line itself. The pipe only supplies the fallback: `.notice` for stdout and
 `.warning` for stderr. Wine, MoltenVK and ScummVM write routine chatter to
 stderr and real failures to stdout, so a pipe-based level can't be trusted.
 
+A line repeated back to back is logged three times, then only counted: `(the
+line above repeated N more times)` follows when another line comes or the
+pipe closes, and every 100,000 while it goes on. A Wine process that lost its
+wineserver once printed the same `msync` error four million times in two
+minutes, pushing the whole build out of the log. Whoever reads the lines
+(`onLine`) still gets every one.
+
 | Line | Level |
 | --- | --- |
 | Wine `err:` (`0124:err:module:import_dll …`) | error, except the `experimental wow64 mode` notice every launch prints (debug) |
