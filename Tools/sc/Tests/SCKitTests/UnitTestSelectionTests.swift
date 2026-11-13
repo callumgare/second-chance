@@ -12,6 +12,11 @@ struct UnitTestSelectionTests {
             "SecondChanceTests/DocsTableTests.swift": "struct DocsTableTests {}",
             "SecondChanceTests/Integration/DiskInstallIntegrationTests.swift": "struct DiskInstallIntegrationTests {}",
             "Packages/WrappKit/Tests/WrappKitTests/CompositionTests.swift": "@Suite struct CompositionTests {}",
+            // Attribute arguments with calls nested in them, parentheses in a string, and a line break.
+            "Packages/WrappKit/Tests/WrappKitTests/TimedTests.swift":
+                "@Suite(\"A (slow) one\", .timeLimit(.minutes(2)))\nnonisolated struct TimedTests {}",
+            "Packages/WrappKit/Tests/WrappKitTests/SpreadTests.swift":
+                "@Suite(\n    \"Spread over lines\",\n    .serialized\n)\nstruct SpreadTests {}",
             // A name only in a string, or a longer one, is no declaration of it.
             "Tools/sc/Tests/SCKitTests/ParsingTests.swift": "struct ParsingTests {}\nstruct DocsTableTestsHelper {}\nlet x = \"struct DocsTableTests {}\"",
         ]
@@ -28,10 +33,11 @@ struct UnitTestSelectionTests {
         let root = try repo()
         defer { try? FileManager.default.removeItem(at: root) }
         let selection = try UnitTestSelection.locate(
-            ["DocsTableTests/everyDocHasARow()", "CompositionTests", "ParsingTests"], root: root,
+            ["DocsTableTests/everyDocHasARow()", "CompositionTests", "TimedTests", "SpreadTests", "ParsingTests"], root: root,
             packages: ["WrappKit", "WrappBuilder"], integrationSuites: ["DiskInstallIntegrationTests"])
         #expect(selection == UnitTestSelection(app: ["DocsTableTests/everyDocHasARow()"],
-                                               packages: ["WrappKit": ["CompositionTests"]], tool: ["ParsingTests"]))
+                                               packages: ["WrappKit": ["CompositionTests", "TimedTests", "SpreadTests"]],
+                                               tool: ["ParsingTests"]))
     }
 
     @Test("A name that's nowhere, or an integration suite's, is refused")

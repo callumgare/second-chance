@@ -54,10 +54,16 @@ struct UnitTestSelection: Equatable, Sendable {
 
     /// Whether a Swift file under `folder` declares a type called `suite`: a
     /// line starting with the declaration, after any attributes and
-    /// modifiers, so a name in a string or a comment doesn't count.
+    /// modifiers, so a name in a string or a comment doesn't count. An
+    /// attribute's arguments may span lines, hold strings with parentheses
+    /// in them and calls nested three deep:
+    /// `@Suite("A (slow) one", .timeLimit(.minutes(2)))`.
     static func declares(_ suite: String, under folder: URL) -> Bool {
         guard let walker = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: nil) else { return false }
-        let pattern = #"^[ \t]*(?:@\w+(?:\([^)\n]*\))?\s+)*(?:(?:public|internal|private|fileprivate|final|nonisolated)\s+)*"#
+        let string = #""(?:[^"\\\n]|\\.)*""#
+        var arguments = #"\((?:[^()"]|"# + string + #")*\)"#
+        for _ in 0..<3 { arguments = #"\((?:[^()"]|"# + string + "|" + arguments + #")*\)"# }
+        let pattern = #"^[ \t]*(?:@\w+(?:"# + arguments + #")?\s+)*(?:(?:public|internal|private|fileprivate|final|nonisolated)\s+)*"#
             + #"(?:struct|class|enum|actor|extension)\s+"# + NSRegularExpression.escapedPattern(for: suite) + #"\b"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: .anchorsMatchLines) else { return false }
         for case let file as URL in walker where file.pathExtension == "swift" {
