@@ -25,7 +25,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 
 /// One edition of a game the Big Fish account owns: the game, and which of
 /// its language editions it is.
-struct BigFishGameChoice: Equatable {
+nonisolated struct BigFishGameChoice: Equatable {
     let game: GameInfo
     let sku: BigFishSKU
 

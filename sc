@@ -64,7 +64,7 @@ trap 'stop_progress; exit 143' TERM
                 for _ in 1 2 3 4 5; do
                     pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
                     [[ -z "$pid" || "$pid" == 1 ]] && break
-                    [[ "$pid" == $$ ]] && { ours=1; break; }
+                    [[ "$pid" == "$$" ]] && { ours=1; break; }
                 done
                 if [[ -z "$ours" ]]; then
                     name="$(basename "$(ps -o comm= -p "$holder" 2>/dev/null)")"

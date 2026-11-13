@@ -3,8 +3,6 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
 echo "🔍 Verifying swift-log static linking (no dynamic framework)..."
 
 GAMEWRAPPER_BINARY="${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/MacOS/${PRODUCT_NAME}"
