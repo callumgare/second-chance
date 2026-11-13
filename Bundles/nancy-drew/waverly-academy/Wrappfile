@@ -13,9 +13,11 @@ FUNCTION pre-install-setup
   LAUNCH --mount=type=store,source=wine-documents,target=A: --mount=type=store,source=wine-documents,target=C:/users/crossover/Documents
 END
 
-# What every install of the game ends with: its .ini settings
+# What every install of the game ends with: its .ini settings, and its sound
+# and snow at speed under Rosetta
 FUNCTION post-install-setup
   DO nancy-drew.configure-ini --into=${const.install-dir}
+  DO nancy-drew.rosetta-fixes --into=${const.install-dir} --exe=Waverly.exe
 END
 
 # Wine 10: the Nancy Drew games stay on the Wine they were made and tested

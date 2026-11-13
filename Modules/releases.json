@@ -1168,6 +1168,70 @@
         "versions" : [
           "1"
         ]
+      },
+      {
+        "data" : [
+          "patches.json",
+          "ini.yaml",
+          "clean-exit-log.yaml"
+        ],
+        "files" : {
+          "assets/her-update-wizard.au3" : "0ceb5062336161cda5fbba7e4abef25eb551b735910806d7813f6c2a122fc331",
+          "assets/installshield-custom-dialog-automate.au3" : "c9580969337ee5813bfd9abab10d26add0c02a1f06eb9ec55bb7b37415cc458e",
+          "assets/nancy-drew.icns" : "f90d8503e72c48cecbc4194a6835d4e9f030735e9c8bdf7f74588ea0194bd166",
+          "assets/nancy-drew.icon/Assets/Image.png" : "6247e66d03349ccd31d8c2f7fa84d727afb759c37a939f75ec66dc40f71f712f",
+          "assets/nancy-drew.icon/icon.json" : "027712cec53941d0606600377a501a9dc1d8f324e5cc5143abf9acd31899f511",
+          "assets/rosetta-fixes/comdlg32.dll" : "3e7b864eb1d385cf239a14b6b0c8e991e613509dcf8d012fa2fa6563bf1596c2",
+          "assets/update-installation-wizard.au3" : "2b6029213949572ec7b5dd0db82d59c762e68a0a360f8250a1734ffd7bd73192",
+          "clean-exit-log.schema.json" : "67ccd3e5b95e5ef8c09ba7fd14319530f4ba7553a76901aaa29e0aab163563b6",
+          "clean-exit-log.yaml" : "2274ae5f26829d653071a5e0c0806e73f48f90072f333895267cc553f111f0ad",
+          "functions/configure-ini" : "415cc6445d055bf77cd1604c1e50c179af5498a388931ac94e73a76a1e6d4589",
+          "functions/patch" : "e09384d0541e04167f97c48626c17f8940d0f796610a58de56893ee772ee452f",
+          "functions/rosetta-fixes" : "412516f6ce87445c9694cd439f00140ef6693be53585a4c1ac22631736ea196e",
+          "functions/set-icon" : "97720d5874d6f4023602acd3b5abefe70a5d4f6fb2f133958ed9f8e58f80a0c6",
+          "ini.schema.json" : "391fa7dd698e2c9a7d178f7c50ce689ed06ce828f2898b50237a5dce268b1cde",
+          "ini.yaml" : "6e0bed00bbe76e516c78e6ec44458223f8c0e800fbd2860e2ba0c7edadcf7e7e",
+          "module.yaml" : "7ee55ec0350d09120604d4470d00f25fc57945751e2b3374d9ae1ad6ab0cfbe8",
+          "needles/exit-text.yaml" : "75dc0a92d252ca965a64cd33dbac581eba102677bff334f156b94ba4efb56226",
+          "needles/her-logo-text.yaml" : "e478c408474e3fdf0bc26fbfde8c3677b4444a4e8c3e1c6139ff4d58bec99f7a",
+          "needles/quit-button.png" : "5d3e8090044ddc560257c6a7d5505726ba95858806de810df49fe41bea72486a",
+          "needles/quit-button.yaml" : "a24d743c1da78ca8ce4641765e978cf8f101898e386295ed0173ca42bad6cc69",
+          "needles/splash/defaults.yaml" : "f74d7c765ff2d1cee751c0e7ab59eb92b39a5cc69b17f24f4bc0a058c7516575",
+          "needles/splash/splash-any-big-fish-her-logo.png" : "0ad81bf0409cb088ec66c2e9eb2480b4277278cdc3da1319f687404e665096e0",
+          "needles/splash/splash-any-big-fish-logo-white.png" : "4e4bb97138a682b9a359f7378b3f015c2b42acdb8b127f065e598e2e79dc0b70",
+          "needles/splash/splash-any-big-fish-logo.png" : "9a3164d85a09f222ca991a429785e44418760ddf6b31b96d32b2f7073aaacc67",
+          "needles/splash/splash-any-her-intro-1.png" : "cda02a0129513029268ce874b4383372a1107c17f54f644856bae6f3f4d9890a",
+          "needles/splash/splash-any-her-intro-2.png" : "1afc5c65efbc3826cf7888959ecc13c95c1e0ba1b43a6009fce38b0e31598150",
+          "needles/splash/splash-any-her-intro-3.png" : "31f3a5b39dd7d9b8ab2e51a2bec8ff26520e93687b06ca75b7dc44de1989b9ac",
+          "needles/splash/splash-any-her-intro-4.png" : "7971369ef5642af2d6cc7576effdf0b98b55ff07fca2ca79e3ff75210b7b33da",
+          "needles/splash/splash-any-her-intro-5.png" : "d28d41e89f19740d20a972fc5362ddf232ba8ac03b6d0d06f46b209a71a04259",
+          "needles/splash/splash-any-her-intro-6.png" : "f0c5c6b550d0bf1fadea7eeb82422975a941eb71c1d669af6c03345144222745",
+          "needles/splash/splash-any-her-intro-7.png" : "47a6226492e5ccbb2916a68d0a8c0b6e4d9da81715477cd53161bdd5830fbd43",
+          "needles/splash/splash-any-her-intro-8.png" : "0c2ca01747d5e976da2aa63b2124d4422bf7cc1d1f071f33316649c7b0013b99",
+          "needles/splash/splash-any-her-logo-blue.png" : "27474fa271f41c8b662af9baa8c52620305fad73b80a7b2e39c8416255c27e83",
+          "needles/splash/splash-any-her-logo-gold-2.png" : "64ca5e2d8b6cb12530e03eaf1bbbebdb76d16cddbe3d5134ad3411237bd8067c",
+          "needles/splash/splash-any-her-logo-gold.png" : "2675e91ad88a42b9043a80b10a55fca6fc49ea5ed1a5e29f9d7d8b393bcc05c2",
+          "needles/splash/splash-any-her-logo-red-2.png" : "863f6b75f1d0cb8f77be853bf70aaa6d822d36d8f0936b8f6f5ce0ac396f72e1",
+          "needles/splash/splash-any-her-logo-red-on-white.png" : "af167c3c9fa5b5effb0c9142fd1303fe1db02721dc62f0e853030e8134e69165",
+          "needles/splash/splash-any-her-logo-red.png" : "3fd62b3a095214305f25fc4f91f7006cebb8a2f4d4b858a2c4d46bbdd26d81dc",
+          "needles/splash/splash-any-nancy-drew-1.png" : "d909fdaa766e8f7010164c9c579a4f3cd9f63825083dcfe5121e97069a65e72f",
+          "needles/splash/splash-any-nancy-drew-2.png" : "da87a6f0ba565632d88e006ec67e6dcf7ff878032696807cb46ada6a915178ce",
+          "needles/splash/splash-any-nancy-drew-3.png" : "1b2e614c71901468bc23002c1d92955bdc7882ab409d440df5077f688d5d4509",
+          "needles/splash/splash-any-nancy-drew-4.png" : "be8fe963e13ae51c965215eb43312f014783f430b1577da875e7c1721c0a9065",
+          "patches.json" : "1dfab9e5b6740d38e2a52f771083260964a8ff07b33ead83602df7e480ffce4a",
+          "patches.schema.json" : "5fc2a5f8712d5f5b4560a659bb42f60862621c67fde8f9d706012a0db9b7ed4b",
+          "scenarios/quit-from-menu.yaml" : "deb9ac1a2b5b97dfad99c677d598723b18b101ac26d37cfbb5c1f7cefd39ef89"
+        },
+        "functions" : [
+          "functions/patch",
+          "functions/configure-ini",
+          "functions/set-icon",
+          "functions/rosetta-fixes"
+        ],
+        "release" : 15,
+        "versions" : [
+          "1"
+        ]
       }
     ],
     "scummvm" : [

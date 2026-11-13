@@ -1,0 +1,25 @@
+; Every function Wine's comdlg32 exports by name that a game might import,
+; each passed on to Wine's own (rosetta_fixes.c).
+LIBRARY comdlg32.dll
+EXPORTS
+    ChooseColorA
+    ChooseColorW
+    ChooseFontA
+    ChooseFontW
+    CommDlgExtendedError
+    FindTextA
+    FindTextW
+    GetFileTitleA
+    GetFileTitleW
+    GetOpenFileNameA
+    GetOpenFileNameW
+    GetSaveFileNameA
+    GetSaveFileNameW
+    PageSetupDlgA
+    PageSetupDlgW
+    PrintDlgA
+    PrintDlgW
+    PrintDlgExA
+    PrintDlgExW
+    ReplaceTextA
+    ReplaceTextW

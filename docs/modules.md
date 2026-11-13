@@ -382,6 +382,65 @@ refuses a plan with any module's instruction. Each package's
 does, and its tests run with `swift test --package-path
 Packages/Modules/<name>`, and in `sc test unit`.
 
+### Rosetta fixes
+
+Her's later games were built for x87 floating-point maths, which Rosetta
+emulates in software, about 16 times slower than real time. 32-bit SSE2
+code runs at close to native speed. Two loops in Warnings at Waverly Academy
+did enough x87 maths to make it unplayable on Apple Silicon (issue 7): a
+scene with sounds and snow ran at a frame every couple of seconds.
+
+- **Its sound.** The game decodes every sound's Ogg Vorbis
+  (`.his`, type 2) with a libvorbisfile linked into `Waverly.exe` and built
+  for x87.
+- **Its snow.** The particle system steps a fixed timestep with no cap, so a
+  slow frame leaves more steps to catch up. Under emulation the catch-up
+  fell further behind each frame, stalling the game for 30–60 s.
+
+`DO nancy-drew.rosetta-fixes --into=<game folder> --exe=<program>` fixes
+both. It copies the nancy-drew module's `assets/rosetta-fixes/comdlg32.dll`
+into the game's folder, and makes Wine load it before its own for that
+program (`AppDefaults\<program>\DllOverrides`, `native,builtin`). Wine 10
+has no `AppInit_DLLs`, and `Waverly.exe` imports `comdlg32.dll`
+(`GetFileTitleA` alone). The DLL loads Wine's own `comdlg32.dll` from the
+system folder and passes each of its exports to it. When it loads, it looks
+in the program's code for each fix's pattern:
+
+- **The sound fix** looks for the entries of `ov_open`, `ov_clear`,
+  `ov_raw_seek` and `ov_read`. It sends each to libvorbisfile 1.3.7 built
+  for SSE2, whose `OggVorbis_File` is laid out as the game's is. Several of
+  the game's functions take arguments in registers (whole-program
+  optimisation), and small stubs translate them.
+- **The particle fix** looks for the particle update's catch-up count. It
+  caps the count at 0.25 s of steps. The first update of a view is left
+  whole, as that is its warm-up (2 s of snow falling before it's seen).
+
+Steam's copy is wrapped in Steam's DRM (SteamStub, a `.bind` section). Its
+code is encrypted on disk and is decrypted only when the game starts, after
+every DLL's `DllMain` has run. For an `.exe` like that, the DLL points the
+game's import of `GetCommandLineA` at itself. The first call from the game's
+own code, which comes as its C runtime starts up, puts the import back and
+makes the fixes then.
+
+A fix is made only where its pattern is found exactly once, and the two are
+independent. A game it doesn't recognise, such as a different build or an
+Armadillo-packed Big Fish copy, is left as it was, and the log says which.
+Its lines come through Wine's debug output, so they show up in the wrapp's
+log as `[rosetta-fixes] …`. `SECOND_CHANCE_ROSETTA_FIXES=0` (`--debug
+no-rosetta-fixes` on `sc wrapp run`) leaves the game unpatched.
+
+The source is `Packages/Modules/nancy-drew/RosettaFixes/`.
+`regenerate.sh` rebuilds the DLL with MinGW (`brew install mingw-w64`) from
+libogg's and libvorbis's releases, pinned by their hashes. It refuses a
+build that leaves x87 instructions in the decoding path, and writes the
+stripped DLL into the module's assets, where it is checked in. Building
+with `-DROSETTA_FIXES_STATS` adds counters to the log every 2 s: time spent
+decoding, and the most particle steps due in a frame. The CD and Steam
+editions' `Waverly.exe` match the patterns (Steam's is a different build at
+different addresses). Her's Windows download hasn't been tried. Other Her
+games are likely to differ, as whole-program optimisation picks each build's
+calling conventions.
+
 ## Engine packages
 
 An engine module's version says what the engine is made from: its makers'
@@ -711,6 +770,7 @@ none.
 | `nancy-drew` | `clean-exit-log.yaml`: the log Her's later engine writes, and its clean-exit line | the wrapp (`HerEngineLog`), compiled in by `sc generate` |
 | `nancy-drew` | `assets/*.au3`: the AutoIt scripts that click through an installer that won't run silently, and patchers with no silent mode | `GameInstallerRunner` |
 | `nancy-drew` | `needles/`: the splash screens many games share and the main menu's Exit, and `scenarios/quit-from-menu.yaml`, the test every game's bundle names ([testing.md](testing.md#scenarios)) | WrappPuppeteer (`TestData`), from the source tree or its bundle's copy |
+| `nancy-drew` | `functions/rosetta-fixes` and `assets/rosetta-fixes/comdlg32.dll`: the DLL that makes a game's sound and snow fast under Rosetta, and the function that lays it in (`DO nancy-drew.rosetta-fixes`, Waverly Academy's stages) ([above](#rosetta-fixes)) | the Wrappfile checker and planner, and the game, which loads it |
 | `nancy-drew` | `functions/patch`, `functions/configure-ini`, `functions/set-icon`: Wrappfile functions (`DO nancy-drew.patch --id=… --into=…`), the first two written by each stage that installs a Wine game, the last (the games' icon, `COPY` and `APP --icon`) by every game's; `assets/installshield-custom-dialog-automate.au3`, the script `INSTALLER.RUN --automation` names for an InstallShield installer that won't exit by itself; `assets/nancy-drew.icon`, the games' icon, and `assets/nancy-drew.icns` compiled from it by `sc generate` for their `APP --icon` | the Wrappfile checker and planner, and the builders carrying the plan out |
 
 Second Chance's app finds the nancy-drew module through `NancyDrewModule`.

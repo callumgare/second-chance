@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "nancy-drew"
-release: 14
+release: 15
 native: "nancy-drew"                         # its Swift: Packages/Modules/nancy-drew
 versions:
   - { version: "1" }
@@ -13,10 +13,11 @@ assets:
   - "assets/update-installation-wizard.au3"
   - "assets/nancy-drew.icns"                             # the games' icon (APP --icon), compiled from nancy-drew.icon by sc generate
   - "assets/nancy-drew.icon"
+  - "assets/rosetta-fixes/comdlg32.dll"                  # the games' sound and particles at speed under Rosetta (DO nancy-drew.rosetta-fixes)
   - "needles"                                            # WrappPuppeteer's: what its scenario looks for, by tag
   - "scenarios/quit-from-menu.yaml"                      # and the scenario every game's bundle names
 allow-paths: ["assets/"]                     # its functions read its AutoIt scripts and icon
-functions: ["functions/patch", "functions/configure-ini", "functions/set-icon"]   # DO nancy-drew.<name>
+functions: ["functions/patch", "functions/configure-ini", "functions/set-icon", "functions/rosetta-fixes"]   # DO nancy-drew.<name>
 notes:
   about: "What every Nancy Drew game shares: Her Interactive's installers, patches, settings and screens."
 build:

@@ -1,0 +1,16 @@
+# DO nancy-drew.rosetta-fixes --into=<the game's folder> --exe=<its program's file name>
+#
+# Makes the game run at speed under Rosetta, whose software x87 maths made a
+# scene with sounds and snow playing drop to a frame every couple of seconds:
+# its Ogg Vorbis decoding is replaced by one built for SSE2, and its particle
+# system's catch-up after a slow frame is capped. Both are done by a proxy
+# comdlg32.dll in the game's folder, which the game is made to load before
+# Wine's own (and which passes every comdlg32 call on to it). A game whose
+# code it doesn't recognise is left as it is. Built from
+# Packages/Modules/nancy-drew/RosettaFixes; docs/modules.md#rosetta-fixes.
+FUNCTION rosetta-fixes
+  INPUT into
+  INPUT exe
+  COPY assets/rosetta-fixes/comdlg32.dll ${input.into}/comdlg32.dll
+  WINE.REGISTRY --set "HKEY_CURRENT_USER\Software\Wine\AppDefaults\${input.exe}\DllOverrides:comdlg32" native,builtin
+END
