@@ -48,8 +48,10 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
 - **`#` starts a comment** at the start of a word, outside quotes; a `#` inside a
   word is ordinary.
 - **Words** are split on spaces. Double quotes make one word of what's between
-  them, and `""` inside them is a quote. There is no shell: `RUN` runs a program
-  with its arguments, so pipes and `&&` don't exist.
+  them, and `""` inside them is a quote. A `RUN` of a module's program gets
+  its arguments as words, with no shell; a `RUN` no module runs is a shell
+  command, given the rest of its line as written
+  ([below](#shell-commands)).
 - **Options** are `--name` or `--name=value`. For `RUN` and a module's `.RUN`,
   the first word that isn't one is the program, and everything after it is the
   program's arguments; other instructions take options anywhere
@@ -81,7 +83,7 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
 | `STORE <name> [--retention=keep\|cache\|session] [--scope=app\|global] [--exclusive[=<lock>]]`, `LOCK <name> [--scope=app\|global]` | Declares a store, data kept outside the app, and a lock stores are used under, before the first `FROM` ([Stores](#stores)). |
 | `CONST <name> = <value>`, `VAR <name> [= <value>]`, `SET <name> = <value>` | A fixed value; a value worked out in the Wrappfile; and a new value for a `VAR`. |
 | `USE <module>[@<constraint>] [AS <name>]` | Adds a module, and what it depends on: its instructions are then `<NAME>.INSTRUCTION`, its functions `DO <name>.<function>`, and its path types, options and mount fields are the stage's ([below](#what-modules-add)). |
-| `RUN [--mount=…]… [--env NAME=<value>]… <program> <args>` | Runs a program inside an engine: its path type says which. Mounts: `store` ([Stores](#stores)), `bind` (a file of the bundle's or a module's) and `fetch` (a download, by its hash). `--env` is the only way a value reaches a program's environment. A Wine program's takes `--wine.colors` and `--wine.display-mode` ([A build step's screen](#a-build-steps-screen)). |
+| `RUN [--mount=…]… [--env NAME=<value>]… <program> <args>` / `RUN [--mount=…]… [--env NAME=<value>]… <command>` | Runs a program inside an engine, its path type saying which; or, when no module of the stage runs its first word, a shell command on the Mac, in a sandbox that keeps it to the build ([Shell commands](#shell-commands)). Mounts: `store` ([Stores](#stores)), `bind` (a file of the bundle's or a module's) and `fetch` (a download, by its hash). `--env` is the only way a value reaches a program's environment. A Wine program's takes `--wine.colors` and `--wine.display-mode` ([A build step's screen](#a-build-steps-screen)). |
 | `COPY [--from=<stage or ${input.<name>}>] <src> <dest>` | Copies files: from another stage or an input, or without `--from`, a bundle's or module's file. |
 | `ADD --checksum=sha256:<hash> [--unpack=zip --member=<file> [--extract]] <url> <dest>` | A download, found in the download cache first. |
 | `MOVE`, `REMOVE`, `EDIT <file> --ini=<section>.<key>=<value>… [--keys-must-exist] [--create]` | File changes the builder makes itself. `EDIT` changes each setting in its section, or adds it; with `--keys-must-exist`, each setting must already be in the file, or the step fails naming those that aren't. The file must exist unless the step says `--create`. The older `--must-exist` is refused, with a message saying so; `--from-data` is gone, replaced by `NANCY-DREW.CONFIGURE-INI`. |
@@ -852,6 +854,56 @@ discs only when it has a `disc-files` stage. Its Her download stage runs
 edition's patches (`DO nancy-drew.patch`) are the ones its builder applies,
 in order (`TestFixtures/edition-patches.json`), and a Steam edition's
 `launch-mode` is a choice exactly where today's Steam build asks it.
+
+## Shell commands
+
+A `RUN` whose first word no module of the stage runs is a shell command, as
+Docker's shell form of `RUN` is. It's for the file work no other
+instruction does: patching a byte in a game's file, unpacking an odd
+archive. A Windows program is still Wine's, because the wine module claims
+`C:/…` paths: what decides is the path types ([below](#path-types)).
+
+```dockerfile
+RUN --mount=type=bind,source=assets/patch.pl,target=/patch.pl \
+    perl patch.pl "SharedSupport/prefix/drive_c/Game/Data/scripts.dat"
+```
+
+- **The command is the line as written** from its first word on, quotes,
+  `|`, `&&` and `>` included, given to `/bin/sh -c`. Continued lines are
+  joined with a space. Only `${…}` is the Wrappfile's, filled in with the
+  value as it is, unquoted, as Docker does: quote a value that may have
+  spaces. `$$` is a `$`, though a lone `$` (`$HOME`) needs no doubling.
+  A `#` after a space still starts a comment, so text with one in it goes
+  in double quotes, which keep it from the Wrappfile; single quotes don't
+  (`grep "a #b"`, not `grep 'a #b'`).
+- **It runs in the app's `Contents/`**, the folder a bare `/…` path names,
+  so a file there is written without its `/`: `SharedSupport/…`. A
+  module's paths (`C:/…`) aren't the Mac's, so name a Wine file by where
+  it is in the app, `SharedSupport/prefix/drive_c/…`.
+- **Its environment is bare**: `PATH` is `/usr/bin:/bin:/usr/sbin:/sbin`,
+  `HOME` and `TMPDIR` a temporary folder of its own, removed after it, and
+  `LANG` `en_US.UTF-8`; `--env` adds to it. `mktemp` with no template
+  ignores `TMPDIR`, so give it one: `mktemp "$TMPDIR/x.XXXX"`.
+- **A sandbox (`sandbox-exec`) keeps it to the build.** It may read and
+  write the step's tree, the stores its mounts link to and its temporary
+  folder; read the system's own files (`/usr`, `/bin`, `/System` and the
+  like); and nothing else, so not the person's files, nor a bundle's but by
+  a `bind` mount, nor the network. A bundle's own steps stay inside its
+  build, whatever they run (`ShellStep`).
+- **It has what every Mac has**: `sh`, `perl`, `sed`, `awk`, `dd`, `xxd`,
+  `unzip`, `plutil` and the rest of macOS's own tools. Not Python, which
+  only the developer tools bring, nor anything installed by hand.
+- **A module's options are refused** (`--wine.colors`), as there's no
+  module to take them, as is a secret input in its text: one reaches a
+  command only through `--env`.
+- **What it reads is its key's only as far as the plan knows**: its text,
+  its `--env`s and the files its mounts bring. Bring a bundle's file with a
+  `bind` mount, never a path, so changing the file makes the step fresh.
+- **No layer is kept after one by itself**, unlike after a program an
+  engine runs, as a command is quick; `LAYER-HINT` keeps one after a slow one.
+- **A non-zero exit fails the step**, its output in the build's log.
+
+`sc bundle plan` shows one as `RUN --shell <command>`.
 
 ## What a build may read
 

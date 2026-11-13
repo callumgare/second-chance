@@ -537,6 +537,14 @@ public nonisolated struct WrappfileChecker {
         for (index, argument) in instruction.arguments.enumerated() {
             check(argument, spec.role(ofArgument: index))
         }
+        // A RUN whose program no module of the stage runs is a shell
+        // command's, which takes none of a module's options.
+        if instruction.keyword == "RUN", let program = instruction.arguments.first?.raw, !program.hasPrefix("${"),
+           pathTypes.split(program) == nil, pathTypes.claiming(program, as: .program, among: scope.moduleIDs) == nil,
+           let option = instruction.options.first(where: { $0.name.contains(".") }) {
+            found.errors.append("\(at) --\(option.name): \(program) is a shell command's, as no module of the stage runs it, "
+                                + "and a module's options are for a program it runs")
+        }
         for option in instruction.options {
             guard let value = option.value else { continue }
             if option.name == "mount" {

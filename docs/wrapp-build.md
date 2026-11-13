@@ -405,7 +405,9 @@ app's tree ([Updating a wrapp](#updating-a-wrapp)) ([steam.md](steam.md#the-buil
   (fetched through the download cache, its bytes so far as the step's
   progress), `EDIT --ini` and `--plist` (with `--create` and
   `--keys-must-exist`), `MOVE`, `REMOVE`, `APP`, `ENGINE`, and `RUN`, whose
-  program goes to the executor of its path type's module.
+  program goes to the executor of its path type's module, or, planned as
+  `RUN --shell`, to `/bin/sh` in a sandbox (`ShellStep`,
+  [wrappfile.md](wrappfile.md#shell-commands)).
 - **A step's mounts** (`Mounts`) are `bind`, a file of the bundle's or a
   module's, and `fetch`, a download by its hash, each cloned into place at
   its `target` before the step and removed after, whatever happens; and
@@ -559,7 +561,8 @@ step and keeps a layer after the expensive ones (`StepKeys`, `Layering`).
   stage another is built or copied from, or a module's; after a module's
   instruction whose `module.yaml` says `layer: suggested` (the wine module's
   `PREFIX`, `STEAM.CLIENT`, `STEAM.SIGN-OUT`, `INSTALLER.RUN` and the like);
-  and after a core `ADD` or `RUN`; but not inside a `LAYER-HINT` block.
+  and after a core `ADD` or `RUN` of an engine's program (not a shell
+  command's); but not inside a `LAYER-HINT` block.
   Before it's kept, each executor checkpoints the tree (the wine one ends
   its session, so Wine's registry is written). A step skipped
   (`--on-failure=ask`) means nothing after it is kept or restored.

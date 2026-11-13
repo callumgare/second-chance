@@ -133,6 +133,24 @@ struct WrappfileParserTests {
         #expect(run.arguments.map(\.raw) == ["prog", "a b", #"say "hi""#, "--not-an-option"])
     }
 
+    @Test("A RUN keeps its words from the program on as written, for a shell: quotes, pipes and continued lines")
+    func shellText() throws {
+        let file = try WrappfileParser.parse(#"""
+        FROM scratch
+        RUN --env A=1   perl -pi -e "s/a b/c/"  x.txt \
+            | grep "say ""hi""" && echo ${const.x} $$HOME # a comment
+        WINE.RUN C:/a.exe "b c"
+        """#)
+        let body = try #require(file.stages.first?.body)
+        let steps = body.flatMap(\.instructions)
+        let run = try #require(steps.first)
+        #expect(run.shellText?.raw == #"perl -pi -e "s/a b/c/"  x.txt | grep "say ""hi""" && echo ${const.x} $$HOME"#)
+        #expect(run.shellText?.parts.last == .text(" $HOME"))
+        #expect(run.shellText?.substitutions == ["const.x"])
+        #expect(run.arguments.first?.raw == "perl")
+        #expect(steps.last?.shellText == nil)
+    }
+
     @Test("Keywords, module names and stage names are case-insensitive")
     func caseInsensitive() throws {
         let lower = try WrappfileParser.parse("""

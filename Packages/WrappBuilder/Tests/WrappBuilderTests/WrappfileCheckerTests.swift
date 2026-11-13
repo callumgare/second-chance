@@ -96,6 +96,15 @@ struct WrappfileCheckerTests {
         #expect(found.contains { $0.hasPrefix(expected) }, "\(found)")
     }
 
+    @Test("A RUN no module of the stage runs is a shell command, which checks clean but takes no module's options")
+    func shellRun() throws {
+        let shell = #"RUN --mount=type=bind,source=assets/disc.iss,target=/disc.iss perl -pi -e "s/a/b/" /x.txt | grep -q b && echo done"#
+        #expect(try problems(Self.valid.replacingOccurrences(of: "USE installer", with: "USE installer\n" + shell)) == [])
+        let colours = try problems(Self.valid.replacingOccurrences(of: "USE installer", with: "USE installer\nRUN --wine.colors=256 echo hi"))
+        #expect(colours == ["line 9: RUN --wine.colors: echo is a shell command's, as no module of the stage runs it, "
+                            + "and a module's options are for a program it runs"])
+    }
+
     @Test("A function reads the file's values, where it's defined, and its own INPUTs, but not its caller's")
     func functionsReadWhereDefined() throws {
         // The file's CONST, as the function is the file's.

@@ -243,6 +243,35 @@ struct BuildPlanTests {
         #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.display-mode=800") }
     }
 
+    @Test("A RUN no module's program type takes is a shell command, as written, its ${…}s filled in")
+    func shellRun() throws {
+        let text = """
+        CONST file = "a b.txt"
+        INPUT password --secret --default="hunter2"
+        FROM scratch AS only
+        USE wine
+        RUN --mount=type=bind,source=assets/disc.iss,target=/disc.iss perl -pi -e "s/x/y/" "${const.file}" | cat
+        RUN C:/setup.exe /s
+        RUN /bin/echo ${const.file}
+        FROM scratch AS colours
+        USE wine
+        RUN --wine.colors=256 echo hi
+        FROM scratch AS secret
+        RUN echo ${input.password}
+        FROM scratch AS no-wine
+        RUN C:/setup.exe
+        """
+        #expect(try steps(text).map(\.description) == [
+            #"RUN --mount=type=bind,source=bundle:assets/disc.iss,target=/disc.iss --shell perl -pi -e "s/x/y/" "a b.txt" | cat"#,
+            "RUN wine:C:/setup.exe /s",
+            "RUN --shell /bin/echo a b.txt",
+        ])
+        #expect(throws: BuildPlanner.PlanError.self) { try steps(text, stage: "colours") }
+        #expect(throws: BuildPlanner.PlanError.self) { try steps(text, stage: "secret") }
+        // A drive path is still Wine's, never a shell's, in a stage without it.
+        #expect(throws: BuildPlanner.PlanError.self) { try steps(text, stage: "no-wine") }
+    }
+
     @Test("--wine.quit-confirm-key is recorded beside a quit key, and refused without one")
     func quitConfirmKey() throws {
         func plan(_ options: String) throws -> BuildPlan {

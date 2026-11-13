@@ -2298,6 +2298,14 @@ contain the programs it runs.
   only the edition's inputs and the bundle's or a module's files; a volume
   is always a folder inside the wrapp's own in Application Support; and a
   download is only ever accepted with the hash the bundle gives.
+
+  > _Post-implementation edit, 2026-11-13, by Claude at Callum's request:
+  > a `RUN` that no module runs is now a shell command on the Mac, so a
+  > bundle no longer runs programs only inside an engine. It runs in a
+  > sandbox that lets it write only in the build and read only the build
+  > and the system's files, with no network, which keeps the rule's point:
+  > a bundle's own steps stay inside its build
+  > ([wrappfile.md](../wrappfile.md#shell-commands))._
 - **Where it came from is shown.** Shipped bundles are signed with Second
   Chance; added bundles and modules are marked as added in the app and in
   failure reports, and an added bundle overriding a shipped one is logged.
@@ -3135,6 +3143,8 @@ never written to a layer or a key — the shared Steam sign-in).
   session costs seconds), so layers are grouped, by hand or automatically;
   `\` is special only at the end of a line, since Windows paths are full of
   it (Docker needs `# escape=` for that); no shell form of `RUN`.
+  _(Post-implementation edit, 2026-11-13, by Claude at Callum's request: a
+  shell form came later, for a `RUN` no module runs, sandboxed; see Trust.)_
 - **Its warning:** Docker, like flatpak-builder, is known for cache misses
   nobody can explain.
 

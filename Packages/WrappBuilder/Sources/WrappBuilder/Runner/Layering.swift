@@ -151,7 +151,8 @@ nonisolated final class Layering: Sendable {
         }
         if step.inLayerHint { return nil }
         if configuration.suggestsLayer(step) { return "module" }
-        if step.module == nil, ["ADD", "RUN"].contains(step.instruction) { return "core" }
+        // A shell command is quick, as a rule: LAYER-HINT keeps one after one that isn't.
+        if step.module == nil, ["ADD", "RUN"].contains(step.instruction), !step.has("shell") { return "core" }
         return nil
     }
 }

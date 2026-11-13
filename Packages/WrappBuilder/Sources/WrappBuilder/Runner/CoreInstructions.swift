@@ -217,8 +217,10 @@ public nonisolated enum CoreInstructions {
 
     /// `RUN [--mount=…] [--env NAME=<value>] <program> <arguments>`: the
     /// program through its path type's module, its mounts in place, its exit
-    /// code the step's success.
+    /// code the step's success. One planned `--shell`, whose program no
+    /// module runs, is a shell command (`ShellStep`).
     static func runProgram(_ step: PlannedStep, in context: LocalStepContext) async throws {
+        if step.has("shell") { return try await ShellStep.run(step, in: context) }
         guard let program = step.arguments.first else { throw StepFailure.recipe("\(step.origin): RUN names its program") }
         var environment: [String: String] = [:]
         for pair in step.options["env"] ?? [] {

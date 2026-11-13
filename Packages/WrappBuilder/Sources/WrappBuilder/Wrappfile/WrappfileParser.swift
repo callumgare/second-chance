@@ -38,6 +38,9 @@ public nonisolated enum WrappfileParser {
     struct Line {
         let number: Int
         let words: [RawWord]
+        /// The line as written, continuations joined and its comment gone:
+        /// what a shell `RUN` takes its command from.
+        var text = ""
     }
 
     /// A word as written: its text with quotes removed, and whether it
@@ -49,6 +52,8 @@ public nonisolated enum WrappfileParser {
         /// Where in `text` a quote began partway through the word
         /// (`${a}="b"`), which a condition splits.
         var quoteStart: Int?
+        /// Where in its line's text the word begins, quote included.
+        var start = 0
     }
 
     static func logicalLines(_ text: String) throws(WrappfileError) -> [Line] {
@@ -63,12 +68,12 @@ public nonisolated enum WrappfileParser {
             pending += (pending.isEmpty ? "" : " ") + content
             if continues { continue }
             let words = try split(pending, line: start)
-            if !words.isEmpty { result.append(Line(number: start, words: words)) }
+            if !words.isEmpty { result.append(Line(number: start, words: words, text: pending)) }
             pending = ""
         }
         if !pending.isEmpty {
             let words = try split(pending, line: start)
-            if !words.isEmpty { result.append(Line(number: start, words: words)) }
+            if !words.isEmpty { result.append(Line(number: start, words: words, text: pending)) }
         }
         return result
     }
@@ -99,13 +104,18 @@ public nonisolated enum WrappfileParser {
         var quoteStart: Int?
         var inQuotes = false
         var started = false
+        var start = 0
+        var position = -1
         var characters = Array(text)[...]
         while let character = characters.popFirst() {
+            position += 1
+            if !started, !inQuotes, character != " ", character != "\t" { start = position }
             if inQuotes {
                 if character == "\"" {
                     if characters.first == "\"" {
                         current.append("\"")
                         characters.removeFirst()
+                        position += 1
                     } else {
                         inQuotes = false
                     }
@@ -118,7 +128,7 @@ public nonisolated enum WrappfileParser {
                 if !started { quoted = true } else if quoteStart == nil { quoteStart = current.count }
                 started = true
             } else if character == " " || character == "\t" {
-                if started { words.append(RawWord(text: current, quoted: quoted, quoteStart: quoteStart)) }
+                if started { words.append(RawWord(text: current, quoted: quoted, quoteStart: quoteStart, start: start)) }
                 current = ""
                 quoted = false
                 quoteStart = nil
@@ -129,7 +139,7 @@ public nonisolated enum WrappfileParser {
             }
         }
         if inQuotes { throw WrappfileError(line: line, message: "a quote isn't closed") }
-        if started { words.append(RawWord(text: current, quoted: quoted, quoteStart: quoteStart)) }
+        if started { words.append(RawWord(text: current, quoted: quoted, quoteStart: quoteStart, start: start)) }
         return words
     }
 
@@ -435,6 +445,7 @@ public nonisolated enum WrappfileParser {
             if WrappfileParser.declarations.contains(keyword) { return try declaration(line, keyword: keyword) }
             let runsAProgram = keyword == "RUN" || keyword.hasSuffix(".RUN")
             var words = Array(line.words.dropFirst())[...]
+            var shellText: Word?
             while let raw = words.popFirst() {
                 if !runsAProgram || arguments.isEmpty, !raw.quoted, raw.text.hasPrefix("--"), raw.text.count > 2 {
                     let body = raw.text.dropFirst(2)
@@ -449,10 +460,19 @@ public nonisolated enum WrappfileParser {
                         options.append(InstructionOption(name: String(body), value: nil))
                     }
                 } else {
+                    if keyword == "RUN", arguments.isEmpty {
+                        // A shell command, if no module's program type takes its
+                        // first word, is the rest of the line as written, quotes
+                        // and all; only its ${…}s are filled in.
+                        let text = String(Array(line.text)[raw.start...])
+                        shellText = try word(RawWord(text: text, quoted: false), line: line.number)
+                    }
                     arguments.append(try word(raw, line: line.number))
                 }
             }
-            return Instruction(keyword: keyword, options: options, arguments: arguments, line: line.number)
+            var instruction = Instruction(keyword: keyword, options: options, arguments: arguments, line: line.number)
+            instruction.shellText = shellText
+            return instruction
         }
 
         /// `INPUT <name> [--default=<value>] [--secret]`, or `CONST`, `VAR`

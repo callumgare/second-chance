@@ -139,6 +139,10 @@ public nonisolated struct Instruction: Sendable, Equatable {
     public let options: [InstructionOption]
     public let arguments: [Word]
     public let line: Int
+    /// A core `RUN`'s words from its first argument on, as written, quotes
+    /// and all: the command a shell is given when no module's program type
+    /// takes that first word.
+    public var shellText: Word?
 
     /// The module alias of a module's instruction, in lower case as a
     /// module's name is (`wine` for `WINE.MOUNT`); nil for a core one.

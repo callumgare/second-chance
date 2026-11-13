@@ -138,6 +138,32 @@ struct PlanRunnerTests {
         // A program in no engine is refused.
         await #expect(throws: StepFailure.self) { try await run([step("RUN", "/bin/sh")], in: tree) }
     }
+
+    @Test("A shell RUN runs in the tree's Contents with its mounts and --envs, and can't write outside the tree")
+    func runsAShellCommand() async throws {
+        let tree = try tree(), outside = FileManager.default.temporaryDirectory.appendingPathComponent("outside-\(UUID().uuidString)")
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("mount-\(UUID().uuidString).txt")
+        defer { for each in [tree, outside, file] { try? FileManager.default.removeItem(at: each) } }
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try "from the bundle".write(to: file, atomically: true, encoding: .utf8)
+        let shell: [String: [String]] = ["shell": [""]]
+        try await run([step("RUN", options: shell.merging(["env": ["GREETING=hello there"],
+                                                           "mount": ["type=bind,source=bundle:x.txt,target=/x.txt"]]) { $1 },
+                            #"echo "$GREETING" > made.txt && cat x.txt | tr a-z A-Z >> made.txt && echo "$HOME" | grep -q run-"#)],
+                      files: ["bundle:x.txt": file], in: tree)
+        let made = try String(contentsOf: tree.appendingPathComponent("Contents/made.txt"), encoding: .utf8)
+        #expect(made == "hello there\nFROM THE BUNDLE")
+        #expect(!FileManager.default.fileExists(atPath: tree.appendingPathComponent("Contents/x.txt").path))
+        // Outside the tree, it can neither write nor read the person's files.
+        let escape = outside.appendingPathComponent("escaped.txt")
+        await #expect(throws: StepFailure.failed("Wrappfile:1: the shell command exited with 1")) {
+            try await run([step("RUN", options: shell, "echo x > '\(escape.path)'")], in: tree)
+        }
+        #expect(!FileManager.default.fileExists(atPath: escape.path))
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        await #expect(throws: StepFailure.self) { try await run([step("RUN", options: shell, "ls '\(home)'")], in: tree) }
+        await #expect(throws: StepFailure.self) { try await run([step("RUN", options: shell, "curl -sf -m 5 https://example.com")], in: tree) }
+    }
 }
 
 /// Layers kept by the runner and restored by the next build.

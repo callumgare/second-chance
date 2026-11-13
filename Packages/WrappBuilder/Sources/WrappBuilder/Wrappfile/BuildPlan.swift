@@ -859,7 +859,26 @@ public nonisolated struct BuildPlanner {
                     arguments.append(role == .input ? value : try fullForm(value, role: role, scope: scope, modules: stageModules, origin: at))
                 }
                 if module == nil, instruction.keyword == "RUN" {
-                    try checkScreenOptions(options.compactMapValues(\.first), origin: at)
+                    if let program = arguments.first, planner.pathTypes.split(program) == nil, let text = instruction.shellText {
+                        // No module's program type takes it: a shell command,
+                        // given as written, run on the Mac in a sandbox.
+                        if let option = options.keys.sorted().first(where: { $0.contains(".") }) {
+                            throw PlanError(description: "\(at): --\(option) is for a program a module runs, and \(program) is "
+                                            + "a shell command's (no module of the stage runs it)")
+                        }
+                        // A command is logged and keyed: a secret reaches one only through --env.
+                        for expression in text.substitutions {
+                            if let reference = try? Reference.parse(expression), reference.root == "input",
+                               let name = reference.plainPath.first, case .input(_, _, true)? = scope.binding(name) {
+                                throw PlanError(description: "\(at): ${\(expression)} is a secret, which reaches a shell command "
+                                                + "only through --env NAME=${\(expression)}, never its text")
+                            }
+                        }
+                        options["shell"] = [""]
+                        arguments = [try substitute(text, in: scope, origin: at, as: .text, runTime: false)]
+                    } else {
+                        try checkScreenOptions(options.compactMapValues(\.first), origin: at)
+                    }
                 }
                 var step = PlannedStep(instruction: instruction.name, module: module, options: options,
                                        arguments: arguments, name: options["name"]?.first, origin: at)

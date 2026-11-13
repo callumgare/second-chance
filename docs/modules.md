@@ -123,7 +123,9 @@ build:
 
 - **`path-types`** are the kinds of path it handles, by name (never one
   letter, so a drive is never a type): their `roles`, `location` (a place in
-  the app or the engine) and `program` (what `RUN` and `LAUNCH` start), and
+  the app or the engine) and `program` (what `RUN` and `LAUNCH` start: a
+  `RUN` whose first word no module claims is a shell command,
+  [wrappfile.md](wrappfile.md#shell-commands)), and
   an optional `short-form`, a regular expression on the whole path that it
   claims in those roles in a stage that uses it (wine's and dosbox's `C:/…`).
   Where two modules' short forms match, the one the stage used last takes it
