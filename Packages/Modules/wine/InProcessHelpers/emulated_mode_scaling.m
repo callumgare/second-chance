@@ -54,6 +54,7 @@
 #import <Cocoa/Cocoa.h>
 #import <OpenGL/OpenGL.h>
 #import <QuartzCore/QuartzCore.h>
+#import <objc/message.h>
 #import <objc/runtime.h>
 #import <os/log.h>
 #include <dlfcn.h>
@@ -684,6 +685,82 @@ static void centredUpdateLayer(NSView *self, SEL _cmd) {
     }
 }
 
+// ## Wine's hold on the pointer, after the window changes shape
+//
+// Wine's Mac driver holds the pointer in a window (WineConfinementClipCursor-
+// Handler) by intersecting the clip rect with the window's frame once, when it
+// starts clipping, and giving the window that as its mouse confinement rect.
+// It never works it out again while the clip rect stays the same: the
+// controller's -startClippingCursor: returns early for an equal rect, and
+// Wine assumes a clipping window can't change shape (it even locks windows in
+// place then, CursorClippingLocksWindows). With an emulated mode a game's
+// window does change shape while it clips: it makes its window the mode's size
+// (800x600 at the top left of the display) and switches mode, win32u then
+// clips the cursor to that window, which now covers the emulated screen, and
+// only after that does Wine map the window up to the display. When the clip
+// lands first the pointer stays held in the old 800x600 frame, the top left of
+// the screen, for good: coming back to the game asks for the same rect again,
+// without the clip having stopped while the game was in the background (see
+// "In the background"). Warnings at Waverly Academy did so on a loaded Mac
+// (2026-11-13); on an idle one the window grew first. So when a window Wine is
+// holding the pointer in changes frame, its handler starts clipping again with
+// the rect it already has, working the confinement out for the frame the
+// window has now.
+
+@interface NSWindow (EmulatedModeConfinement)
+- (NSRect)mouseConfinementRect;
+@end
+
+static void reclipForWindowFrame(NSWindow *window) {
+    Class controllerClass = NSClassFromString(@"WineApplicationController");
+    if (!controllerClass || ![controllerClass respondsToSelector:NSSelectorFromString(@"sharedController")]) return;
+    id controller = ((id (*)(id, SEL))objc_msgSend)(controllerClass, NSSelectorFromString(@"sharedController"));
+    Ivar handlerIvar = class_getInstanceVariable(controllerClass, "clipCursorHandler");
+    if (!controller || !handlerIvar) return;
+    id handler = object_getIvar(controller, handlerIvar);
+    if (!handler || ![handler isKindOfClass:NSClassFromString(@"WineConfinementClipCursorHandler")]) return;
+    Ivar clippingIvar = class_getInstanceVariable([handler class], "clippingCursor");
+    Ivar windowNumberIvar = class_getInstanceVariable([handler class], "clippingWindowNumber");
+    if (!clippingIvar || !windowNumberIvar) return;
+    BOOL clipping = *(BOOL *)((uint8_t *)(__bridge void *)handler + ivar_getOffset(clippingIvar));
+    NSInteger number = *(NSInteger *)((uint8_t *)(__bridge void *)handler + ivar_getOffset(windowNumberIvar));
+    if (!clipping || number != window.windowNumber) return;
+
+    NSValue *clip = [handler valueForKey:@"cursorClipRect"];
+    if (!clip) return;
+    CGRect rect = NSRectToCGRect(clip.rectValue);
+    NSRect before = window.mouseConfinementRect;
+    if (!((BOOL (*)(id, SEL, CGRect))objc_msgSend)(handler, NSSelectorFromString(@"startClippingCursor:"), rect)) {
+        helperReport("EmulatedMode", "warning", "couldn't hold the pointer in the game's window again after it changed shape");
+        return;
+    }
+    NSRect after = window.mouseConfinementRect;
+    if (!NSEqualRects(before, after)) {
+        helperReport("EmulatedMode", "notice",
+                     "the pointer was held in %.0fx%.0f at %.0f,%.0f of the game's window; now %.0fx%.0f at %.0f,%.0f, "
+                     "as the window has changed shape",
+                     before.size.width, before.size.height, before.origin.x, before.origin.y,
+                     after.size.width, after.size.height, after.origin.x, after.origin.y);
+    }
+}
+
+static void reclipWhenWindowsChangeShape(void) {
+    Class wineWindow = NSClassFromString(@"WineWindow");
+    if (!wineWindow || ![NSWindow instancesRespondToSelector:@selector(mouseConfinementRect)]) {
+        helperReport("EmulatedMode", "warning", "no -mouseConfinementRect to check; the pointer may stay held in the "
+                     "game's window as it was before the mode switch");
+        return;
+    }
+    void (^check)(NSNotification *) = ^(NSNotification *note) {
+        NSWindow *window = note.object;
+        if (![window isKindOfClass:wineWindow]) return;
+        reclipForWindowFrame(window);
+    };
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+    [center addObserverForName:NSWindowDidResizeNotification object:nil queue:nil usingBlock:check];
+    [center addObserverForName:NSWindowDidMoveNotification object:nil queue:nil usingBlock:check];
+}
+
 __attribute__((constructor))
 static void emulatedModeScalingInit(void) {
     gLog = os_log_create("com.secondchance.gamewrapper", "EmulatedMode");
@@ -743,6 +820,7 @@ static void emulatedModeScalingInit(void) {
                      "a GDI program's scaled picture may show a line of what Wine didn't paint at its right and bottom");
     }
 #endif
+    reclipWhenWindowsChangeShape();
     gArmed = YES;
     helperReport("EmulatedMode", "notice", "armed in %s", getenv("EMULATED_MODE_SCALING_EXE"));
 }

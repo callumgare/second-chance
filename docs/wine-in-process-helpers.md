@@ -649,6 +649,27 @@ blits it up; winemac has nothing like it.) In the game's process the helper:
   (2026-11-10, in a test session) did the same until this, and left it
   whole after.
 
+- holds the pointer in the whole picture once the window has grown. win32u
+  clips the cursor to a foreground window covering the screen, and the Mac
+  driver (`WineConfinementClipCursorHandler`) does that by intersecting the
+  clip rect with the window's frame once, as it starts, and giving the window
+  that as its `-setMouseConfinementRect:`. It never works it out again while
+  the rect stays the same, as Wine assumes a clipping window can't change
+  shape. Here it does: the game's mode-sized window covers the emulated screen
+  as soon as the mode switches, and win32u may clip to it before Wine maps the
+  window up to the display. Warnings at Waverly Academy, on a busy MacBook
+  (2026-11-13), had its cursor held to the top-left 800×600 points of the
+  screen for good, and switching away and back didn't help, since the game
+  asks for the same rect again having never stopped clipping (above). On an
+  idle Mac, a test session included, the window grew first and nothing was
+  wrong. So when a Wine window the pointer is held in moves or resizes, the
+  helper has Wine's handler start clipping again with the rect it has
+  (`-startClippingCursor:`), against the frame the window has now. The log
+  says `the pointer was held in 674x600 at 126,0 of the game's window; now
+  1260x945 at 126,0, as the window has changed shape`. To see the clips
+  themselves, `--debug wine=err+all,+cursor` logs each one Wine passes to the
+  Mac driver (`macdrv_ClipCursor`), in the display's points.
+
 Once Wine's window covers the display, [native fullscreen](#native-fullscreen)
 puts it into a Space as for any other Direct3D game. The Space is the size the
 window already is, so nothing is resized. Nothing happens in a game that never
