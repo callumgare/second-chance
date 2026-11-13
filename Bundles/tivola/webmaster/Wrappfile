@@ -28,6 +28,17 @@ REMOVE C:/quicktime-setup
 # asks for a screen size and then plays from wherever it was started.
 WINE.KEEP-DISCS ${input.disc-1} --into=C:/webmaster-cd
 
+# A Lingo error catcher. When the game hits a script error ("Director Player
+# Error"), it writes the error and where the player was (the scene, recent
+# places, the sprites on screen) to "Webmaster error log.txt" in the saves,
+# then lets Director show its alert as before. The patch makes the game's
+# startup handler (globalInitialize, in the scripts cast) turn the hook's
+# text into a script and set it as Director's alertHook. It changes the disc
+# copy, which D: is too, and leaves one already patched alone.
+RUN --mount=type=bind,source=error-log/alert-hook.pl,target=/alert-hook.pl \
+    --mount=type=bind,source=error-log/alert-hook.lingo,target=/alert-hook.lingo \
+    perl alert-hook.pl "SharedSupport/prefix/drive_c/webmaster-cd/disk-1/Data/Casts Sander/HD/scripts.cxt" alert-hook.lingo
+
 # It draws with GDI (Dirapi.dll imports neither ddraw nor d3d). The projector
 # never sets a display mode: its window covers whatever screen it finds, its
 # 800x600 stage drawn small in the middle. Started in an 640x480 mode, which

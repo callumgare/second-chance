@@ -4,7 +4,7 @@ id: "tivola/webmaster"
 version: 1
 title: "Webmaster"
 display-name: "Webmaster"
-allow-paths: ["quicktime/", "assets/"]  # QuickTime 4's setup script, and its icon
+allow-paths: ["quicktime/", "assets/", "error-log/"]  # QuickTime 4's setup script, its icon, and its error catcher
 
 volumes:
   saves:

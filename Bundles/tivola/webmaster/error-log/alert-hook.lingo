@@ -1,0 +1,72 @@
+-- Second Chance: writes each Lingo error, with where the player was, to
+-- "Webmaster error log.txt" beside the saves, then lets Director show its alert.
+-- The riskier details are written last, so an error reading them loses only those.
+property busySince
+
+on alertHook me, err, msg
+  global sites, gameProgression, historyList, backgroundObject, objectList
+  -- an error while logging one comes straight back here: let Director report it
+  if integerp(busySince) then
+    if the milliseconds - busySince < 2000 then return 0
+  end if
+  busySince = the milliseconds
+  nl = numToChar(10)
+  t = "==== " & the long date && the long time & nl
+  t = t & "Error: " & string(err) & nl & "Message: " & string(msg) & nl
+  t = t & "Movie: " & the movieName && "frame" && the frame & nl
+  scWrite(me, t)
+  t = ""
+  if objectp(gameProgression) then
+    t = t & "Layer:" && string(gameProgression.layer) & ", scene:" && string(gameProgression.scene)
+    t = t & ", level:" && string(gameProgression.level) & ", view:" && string(gameProgression.view) & nl
+  end if
+  if not voidp(sites) then
+    if not voidp(sites.currentSitePage) then t = t & "Place: " & string(sites.currentSitePage.id) & nl
+  end if
+  if not voidp(backgroundObject) then
+    if not voidp(backgroundObject.sitePage) then t = t & "Background page: " & string(backgroundObject.sitePage.id) & nl
+  end if
+  if listp(historyList) then
+    h = ""
+    n = historyList.count()
+    repeat with i = max(1, n - 14) to n
+      s = getAt(historyList, i)
+      h = h && string(s.id)
+    end repeat
+    t = t & "Recent places:" & h & nl
+  end if
+  t = t & "Sprites:" & nl
+  repeat with i = 1 to the lastChannel
+    m = the member of sprite i
+    if the number of m > 0 then
+      if the name of m <> "empty member" then t = t & "  " & i & ": " & string(m) && QUOTE & the name of m & QUOTE & nl
+    end if
+  end repeat
+  scWrite(me, t)
+  if listp(objectList) then
+    t = "Objects:"
+    repeat with o in objectList
+      t = t && string(o.getType())
+    end repeat
+    scWrite(me, t & nl)
+  end if
+  scWrite(me, nl)
+  busySince = 0
+  return 0
+end
+
+on scWrite me, t
+  p = dosGetSpecialFolder("Personal")
+  if the last char of p <> "\" then p = p & "\"
+  p = p & "Webmaster error log.txt"
+  f = new(xtra "fileio")
+  f.openFile(p, 0)
+  if f.status() <> 0 then
+    f.createFile(p)
+    f.openFile(p, 0)
+  end if
+  f.setPosition(f.getLength())
+  f.writeString(t)
+  f.closeFile()
+  f = 0
+end
