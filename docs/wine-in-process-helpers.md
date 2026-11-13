@@ -54,7 +54,10 @@ variables reach the game from whichever process launches it.
 (`wine.start`). A game Steam launches (`-applaunch`, the `wine-steam` engine) is started
 by the Steam client, which has the environment it was started with — not the
 `-applaunch` call's — so the wrapp's `SteamClient` sets them on every Steam
-process it runs. Steam's own processes have other names and never arm.
+process it runs. Steam's own processes have other names and never arm. A
+Steam that updates itself as it starts is restarted by its updater, which
+leaves them out, so the wrapp (`WrappSteam.waitUntilSignedIn`) starts Steam
+again once it has signed in after an update; the game then gets them.
 
 A game Big Fish owns is started by its DRM service, `bfggameservices.exe`
 (`bfgprocess.exe` only hands it the game's `.bfg`), and a Windows service

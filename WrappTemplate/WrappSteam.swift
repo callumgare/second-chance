@@ -42,6 +42,9 @@ nonisolated final class WrappSteam: @unchecked Sendable {
     }
 
     let client: SteamClient
+    /// Whether the game Steam launches has in-process helpers to arm, whose
+    /// variables reach it only from a Steam this wrapp started (`SteamClient.run`).
+    private let armsGameHelpers: Bool
     private let store = SteamSessionStore()
     private let prefix: URL
     private let lock: SteamActiveLock
@@ -62,9 +65,10 @@ nonisolated final class WrappSteam: @unchecked Sendable {
          onOutputLine: (@Sendable (String) -> Void)? = nil) throws {
         self.lock = lock
         prefix = config.winePrefix
+        let gameExe = getGameLaunchInfo(config).gameExePath.map(URL.init(fileURLWithPath:))
+        armsGameHelpers = gameExe != nil
         client = SteamClient(wrappPath: config.appPath, prefixDir: config.winePrefix,
-                             gameExe: getGameLaunchInfo(config).gameExePath.map(URL.init(fileURLWithPath:)),
-                             launch: config.launch, onOutputLine: onOutputLine)
+                             gameExe: gameExe, launch: config.launch, onOutputLine: onOutputLine)
 
         // A wrapp that was force-quit or crashed never stopped its Steam, which
         // is still running here, signed in. This wrapp holds the Steam lock, so
@@ -98,9 +102,16 @@ nonisolated final class WrappSteam: @unchecked Sendable {
     /// taking up its offer to sign in afresh (`signInAfresh`) signs out of
     /// Steam, takes the sign-in out of the prefix, and starts Steam again to
     /// ask for one. Otherwise the wait ends early only if Steam exits.
+    ///
+    /// A Steam that updated itself on the way is started again once it has
+    /// signed in: its updater starts the new client itself, without the
+    /// variables that arm the game's helpers, so the game it launched had
+    /// none (Secrets Can Kill Remastered, 2026-11-13). The client started
+    /// again is up to date, signs in with the sign-in it has, and has them.
     func waitUntilSignedIn(status: (Status) -> Void) throws {
         let client = client
         var watch = SteamSignInWatch(client: client, runningCheckInterval: 5)
+        var updatedItself = false
         var policy = SteamStallPolicy(canOfferFreshSignIn: true)
         func startAgain() {
             Blocking.wait { await client.shutdown(timeout: 30) }
@@ -139,6 +150,10 @@ nonisolated final class WrappSteam: @unchecked Sendable {
             for event in watch.check() {
                 try carryOut(policy.handle(event))
                 switch event {
+                case .signedIn where updatedItself && armsGameHelpers:
+                    logger.notice("Steam updated itself and signed in; starting it again, as the client its update started doesn't arm the game's helpers")
+                    updatedItself = false
+                    startAgain()
                 case .signedIn:
                     state.withLock { signedIn = true }
                     status(.signedIn)
@@ -147,6 +162,7 @@ nonisolated final class WrappSteam: @unchecked Sendable {
                     status(.waitingForSignIn)
                     Blocking.wait { await client.bringSignInWindowForward() }
                 case .startup(let stage):
+                    if case .updating = stage { updatedItself = true }
                     status(.startup(stage))
                 case .quiet, .active, .stuck:
                     break
