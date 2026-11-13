@@ -1,6 +1,5 @@
-# Its name, on the intro's title card about ten seconds in and on the main
-# menu. (Started in its 800x600 display mode, it skips the start screen that
-# checks the display; OCR reads its "i" as a Cyrillic one now and then.)
+# Its name and the level choice, on the title screen it reaches once its
+# intro has played (copied from Bioscopia's at first, which never matched).
 kind: "text"
 tags: ["running"]
-text: { strings: ["Bioscop", "New game"] }
+text: { strings: ["WEBMASTER", "Level"] }
