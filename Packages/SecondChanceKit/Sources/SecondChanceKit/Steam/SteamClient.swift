@@ -265,6 +265,11 @@ nonisolated public final class SteamClient: SteamClientDriving, @unchecked Senda
             logger.warning("Steam's Wine session was still running after \(elapsed)s; stopping it. \(running)")
             await wine.server.stop()
         }
+        // A session whose server went while Steam ran "stops" at once and
+        // leaves Steam behind, spinning on msync errors for hours: a stuck
+        // Steam started again (Ghost of Thornton Hall, 2026-11-13) left two
+        // that kept a test Mac fully loaded until Big Fish's launchers failed.
+        await wine.server.clearLeftovers()
     }
 
     /// The Wine programs running, for the log.

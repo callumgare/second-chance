@@ -555,7 +555,11 @@ runs `C:\Program Files (x86)\Steam\steam.exe` in the prefix:
   has been seen to leave a web helper running for minutes, so after the
   timeout it stops the wineserver. A session still running after 25 s has
   the Wine programs then running logged, and again before it is stopped,
-  so the log names what held it open.
+  so the log names what held it open. Last, it kills whatever of the
+  prefix's is still running with no wineserver (`clearLeftovers`): a session
+  whose server went while Steam ran counts as stopped at once, and Steam,
+  left behind, spins on `msync` errors for hours, printing millions of lines
+  and keeping the Mac loaded.
 
 **Steam writes its logs with Windows line endings.** In Swift `"\r\n"` is a
 single `Character`, so `split(separator: "\n")` never splits them; split with
