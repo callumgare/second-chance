@@ -225,10 +225,22 @@ public nonisolated final class RPCConnection: Sendable {
         var onUnanswered: (@Sendable () -> Void)?
     }
 
-    public init(input: FileHandle, output: FileHandle, handler: Handler? = nil, cancelGrace: Duration = .seconds(10)) {
+    public convenience init(input: FileHandle, output: FileHandle, handler: Handler? = nil, cancelGrace: Duration = .seconds(10)) {
+        self.init(input: input, output: output, cancelGrace: cancelGrace) { _ in handler }
+    }
+
+    /// A connection whose handler needs the connection itself (a module's
+    /// program answers through it): `makeHandler` is given it, and what it
+    /// returns answers from the first message on. Reading starts only once
+    /// it has, so a request already waiting (the build's `hello`, sent as the
+    /// program starts) is never read with nothing to answer it.
+    public init(input: FileHandle, output: FileHandle, cancelGrace: Duration = .seconds(10),
+                makeHandler: (RPCConnection) -> Handler?) {
         self.output = output
         self.cancelGrace = cancelGrace
-        self.callbacks = Mutex(Callbacks(handler: handler))
+        self.callbacks = Mutex(Callbacks(handler: nil))
+        let handler = makeHandler(self)
+        callbacks.withLock { $0.handler = handler }
         let lines = Self.lines(of: input)
         let task = Task.detached { [weak self] in
             for await line in lines {
@@ -466,49 +478,52 @@ public nonisolated struct LogLine: Codable, Sendable {
 public nonisolated enum ModuleProgram {
     public static func serve(_ executor: some ModuleExecutor, input: FileHandle = .standardInput,
                              output: FileHandle = .standardOutput) async throws {
-        let connection = RPCConnection(input: input, output: output)
         let done = AsyncStream<Void>.makeStream()
-        connection.whenClosed { done.continuation.finish() }
         let signals = SignalHandlers()
-        connection.setHandler { method, params in
-            func decode<T: Decodable>(_ type: T.Type) throws -> T {
-                guard let params else { throw RPCError(.invalidParams, "\(method) has no params") }
-                return try JSONDecoder().decode(type, from: params)
-            }
-            func encode<T: Encodable>(_ value: T) throws -> Data { try JSONEncoder().encode(value) }
-            switch method {
-            case "hello":
-                return try encode(Hello(protocol: ModuleProtocol.version, handles: type(of: executor).handles))
-            case "keyInputs":
-                let remote = try decode(RemoteStep.self)
-                return try encode(try await executor.keyInputs(for: remote.step, in: RemoteStepContext(connection, remote, signals)))
-            case "run":
-                let remote = try decode(RemoteStep.self)
-                try await executor.run(remote.step, in: RemoteStepContext(connection, remote, signals))
-                return nil
-            case "runProgram":
-                let run = try decode(RunProgram.self)
-                let remote = RemoteStep(step: run.program.step, tree: run.mounts.first ?? "/", signals: [])
-                return try encode(Exit(exit: try await executor.runProgram(run.program, in: RemoteStepContext(connection, remote, signals))))
-            case "checkpoint":
-                let remote = try decode(RemoteStep.self)
-                try await executor.checkpoint(RemoteStepContext(connection, remote, signals))
-                return nil
-            case "finish":
-                await executor.finish()
-                done.continuation.finish()
-                return nil
-            case "signal":
-                let fired = try decode(SignalFired.self)
-                signals.fire(fired.option, fired.fields)
-                return nil
-            default:
-                throw RPCError(.methodNotFound, "a module's program has no \(method)")
+        // The handler is in place before anything is read: the build sends `hello` as the program starts.
+        let connection = RPCConnection(input: input, output: output) { connection in
+            connection.whenClosed { done.continuation.finish() }
+            return { method, params in
+                func decode<T: Decodable>(_ type: T.Type) throws -> T {
+                    guard let params else { throw RPCError(.invalidParams, "\(method) has no params") }
+                    return try JSONDecoder().decode(type, from: params)
+                }
+                func encode<T: Encodable>(_ value: T) throws -> Data { try JSONEncoder().encode(value) }
+                switch method {
+                case "hello":
+                    return try encode(Hello(protocol: ModuleProtocol.version, handles: type(of: executor).handles))
+                case "keyInputs":
+                    let remote = try decode(RemoteStep.self)
+                    return try encode(try await executor.keyInputs(for: remote.step, in: RemoteStepContext(connection, remote, signals)))
+                case "run":
+                    let remote = try decode(RemoteStep.self)
+                    try await executor.run(remote.step, in: RemoteStepContext(connection, remote, signals))
+                    return nil
+                case "runProgram":
+                    let run = try decode(RunProgram.self)
+                    let remote = RemoteStep(step: run.program.step, tree: run.mounts.first ?? "/", signals: [])
+                    return try encode(Exit(exit: try await executor.runProgram(run.program, in: RemoteStepContext(connection, remote, signals))))
+                case "checkpoint":
+                    let remote = try decode(RemoteStep.self)
+                    try await executor.checkpoint(RemoteStepContext(connection, remote, signals))
+                    return nil
+                case "finish":
+                    await executor.finish()
+                    done.continuation.finish()
+                    return nil
+                case "signal":
+                    let fired = try decode(SignalFired.self)
+                    signals.fire(fired.option, fired.fields)
+                    return nil
+                default:
+                    throw RPCError(.methodNotFound, "a module's program has no \(method)")
+                }
             }
         }
         for await _ in done.stream {}
         // Its reply to `finish` written before it ends.
         try await Task.sleep(for: .milliseconds(100))
+        withExtendedLifetime(connection) {}
     }
 }
 
