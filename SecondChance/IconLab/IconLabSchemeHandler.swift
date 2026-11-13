@@ -39,7 +39,7 @@ final class IconLabSchemeHandler: NSObject, WKURLSchemeHandler {
         let method = request.httpMethod ?? "GET"
         let headers = request.allHTTPHeaderFields ?? [:]
         let body = request.httpBody
-        nonisolated(unsafe) let stream = body == nil ? request.httpBodyStream : nil
+        let stream = body == nil ? request.httpBodyStream.map(BodyStream.init) : nil
         let api = api
         Task {
             let data = if let body { body } else if let stream { await Self.read(stream) } else { Data() }
@@ -103,10 +103,16 @@ final class IconLabSchemeHandler: NSObject, WKURLSchemeHandler {
         }
     }
 
+    /// A request body WebKit gave as a stream, carried off the main actor to be
+    /// read. Only this request's task ever touches it.
+    private nonisolated struct BodyStream: @unchecked Sendable {
+        let stream: InputStream
+    }
+
     /// A request body WebKit gave as a stream.
     @concurrent
-    nonisolated private static func read(_ stream: InputStream) async -> Data {
-        nonisolated(unsafe) let stream = stream
+    nonisolated private static func read(_ body: BodyStream) async -> Data {
+        let stream = body.stream
         var data = Data()
         stream.open()
         defer { stream.close() }
