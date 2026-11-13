@@ -590,7 +590,9 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
   helper reports `automation finished` or `automation failed at line <n>` (with a
   picture of the screen left in the temporary folder's `basilisk-automation/`),
   and the step fails on the second, or when the Mac hasn't shut down in
-  `--limit` seconds (15 minutes). Its prefs are the wrapp's, silent. Its layer
+  `--limit` seconds (15 minutes). A failed automation asks the Mac to shut
+  down, which a dialog still open can keep it from, so after a failure it has
+  60 s before it's stopped, rather than the rest of the limit. Its prefs are the wrapp's, silent. Its layer
   is suggested: what it installs is kept, once per Mac. Its key holds the
   script, as a file the step names, and the hash of the helpers'
   `in_process_helpers.dylib` (`keyInputs`), so a change to `basilisk_mac.m`

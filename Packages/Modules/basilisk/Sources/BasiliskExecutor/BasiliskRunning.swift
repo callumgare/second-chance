@@ -53,13 +53,26 @@ nonisolated extension BasiliskExecutor {
         let pid = process.processIdentifier
         context.log.notice("[Basilisk] The Mac is booted for \(script.lastPathComponent), Basilisk II PID \(pid)")
 
-        let deadline = Date().addingTimeInterval(Self.limit(step))
+        var deadline = Date().addingTimeInterval(Self.limit(step))
+        var failedAt: Date?
         while kill(pid, 0) == 0 || process.process.isRunning {
+            // A failed automation asks the Mac to shut down, which a dialog
+            // still open (QuickTime's licence, Ingenious, 2026-11-14) can
+            // keep it from: the rest of the step's time isn't waited out.
+            if failedAt == nil, case .failed = outcome.result {
+                failedAt = Date()
+                deadline = min(deadline, Date().addingTimeInterval(Self.shutdownAfterFailure))
+            }
             if Date() > deadline {
-                context.log.error("[Basilisk] The Mac's automation hasn't finished in its time: shutting the Mac down")
+                context.log.error(failedAt == nil
+                    ? "[Basilisk] The Mac's automation hasn't finished in its time: shutting the Mac down"
+                    : "[Basilisk] The Mac didn't shut down after its automation failed: stopping it")
                 kill(pid, SIGUSR2)
                 try await Task.sleep(for: .seconds(20))
                 if process.process.isRunning { kill(pid, SIGKILL) }
+                if case .failed(let message) = outcome.result {
+                    throw StepFailure.failed("\(step.origin): the Mac's automation failed: \(message) (pictures in \(Self.picturesFolder.path))")
+                }
                 throw StepFailure.failed("\(step.origin): the Mac's automation didn't finish in its time (pictures in \(Self.picturesFolder.path))")
             }
             try await Task.sleep(for: .milliseconds(250))
@@ -73,6 +86,9 @@ nonisolated extension BasiliskExecutor {
             throw StepFailure.failed("\(step.origin): Basilisk II ended (exit \(process.process.terminationStatus)) before its automation said how it went")
         }
     }
+
+    /// How long the Mac is given to shut down once its automation has failed.
+    static let shutdownAfterFailure: TimeInterval = 60
 
     /// How long the automation may take: `--limit=<seconds>`, else 15 minutes.
     static func limit(_ step: PlannedStep) -> TimeInterval {
