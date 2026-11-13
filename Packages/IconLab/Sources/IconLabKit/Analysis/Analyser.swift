@@ -1,6 +1,7 @@
 import CoreImage
 import CoreVideo
 import Foundation
+import ProcessKit
 import Vision
 
 /// What an image is: Vision's subject mask, text and saliency, plus measures of its own (busyness, colours, flat
@@ -28,6 +29,14 @@ nonisolated public enum Analyser {
         public var box: [Double]
         public var direction: Int
         public var weight: Double
+    }
+
+    /// `analyse`, off Swift concurrency's pool.
+    /// Vision's `perform` blocks its thread until Vision's own queue has done the work. Several of those on Swift
+    /// concurrency's pool, which has a thread per core, can take every thread it has, and then nothing else in the
+    /// process runs: Icon Lab's tests hung so on a 3-core CI runner. So an async caller analyses on a GCD thread.
+    public static func analysed(_ image: Bitmap, name: String, knownKind: String? = nil, knownCircle: [Double]? = nil) async -> Result {
+        await Blocking.run { analyse(image, name: name, knownKind: knownKind, knownCircle: knownCircle) }
     }
 
     public static func analyse(_ image: Bitmap, name: String, knownKind: String? = nil, knownCircle: [Double]? = nil) -> Result {

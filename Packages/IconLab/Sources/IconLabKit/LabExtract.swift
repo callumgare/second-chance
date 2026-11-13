@@ -240,7 +240,7 @@ nonisolated extension Lab {
         return await jobs.enqueue(title: "Cut-outs · \(rec.name) · \(label)", program: slug, group: "analysis") { [self] progress in
             guard let img = Bitmap.load(store.mediaFile(slug, ff)) else { throw IconLabError.notFound(ff) }
             await progress(0.2, "Vision")
-            let r = Analyser.analyse(img, name: rec.name, knownKind: rec.kind == "unknown" ? nil : rec.kind)
+            let r = await Analyser.analysed(img, name: rec.name, knownKind: rec.kind == "unknown" ? nil : rec.kind)
             let title = await store.program(slug)?.title ?? slug
             let found = PartsFinder.find(img, analysis: r, kind: rec.kind, programTitle: title)
             let n = frame.replacingOccurrences(of: "frame-", with: "")

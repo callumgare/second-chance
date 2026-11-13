@@ -1,6 +1,7 @@
 import CoreImage
 import Foundation
 import Logging
+import ProcessKit
 import Vision
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.IconLab.Lab")
@@ -221,6 +222,23 @@ nonisolated extension Lab {
         let rx = Int(max(0, region[0]) * fullW), ry = Int(max(0, region[1]) * fullH)
         let rw = max(8, Int(min(1, region[2]) * fullW)), rh = max(8, Int(min(1, region[3]) * fullH))
         let crop = pic.cropped(x: rx, y: ry, width: min(rw, pic.width - rx), height: min(rh, pic.height - ry))
+        let masks = try await Blocking.run { try Self.subjectMasks(crop) }
+        var out: [Candidate] = []
+        for (small, all) in masks {
+            var full = Bitmap(width: pic.width, height: pic.height, fill: (0, 0, 0, 255))
+            for y in 0..<small.height { for x in 0..<small.width {
+                let v = small.pixels[small.index(x, y)]
+                let t = full.index(x + rx, y + ry)
+                full.pixels[t] = v; full.pixels[t + 1] = v; full.pixels[t + 2] = v
+            } }
+            out.append(try await candidate(slug, id, mask: full, score: all ? 1 : 0.8))
+        }
+        return out
+    }
+
+    /// Vision's subject masks for `crop`, at its size: all its instances together first, then each one when there
+    /// are several, each saying whether it is all of them. Blocks while Vision works (`Analyser.analysed`).
+    nonisolated private static func subjectMasks(_ crop: Bitmap) throws -> [(mask: Bitmap, all: Bool)] {
         guard let cg = crop.flattened().cgImage else { return [] }
         let handler = VNImageRequestHandler(cgImage: cg)
         let req = VNGenerateForegroundInstanceMaskRequest()
@@ -228,19 +246,11 @@ nonisolated extension Lab {
         guard let r = req.results?.first, !r.allInstances.isEmpty else { return [] }
         var sets: [IndexSet] = [r.allInstances]
         if r.allInstances.count > 1 { sets += r.allInstances.sorted().map { IndexSet(integer: $0) } }
-        var out: [Candidate] = []
-        for set in sets {
+        return sets.compactMap { set in
             guard let buf = try? r.generateScaledMaskForImage(forInstances: set, from: handler),
-                  let small = Analyser.bitmap(fromMask: buf, width: crop.width, height: crop.height) else { continue }
-            var full = Bitmap(width: pic.width, height: pic.height, fill: (0, 0, 0, 255))
-            for y in 0..<small.height { for x in 0..<small.width {
-                let v = small.pixels[small.index(x, y)]
-                let t = full.index(x + rx, y + ry)
-                full.pixels[t] = v; full.pixels[t + 1] = v; full.pixels[t + 2] = v
-            } }
-            out.append(try await candidate(slug, id, mask: full, score: set == r.allInstances ? 1 : 0.8))
+                  let small = Analyser.bitmap(fromMask: buf, width: crop.width, height: crop.height) else { return nil }
+            return (small, set == r.allInstances)
         }
-        return out
     }
 
     public struct SegmentPoint: Codable, Sendable { public var x: Double; public var y: Double; public var positive: Bool }

@@ -83,7 +83,7 @@ nonisolated extension Lab {
                         await forgetMediaCache(slug, id)
                         await progress(0.4, "Analysing the larger copy")
                         // the cheap tier again, on the big copy (a better mask)
-                        let r = Analyser.analyse(big, name: cur.name, knownKind: cur.kindSet == true ? cur.kind : nil, knownCircle: cur.analysis.circle)
+                        let r = await Analyser.analysed(big, name: cur.name, knownKind: cur.kindSet == true ? cur.kind : nil, knownCircle: cur.analysis.circle)
                         if let m = r.mask { try m.writePNG(to: store.maskFile(slug, id)) }
                         let analysed = r
                         cur = try await store.updateMedia(slug, id) { c in
@@ -115,7 +115,7 @@ nonisolated extension Lab {
                 await progress(0.6, "Deep analysis")
                 if let now = await store.mediaRecord(slug, id) { cur = now }
                 let cut = cur.hasMask ? try? await assets.cutout(slug, id).bitmap : nil
-                let findings = Deep.analyse(img, cutout: cut, record: cur, programTitle: title).findings
+                let findings = await Deep.analysed(img, cutout: cut, record: cur, programTitle: title).findings
                 // only its own fields, onto the record as it is now: the analysis may have saved meanwhile
                 guard let done = try await store.updateMedia(slug, id, { c in
                     c.deep = (c.deep ?? [:]).merging(findings) { _, b in b }

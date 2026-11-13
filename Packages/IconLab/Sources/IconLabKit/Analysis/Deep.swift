@@ -1,5 +1,6 @@
 import CoreImage
 import Foundation
+import ProcessKit
 import Vision
 
 /// The deep tier: what's worth knowing about an image someone picked, once its largest copy is here.
@@ -16,6 +17,11 @@ nonisolated public enum Deep {
     public struct Result: Sendable {
         public var findings: [String: JSONValue] = [:]
         public var derived: [Derived] = []
+    }
+
+    /// `analyse`, off Swift concurrency's pool (`Analyser.analysed` says why).
+    public static func analysed(_ image: Bitmap, cutout: Bitmap?, record: MediaRecord, programTitle: String) async -> Result {
+        await Blocking.run { analyse(image, cutout: cutout, record: record, programTitle: programTitle) }
     }
 
     public static func analyse(_ image: Bitmap, cutout: Bitmap?, record: MediaRecord, programTitle: String) -> Result {

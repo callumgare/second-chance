@@ -277,7 +277,7 @@ nonisolated public final class Lab: Sendable {
             var known: String? = ["you", "source"].contains(rec.kindSource ?? "") ? rec.kind : nil
             var fromSource = false
             if known == nil, let label = rec.sourceLabel ?? rec.remote?.sourceLabel, let k = MediaLabels.exactKind(label) { known = k; fromSource = true }
-            var r = Analyser.analyse(img, name: rec.name, knownKind: known, knownCircle: rec.analysis.circle)
+            var r = await Analyser.analysed(img, name: rec.name, knownKind: known, knownCircle: rec.analysis.circle)
             var kind = known ?? "unknown", confidence = known == nil ? 0.0 : 1.0
             var guesses: [KindGuess]?
             if known == nil {
