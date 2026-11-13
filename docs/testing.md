@@ -637,7 +637,9 @@ exited (`ProcessControl.isAlive`). The phases' limits are bounded together
 by `--max-runtime` (2700 s, `AppPuppetRunner.maxRuntime`): a run still going
 then fails, killing the wrapp, so a wedged game can't hold up the whole
 integration run, and the test gives up waiting for WrappPuppeteer two minutes
-after that. WrappPuppeteer writes its exit code to the file the test names
+after that. Before it does, it samples its own threads for 3 s and logs its
+main thread's stack, so a run stuck in a step of WrappPuppeteer's says which
+(the whole sample is in its temporary folder, named in the log). WrappPuppeteer writes its exit code to the file the test names
 (`--exit-code-file`), as the test, which launched it through LaunchServices,
 isn't its parent and can't read its exit status; no file reads as a failure. The wrapp's "save
 regularly" warning counts as dismissed only once the wrapp says it has gone

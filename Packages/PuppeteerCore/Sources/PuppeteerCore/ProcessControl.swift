@@ -138,12 +138,39 @@ nonisolated public enum ProcessCleanup {
         let watchdog = Thread {
             Thread.sleep(forTimeInterval: seconds)
             logger.error("WRAPP_PUPPETEER: run_failed: still running after \(Int(seconds)) s, the most a run may take (--max-runtime)")
+            logOwnStacks()
             LogStore.shared.flush()
             killTestedProcessesAndExit(1, message: nil)
         }
         watchdog.name = "runtime limit"
         watchdog.start()
         logger.notice("  → A run may take at most \(Int(seconds)) s")
+    }
+
+    /// Log where WrappPuppeteer's own threads are, from a few seconds of
+    /// `sample`: a run that outlives its limit is usually stuck in a step,
+    /// and once it's killed nothing says which. Blackmoor Manor's run from
+    /// Steam went silent for 42 minutes after a splash click (2026-11-13),
+    /// with nothing to show where. The main thread's stack goes in the log
+    /// (the test attaches it); the whole sample stays beside it on disk.
+    private static func logOwnStacks() {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wrapp-puppeteer-\(getpid())-stuck.sample.txt")
+        let sample = Process()
+        sample.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
+        sample.arguments = [String(getpid()), "3", "-file", file.path]
+        sample.standardOutput = FileHandle.nullDevice
+        sample.standardError = FileHandle.nullDevice
+        do {
+            try sample.run()
+            sample.waitUntilExit()
+            let text = try String(contentsOf: file, encoding: .utf8)
+            let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+            let main = lines.drop { !$0.contains("com.apple.main-thread") }.prefix(40)
+            logger.error("Where WrappPuppeteer's main thread was (whole sample: \(file.path)):\n\(main.joined(separator: "\n"))")
+        } catch {
+            logger.error("Couldn't sample WrappPuppeteer's threads: \(error)")
+        }
     }
 
     /// Record the processes to kill. `helperPid` is a second process that
