@@ -14,7 +14,7 @@ import WebKit
 @testable import SecondChance
 
 @MainActor
-@Suite struct IconLabWindowTests {
+@Suite(.timeLimit(.minutes(2))) struct IconLabWindowTests {
     /// A fresh folder, removed when `body` is done.
     func withScratch(_ body: (URL) async throws -> Void) async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("iconlab-window-\(UUID().uuidString)", isDirectory: true)
@@ -34,7 +34,7 @@ import WebKit
     }
 
     // A backstop: the page's load is waited on, not timed, so a load that never ends ends here.
-    @Test(.timeLimit(.minutes(2))) func thePageLoadsAndItsAPIAnswers() async throws {
+    @Test func thePageLoadsAndItsAPIAnswers() async throws {
         try await withScratch { dir in
             let host = IconLabHost(paths: IconLabPaths(data: dir.appendingPathComponent("data")))
             let page = IconLabPage(api: host.api)
@@ -59,7 +59,7 @@ import WebKit
         }
     }
 
-    @Test(.timeLimit(.minutes(2))) func eventsReachThePage() async throws {
+    @Test func eventsReachThePage() async throws {
         try await withScratch { dir in
             let host = IconLabHost(paths: IconLabPaths(data: dir.appendingPathComponent("data")))
             let page = IconLabPage(api: host.api)
