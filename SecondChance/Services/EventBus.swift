@@ -68,9 +68,6 @@ actor EventBus<Event: Sendable> {
         subscribers.removeValue(forKey: token.id)?.queue.finish()
     }
 
-    /// Whether anyone is subscribed.
-    var hasSubscribers: Bool { !subscribers.isEmpty }
-
     /// Remove all subscribers.
     func unsubscribeAll() {
         subscribers.values.forEach { $0.queue.finish() }

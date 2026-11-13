@@ -15,17 +15,14 @@ import Testing
 struct BuildBusTests {
 
     @Test("A view model follows its own bus and no other")
-    func viewModelsFollowTheirOwnBus() async throws {
+    func viewModelsFollowTheirOwnBus() async {
         let firstBus = EventBus<AppEvent>()
         let secondBus = EventBus<AppEvent>()
         let first = WrappBuildViewModel(bus: firstBus)
         let second = WrappBuildViewModel(bus: secondBus)
         // The subscriptions are made in a task started by init.
-        try await waitUntil {
-            let firstReady = await firstBus.hasSubscribers
-            let secondReady = await secondBus.hasSubscribers
-            return firstReady && secondReady
-        }
+        await first.subscribed?.value
+        await second.subscribed?.value
 
         await firstBus.publishWrappBuild(.failed(.internalError("boom")))
 
@@ -58,13 +55,5 @@ struct BuildBusTests {
             }
         }
         #expect(offenders.isEmpty, "Publish to the bus the build was given, not EventBus.app: \(offenders.joined(separator: ", "))")
-    }
-
-    private func waitUntil(_ condition: () async -> Bool) async throws {
-        let deadline = Date().addingTimeInterval(5)
-        while await !condition() {
-            guard Date() < deadline else { throw CancellationError() }
-            try await Task.sleep(nanoseconds: 10_000_000)
-        }
     }
 }

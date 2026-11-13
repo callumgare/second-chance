@@ -31,8 +31,11 @@ struct FilesMountTests {
         let app = WrappLayout(app: URL(fileURLWithPath: "/Apps/LaserTank.app"))
         let userFiles = UserFilesLayout(appSupport: URL(fileURLWithPath: "/Support"), bundleID: "com.example.laser-tank")
         let mounts = FilesMount.mounts(of: launch, app: app, userFiles: userFiles, places: .none)
-        #expect(mounts == [FilesMount(folder: app.app.appendingPathComponent("Contents/SharedSupport/LaserTank"),
-                                      store: userFiles.store(owner: "app", name: "saves"), patterns: ["LaserTank.ini", "*.hs"])])
+        // Compared by path: whether a folder's URL keeps the target's trailing slash differs between macOS
+        // versions' Foundation (15 drops it, 26 keeps it), and the folder is the same either way.
+        #expect(mounts.map(\.folder.path) == [app.app.appendingPathComponent("Contents/SharedSupport/LaserTank").path])
+        #expect(mounts.map(\.store.path) == [userFiles.store(owner: "app", name: "saves").path])
+        #expect(mounts.map(\.patterns) == [["LaserTank.ini", "*.hs"]])
     }
 
     @Test("The build's file starts the store's, and is linked back; the program's own file stays")

@@ -150,6 +150,8 @@ class WrappBuildViewModel {
     /// Where this view model's builds report, and where it follows them.
     let bus: EventBus<AppEvent>
     @ObservationIgnored private var busSubscriptionToken: EventBus<AppEvent>.Token?
+    /// Done once the view model hears its bus: `init` subscribes in a task, so a test that publishes waits on this.
+    @ObservationIgnored private(set) var subscribed: Task<Void, Never>?
     private let makeInput: WrappBuildInputFactory
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildViewModel")
 
@@ -184,7 +186,7 @@ class WrappBuildViewModel {
 
         // Subscribe to the build's bus so wrapp-build events drive the observed properties.
         // (A headless run is this view model too: CLIBuilder starts its build.)
-        Task { @MainActor in
+        subscribed = Task { @MainActor in
             let token = await bus.subscribe { [weak self] event in
                 await self?.handleBusEvent(event)
             }
