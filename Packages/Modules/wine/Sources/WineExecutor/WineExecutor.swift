@@ -27,7 +27,10 @@ public nonisolated struct WineExecutor: ModuleExecutor {
     /// (`x::`) is blocked too (`WineDrives.showOnly`), so a prefix layer the
     /// first revision made, which may hold a device link Wine wrote for a
     /// disc the Mac had mounted, is made again rather than restored.
-    public static var revision: Int { 2 }
+    /// 3: a kept disc's own folder is writable (`FileTree.makeOwnerWritable`),
+    /// so a layer holding one copied read-only, whose files nothing could
+    /// delete, is made again.
+    public static var revision: Int { 3 }
 
     /// The winetricks it runs; nil for the module's own.
     let winetricks: URL?

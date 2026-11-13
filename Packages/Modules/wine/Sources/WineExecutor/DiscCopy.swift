@@ -60,7 +60,13 @@ public nonisolated enum DiscCopy {
         } onCancel: {
             state.cancel()
         }
-        try makeOwnerWritable(destination)
+        // Directories copied without their modes can still come out without
+        // write permission for the owner on some file systems, and the
+        // copy's own folder takes the disc root's mode: a CD's, r-xr-xr-x,
+        // left every file in it undeletable, so rebuilding a disc game over
+        // its app failed to remove the old one (Warnings at Waverly Academy,
+        // 2026-11-13).
+        try FileTree.makeOwnerWritable(destination)
     }
 
     /// The files the recursive copy couldn't copy, copied again one at a
@@ -125,19 +131,6 @@ public nonisolated enum DiscCopy {
         let acl = acl_get_link_np(path, ACL_TYPE_EXTENDED)
         if acl != nil { acl_free(UnsafeMutableRawPointer(acl)) }
         return "\(kind) \(mode) \(info.st_uid):\(info.st_gid)\(flags.isEmpty ? "" : " flags=\(flags.joined(separator: ","))")\(acl != nil ? " acl" : "")"
-    }
-
-    /// Directories copied without their modes can still come out without
-    /// write permission for the owner on some file systems: make sure.
-    private static func makeOwnerWritable(_ root: URL) throws {
-        let fileManager = FileManager.default
-        guard let walker = fileManager.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey]) else { return }
-        for case let url as URL in walker {
-            let attributes = try fileManager.attributesOfItem(atPath: url.path)
-            if let mode = attributes[.posixPermissions] as? Int, mode & 0o200 == 0 {
-                try fileManager.setAttributes([.posixPermissions: mode | 0o200], ofItemAtPath: url.path)
-            }
-        }
     }
 
     /// What the copy's C callback reaches through its context pointer.

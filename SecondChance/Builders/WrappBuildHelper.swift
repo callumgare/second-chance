@@ -570,6 +570,12 @@ class WrappBuildHelper {
                 do {
                     try fileManager.moveItem(at: wrappPath, to: staged)
                     if fileManager.fileExists(atPath: finalPath.path) {
+                        // replaceItemAt swaps the two, then deletes the old
+                        // app, which fails on a read-only folder (a disc kept
+                        // before 2026-11-13), leaving it under the hidden name
+                        // and the save reported as failed though the new app
+                        // was in place. So it's made writable first.
+                        try FileTree.makeOwnerWritable(finalPath)
                         _ = try fileManager.replaceItemAt(finalPath, withItemAt: staged)
                     } else {
                         try fileManager.moveItem(at: staged, to: finalPath)
@@ -577,7 +583,7 @@ class WrappBuildHelper {
                 } catch {
                     if fileManager.fileExists(atPath: staged.path) {
                         do {
-                            try fileManager.removeItem(at: staged)
+                            try FileTree.remove(staged)
                         } catch {
                             logger.warning("Couldn't remove the half-saved app at \(staged.path): \(error.localizedDescription)")
                         }
@@ -795,24 +801,10 @@ class WrappBuildHelper {
         }
     }
 
-    /// Delete a wrapp, read-only parts and all. A wrapp built from discs
-    /// before they were made writable on copy holds read-only directories that
-    /// `removeItem` can't empty, so on failure give the owner write permission
-    /// throughout and try again.
+    /// Delete a wrapp, read-only parts and all: one with a disc kept from
+    /// before 2026-11-13 holds a read-only folder (`FileTree`).
     private nonisolated static func removeWrappDirectory(_ url: URL) throws {
-        let fileManager = FileManager.default
-        do {
-            try fileManager.removeItem(at: url)
-        } catch {
-            let chmod = Process()
-            chmod.executableURL = URL(fileURLWithPath: "/bin/chmod")
-            chmod.arguments = ["-R", "u+w", url.path]
-            chmod.standardOutput = FileHandle.nullDevice
-            chmod.standardError = FileHandle.nullDevice
-            try chmod.run()
-            chmod.waitUntilExit()
-            try fileManager.removeItem(at: url)
-        }
+        try FileTree.remove(url)
     }
 
     /// Clean up all tracked temporary wrapps (app termination / crash paths).

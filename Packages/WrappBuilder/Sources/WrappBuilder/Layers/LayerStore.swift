@@ -107,10 +107,10 @@ public nonisolated final class LayerStore: Sendable {
             let meta = Meta(created: made, lastUsed: made, size: Self.allocatedSize(of: content))
             try encoder.encode(meta).write(to: incoming.appendingPathComponent("meta.json"))
             let destination = folder(key.hash)
-            if files.fileExists(atPath: destination.path) { try files.removeItem(at: destination) }
+            if files.fileExists(atPath: destination.path) { try FileTree.remove(destination) }
             try files.moveItem(at: incoming, to: destination)
         } catch {
-            try? files.removeItem(at: incoming)
+            try? FileTree.remove(incoming)
             throw error
         }
         guard let layer = lookup(key, now: now()) else {
@@ -211,7 +211,7 @@ public nonisolated final class LayerStore: Sendable {
         for entry in (try? files.contentsOfDirectory(at: root, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
         where entry.lastPathComponent.hasPrefix(".incoming-") {
             let modified = (try? entry.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? now
-            if now.timeIntervalSince(modified) > 24 * 3600 { try? files.removeItem(at: entry) }
+            if now.timeIntervalSince(modified) > 24 * 3600 { try? FileTree.remove(entry) }
         }
         return removed
     }
@@ -220,13 +220,13 @@ public nonisolated final class LayerStore: Sendable {
     private func remove(_ hash: String) -> Bool {
         guard let lock = Self.tryLock(root.appendingPathComponent(".locks/\(hash).lock")) else { return false }
         defer { lock.release() }
-        return (try? FileManager.default.removeItem(at: folder(hash))) != nil
+        return (try? FileTree.remove(folder(hash))) != nil
     }
 
     /// Remove every layer (`sc clean layers`).
     public func removeAll() throws {
         if FileManager.default.fileExists(atPath: root.path) {
-            try FileManager.default.removeItem(at: root)
+            try FileTree.remove(root)
         }
     }
 
