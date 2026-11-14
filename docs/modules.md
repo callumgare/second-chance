@@ -586,7 +586,12 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
   startup disk (the first `disk` of Basilisk II's prefs): Mac OS marks it
   unmounted cleanly as it restarts and clears the mark as it mounts it again. A
   request the window can't take yet (no window, or none to take it) is tried
-  again for 90 s. The
+  again for 90 s. The script's clicks land even while another app is in front
+  (another build's game launched fullscreen, say): Basilisk II starts with SDL's
+  `SDL_MOUSE_FOCUS_CLICKTHROUGH`, without which SDL's window takes a click
+  then only as a request to bring its app forward, which macOS needn't grant.
+  The wrapp's Basilisk II doesn't, so a person's click on its window in the
+  background only brings it forward, as usual. The
   helper reports `automation finished` or `automation failed at line <n>` (with a
   picture of the screen left in the temporary folder's `basilisk-automation/`),
   and the step fails on the second, or when the Mac hasn't shut down in

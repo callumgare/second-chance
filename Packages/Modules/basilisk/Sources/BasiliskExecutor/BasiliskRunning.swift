@@ -46,6 +46,12 @@ nonisolated extension BasiliskExecutor {
         environment["BASILISK_MAC_AUTOMATION"] = script.path
         environment["BASILISK_MAC_AUTOMATION_PICTURES"] = Self.picturesFolder.path
         environment["HOME"] = scratch.path   // Basilisk II's own prefs and its .basilisk_ii_xpram
+        // The script's clicks land while another app is in front. Without
+        // this, SDL's window takes a click on it then only as its app's
+        // activation, which macOS needn't grant: with a fullscreen game in
+        // front (another build's launch, 2026-11-14) every click on the
+        // QuickTime licence's Agree was lost.
+        environment["SDL_MOUSE_FOCUS_CLICKTHROUGH"] = "1"
         process.environment = environment
         process.onLine = { line in outcome.observe(line) }
         context.substep(String(localized: "Setting up the game's Mac"))
