@@ -44,7 +44,7 @@ their bundle's. A wrapp keeps the Wine it was built with, until it's updated.
 
 | Fault | Affects | Fixed in | What we do |
 | ----- | ------- | -------- | ---------- |
-| [WMI deadlock](#wmi-deadlock) | 9.3 to 10.4, our 10.0_8 | 10.5 (11.0 stable) | Nothing yet: Big Fish trials hang at random |
+| [WMI deadlock](#wmi-deadlock) | 9.3 to 10.4, our 10.0_8 | 10.5 (11.0 stable) | A Big Fish trial is started again in a fresh session |
 | [Big Fish's programs crash](#big-fishs-programs-crash-on-wine-11) | 11.21 (11.0 not tried) | Not fixed | Big Fish stays on 10.0_8 |
 | [Iji crashes at start](#iji-crashes-on-wine-11) | 11.6 onwards | Not fixed | Iji stays on 10.0_8 |
 | [DirectMusic's slow stop](#directmusics-slow-stop) | 10.0 | 11.2 | `WINE.PATCH skip-synth-playout` (Iji) |
@@ -75,7 +75,10 @@ err:sync:RtlpWaitForCriticalSection section … "…/dlls/wbemprox/builtin.c: ta
 
 after which the DRM's launcher and `gmActivator` exit without starting the
 game, leaving the Game Manager waiting. A bought game's launch, which has no
-`gmActivator`, hasn't been seen to hit it.
+`gmActivator`, hasn't been seen to hit it. Pressing Play Now again in the
+same session didn't help, so a trial's wrapp ends the session and starts it
+again in a fresh one ([big-fish.md](big-fish.md#testing)); moving Big Fish to
+a Wine with the fix (10.5 or later) would end the need.
 
 ### Big Fish's programs crash on Wine 11
 

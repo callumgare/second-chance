@@ -20,6 +20,9 @@ final class BigFishRuntime: GameStarting {
     nonisolated static let processExe = #"C:\Program Files (x86)\bfgclient\bfgprocess.exe"#
 
     private let config: GameConfig
+    /// A trial started through the Game Manager, for starting it again
+    /// (`whileWaitingForGame`).
+    private var trial: TrialRestart?
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
     private nonisolated let outputLogger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.Wine")
 
@@ -135,15 +138,104 @@ final class BigFishRuntime: GameStarting {
             return .failed
         }
         diagnostics?.wineLaunched()
+        trial = TrialRestart(manager: manager, sku: sku)
         return LaunchResult(process: nil, gamePid: 0, gameExeName: launchInfo.gameExeName)
+    }
+
+    /// How many times a trial is started again in a fresh Wine session when
+    /// Big Fish's DRM ends without starting the game.
+    nonisolated static let trialRestarts = 2
+    /// How long neither Big Fish's launcher nor its activator may run, once
+    /// one has, before the game counts as not started: between them they
+    /// leave gaps of a few seconds.
+    nonisolated static let trialDRMGoneFor: TimeInterval = 20
+
+    /// A trial whose DRM may need starting again, and where that has got to.
+    private final class TrialRestart {
+        let manager: BigFishGameManager
+        let sku: BigFishSKU
+        var restarts = 0
+        /// Ending the session and starting the Game Manager again.
+        var restarting = false
+        /// Why the game won't start, once it has been started again as often
+        /// as it may be.
+        var gaveUp: String?
+
+        init(manager: BigFishGameManager, sku: BigFishSKU) {
+            self.manager = manager
+            self.sku = sku
+        }
+    }
+
+    /// For a trial: when Big Fish's DRM (its activator and the game's
+    /// launcher) has run and ended without starting the game, end the Wine
+    /// session and press Play Now again in a fresh one. Wine 10's WMI
+    /// deadlocks in the DRM on about one trial launch in five
+    /// (docs/wine.md#wmi-deadlock), and the Game Manager then waits for ever;
+    /// pressing Play Now again in the same session didn't help (2026-11-13),
+    /// a fresh session usually starts it.
+    func whileWaitingForGame(_ launch: LaunchContext) -> (() -> Void)? {
+        guard let trial else { return nil }
+        var watched = ["gmactivator.exe"]
+        if let launcher = trial.manager.installedGame(trial.sku)?.launcher { watched.append(launcher.lowercased()) }
+        var drmRan = false
+        var goneSince: Date?
+        var lastCheck = Date.distantPast
+        return { [logger] in
+            guard !trial.restarting, trial.gaveUp == nil, Date().timeIntervalSince(lastCheck) >= 2,
+                  let processes = ProcessList.recent(maxAge: .seconds(2)) else { return }
+            lastCheck = Date()
+            if processes.wine.contains(where: { watched.contains($0.name.lowercased()) }) {
+                drmRan = true
+                goneSince = nil
+                return
+            }
+            guard drmRan else { return }
+            let since = goneSince ?? Date()
+            goneSince = since
+            guard Date().timeIntervalSince(since) >= Self.trialDRMGoneFor else { return }
+            drmRan = false
+            goneSince = nil
+            guard trial.restarts < Self.trialRestarts else {
+                trial.gaveUp = "Big Fish's DRM ended without starting the game, \(Self.trialRestarts + 1) times"
+                return
+            }
+            trial.restarts += 1
+            trial.restarting = true
+            logger.warning("""
+                [Game Launch] Big Fish's DRM ended without starting the game; \
+                starting the trial again in a fresh Wine session (\(trial.restarts) of \(Self.trialRestarts))
+                """)
+            Task {
+                defer { trial.restarting = false }
+                await trial.manager.shutdown(timeout: 30)
+                do {
+                    try await trial.manager.start(timeout: 600)
+                    try await trial.manager.play(trial.sku)
+                } catch {
+                    logger.error("[Game Launch] Couldn't start the trial again: \(error)")
+                    trial.gaveUp = "the Game Manager couldn't start the trial again: \(error)"
+                }
+            }
+        }
     }
 
     /// While Big Fish's DRM service starts the game there's nothing of ours to
     /// watch: the wait ends when bfgprocess and the service have both gone,
-    /// three checks in a row, without the game appearing.
+    /// three checks in a row, without the game appearing. For a trial, not
+    /// while it's being started again, and once it won't be again, when its
+    /// DRM has ended without starting the game.
     func abandonWaitingIf() -> ((Set<ProcessList.Entry>) -> String?)? {
+        let trial = trial
         var missing = 0
         return { processes in
+            if let trial {
+                if let gaveUp = trial.gaveUp { return gaveUp }
+                if trial.restarting {
+                    missing = 0
+                    return nil
+                }
+            }
             let running = processes.contains { ["bfgprocess.exe", "bfggameservices.exe"].contains($0.name.lowercased()) }
             missing = running ? 0 : missing + 1
             return missing >= 3 ? "Big Fish's launcher has exited without starting the game" : nil

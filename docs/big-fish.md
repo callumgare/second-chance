@@ -266,7 +266,15 @@ since the download's size isn't known beforehand:
   wrapp reaches by pressing the Game Manager's Play Now (with its window
   hidden, and started with the game's in-process helpers armed, since the
   game it starts takes its environment). It checks the
-  wrapp records `BigFishTrial` and the English edition's SKU.
+  wrapp records `BigFishTrial` and the English edition's SKU. On about one
+  launch in five Wine 10's WMI deadlocks in Big Fish's DRM
+  ([wine.md](wine.md#wmi-deadlock)), which then ends without starting the
+  game; so once the DRM (`gmActivator.exe` and the game's launcher) has run
+  and been gone for 20 s, the trial's wrapp ends the Wine session, starts
+  the Game Manager again and presses Play Now, up to twice
+  (`BigFishRuntime.whileWaitingForGame`). Pressing it again in the same
+  session never helped. Each start uses up one of the trial's launches,
+  which stop working after three or four.
 
 Both download the Game Manager's installer once, before the first build
 (`IntegrationStages.bigFishInstaller`), so builds side by side don't each
