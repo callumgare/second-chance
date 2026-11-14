@@ -2,6 +2,64 @@
 
 All notable changes to Second Chance.
 
+## 2.0.0-beta.1 — 2026-11-15
+
+### New
+
+- Add Big Fish Games as a way to build a game's app. Pick a game your Big Fish account owns and Second Chance builds it
+- Add Enter Full Screen on Control-Command-F in games, as in other Mac apps. A game's fullscreen button also remembers your choice for games that keep a fullscreen setting.
+
+### Improved
+
+- Make game apps much smaller to download and quicker to set up. Second Chance itself shrank from 1.4 GB to 122 MB, because game engines are now fetched only when a game needs them.
+- Rebuilding a game from the same disc or download is faster, as the install is reused.
+- Keep your Big Fish and Steam sign-ins between builds, with Sign Out items in the app menu. Copy and paste now work in Steam's sign-in window.
+- Show Play Now and Show in Finder as soon as the game is saved, and keep the done screen when you press Play Now.
+- Say what the build is doing between a step's details, and show clearer progress while a disc is being copied.
+- Games that go fullscreen only when they ask now follow that, and the game's window can be resized and has a title bar when taken out of fullscreen.
+- Update some older Wine-based games to use Wine 11.21 where it works better, and add ScummVM 2026.4.0 for ScummVM games.
+- Ask the build's questions in the main window. Questions like which game to get from a store, putting in disc 2, or which program is the game now appear there instead of in pop-up alerts.
+
+### Fixed
+
+- Fix Waverly Academy running at about half a frame per second on Apple Silicon Macs. It now runs at full speed.
+- Fix Big Fish free trials that sometimes hung when they started. The app now starts them again automatically.
+- Fix games freezing for about a minute the first time they play a sound.
+- Fix the Mac's pointer being stuck in a corner of the screen in some games after the game changed its screen size.
+- Fix the mouse arrow in fullscreen games, so it shows over the black bars and no longer sticks to the game's cursor after a click.
+- Fix games from Big Fish that crashed on Apple Silicon Macs, couldn't find their files, or ignored the mouse in fullscreen.
+- Fix builds failing when rebuilding a disc game over its existing app.
+- Fix disc builds failing on hybrid Mac and PC discs, and on discs with a file that is hard to read.
+- Fix two builds from the same disc image at once interfering with each other.
+- Fix Steam builds failing when Steam updated itself part way through, so the game got none of its helpers.
+- Fix a thin grey line at the edge of some older games' pictures in fullscreen.
+- Fix games losing their screen size when another app's panel, like macOS's Verifying message, popped up.
+- Fix a game's clicks being lost when another app's panel took focus.
+- Fix a Mac installer on a dual-platform disc being built into a game that couldn't start. It is now refused with a pointer to use the discs.
+- Fix Wine crash dialogs appearing in games. A crashed game now just ends.
+- Fix builds that waited forever on a program left running.
+- Fix Wine programs being able to see your whole Mac as a drive.
+- Fix the Big Fish installer appearing stuck for hours.
+- Fix your Big Fish account details being left inside a built game's app.
+- Fix a game that was told to quit starting again anyway.
+
+<details>
+<summary>Behind the scenes</summary>
+
+- Builders became modules: the runner carries out a plan of steps through module executors, with stage trees, layer caching keyed on every step, stores replacing volumes, signals that watch a step while it runs, and sandboxed module programs. Disc, Her download, Steam and Big Fish builds all go through it now.
+- Engines (Wine, ScummVM, DOSBox, Basilisk II) are prepared from their makers' downloads into a per-Mac engine store instead of living in the app template, which shrank from 1.4 GB to 122 MB. Added Wine 11.0 and 11.21, ScummVM 2026.4.0, DOSBox Staging and a Basilisk II module with hfsutils build tools.
+- Each game has a program bundle with a manifest and a Wrappfile, a Dockerfile-like build description. Detection, build plans, launch settings, tests and names all come from bundles. wrapp-builder checks, plans and formats Wrappfiles, and the new key notation (:hold=, wait=, gap=) is shared by quit keys, puppet and scenarios. --wine.mouse replaces --wine.cursor-lock, and bare :hold is refused (both breaking).
+- Icon Lab was rebuilt as a Swift engine package (IconLabKit, IconLabAPI) with a React page, hosted in the app's Debug menu or a dev server. Many fixes and features went in: masks, effects, pins, merging search results, the eyedropper, scan lanes and activity panel. The ProgramImages and WindowsFormats packages extract every image from programs, discs and wrapps.
+- Test sessions: sc keeps a pool of background-login test users per Mac with a keep-alive, screen leases, session add, setup, view, logout, do (clicks, keys, text over Screen Sharing), screenshots and Peekaboo and audio tap setup. Integration tests can shard across sessions and Macs, read logs from files, run from a runtime copy sent with --on, and share installers and engine stores.
+- New puppet tools: sc puppet start, do, wait, screen, name, expect, record, sheet and audio, plus a protocol package (PuppetProtocol) and in-process helpers for virtual pointer, audio levels, screen depth, display mode and scaled-picture windows. Integration tests can listen for sound and keep annotated screen recordings.
+- Failure reports keep only the parts of a path that aren't the person's, with numbered placeholders per report, and a wine-drive failure now says which step failed. sc release gained --pre for pre-releases, tag clean-up, Retina README shots from a test session, and a better engine download check.
+- Build and test robustness: RPCConnection no longer slows with each message or reorders notifications, Process answers at exit rather than when pipes close, Vision work runs off Swift's cooperative pool, repeated log lines are collapsed, and several tests were made stable on CI's macOS 26 runners and Xcode 26.6.
+- sc speed-ups and fixes: builds are optimised file by file, rebuild only when needed, run from a copy a rebuild can't delete, and say when waiting on a lock. Also added worktree commands, !<game> exclusions, duration formatting, and DerivedData clean-up.
+- Documentation: new docs on Wine versions and faults, Icon Lab, program images, builders, signals and the porting skill, which now lives in the repo with its subagents. Several plans were filed as historical, and new plans for consideration were added.
+- Wine fixes that players don't see directly: prefix drive letters are protected from Mac discs, Wine's desktop starts in the prefix so killed sessions don't leave it running, Steam shutdown clears leftover processes, and the Steam installer waits for Wine's desktop.
+
+</details>
+
 ## 1.1.0 — 2026-11-02
 
 ### New
