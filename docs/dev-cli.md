@@ -30,6 +30,7 @@ nearest command's help.
 ./sc release --plain-notes             # Release with the commit-message notes as they are
 ./sc release --notes-model opus        # Rewrite the notes with a model other than Sonnet
 ./sc release --build-only              # Build and zip the next version, changing nothing
+./sc release --pre beta                # A pre-release: 2.1.0-beta.1, then beta.2
 ./sc lint                              # SwiftLint, markdownlint and the Wrappfiles' format, as CI runs them
 ./sc setup                             # Once per clone: tools, git hooks, completions, Wrappfile highlighting
 ./sc icon-lab build                    # Build Icon Lab's page into IconLabAPI's resources

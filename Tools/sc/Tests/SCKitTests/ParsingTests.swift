@@ -46,6 +46,9 @@ struct ParsingTests {
         ["wrapp", "run", "x", "--debug", "no-cursor-lock=1"],
         ["release", "--dry-run", "--notes-only"],
         ["release", "--version", "1.2"],
+        ["release", "--pre", "Beta"],
+        ["release", "--pre", "beta.1"],
+        ["release", "--pre", "beta", "--version", "1.2.0-beta.1"],
         ["test", "unit", "--logs", "pretty"],
         ["in-gui-session"],
         ["attach", "--list", "--stop"],
@@ -53,6 +56,14 @@ struct ParsingTests {
     ])
     func invalidValues(arguments: [String]) {
         #expect(throws: (any Error).self) { try SC.parseAsRoot(arguments) }
+    }
+
+    @Test("A release can be a pre-release, by its label or its whole version")
+    func prerelease() throws {
+        let labelled = try #require(try SC.parseAsRoot(["release", "--pre", "beta", "--dry-run"]) as? ReleaseCommand)
+        #expect(labelled.pre == "beta")
+        let versioned = try #require(try SC.parseAsRoot(["release", "--version", "v2.1.0-rc.1", "--dry-run"]) as? ReleaseCommand)
+        #expect(versioned.version == "v2.1.0-rc.1")
     }
 
     @Test("Arguments after -- reach the program unchanged")

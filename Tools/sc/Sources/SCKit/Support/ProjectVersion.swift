@@ -94,8 +94,19 @@ enum ProjectVersion {
         return result
     }
 
+    /// `1.2.3`, or a pre-release of it such as `1.2.3-beta.1`.
     static func isSemanticVersion(_ value: String) -> Bool {
-        value.range(of: #"^[0-9]+\.[0-9]+\.[0-9]+$"#, options: .regularExpression) != nil
+        value.range(of: #"^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$"#, options: .regularExpression) != nil
+    }
+
+    /// A version with a pre-release part: `1.2.3-beta.1`, not `1.2.3`.
+    static func isPrerelease(_ value: String) -> Bool {
+        isSemanticVersion(value) && value.contains("-")
+    }
+
+    /// A pre-release's label, as `--pre` takes it: `beta`, `rc`.
+    static func isPrereleaseLabel(_ value: String) -> Bool {
+        value.range(of: #"^[a-z][a-z0-9]*$"#, options: .regularExpression) != nil
     }
 }
 

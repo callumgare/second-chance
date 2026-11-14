@@ -96,9 +96,22 @@ struct ProjectVersionTests {
         #expect(throws: SCError.self) { try ProjectVersion.rewrite(broken, version: "1.0.0", build: "1") }
     }
 
-    @Test("Semantic versions", arguments: [("1.2.3", true), ("10.0.0", true), ("1.2", false), ("v1.2.3", false), ("1.2.3-beta", false)])
+    @Test("Semantic versions", arguments: [
+        ("1.2.3", true), ("10.0.0", true), ("1.2.3-beta.1", true), ("1.2.3-rc", true),
+        ("1.2", false), ("v1.2.3", false), ("1.2.3-", false), ("1.2.3-beta..1", false), ("1.2.3 beta", false),
+    ])
     func semver(value: String, valid: Bool) {
         #expect(ProjectVersion.isSemanticVersion(value) == valid)
+    }
+
+    @Test("Pre-releases are told from releases", arguments: [("1.2.3-beta.1", true), ("1.2.3", false), ("1.2-beta", false)])
+    func prerelease(value: String, isPrerelease: Bool) {
+        #expect(ProjectVersion.isPrerelease(value) == isPrerelease)
+    }
+
+    @Test("Pre-release labels", arguments: [("beta", true), ("rc", true), ("alpha2", true), ("Beta", false), ("beta.1", false), ("", false)])
+    func prereleaseLabel(value: String, valid: Bool) {
+        #expect(ProjectVersion.isPrereleaseLabel(value) == valid)
     }
 }
 
@@ -135,6 +148,20 @@ struct ChangelogTests {
         #expect(Changelog.section(for: "0.4.0", in: text) == notes)
         #expect(Changelog.section(for: "0.3.0", in: text) == "Old notes.")
         #expect(Changelog.section(for: "0.5.0", in: text) == nil)
+    }
+
+    @Test("A release's section is apart from its pre-releases'")
+    func prereleaseSections() {
+        let text = Changelog.adding(version: "0.4.0-beta.2", date: "2026-10-20", notes: "- Second",
+                                    to: "# Changelog\n\n## 0.4.0-beta.1 — 2026-10-10\n\n- First\n")
+        #expect(!Changelog.hasSection(for: "0.4.0", in: text))
+        #expect(Changelog.section(for: "0.4.0", in: text) == nil)
+        #expect(Changelog.section(for: "0.4.0-beta.2", in: text) == "- Second")
+        #expect(Changelog.section(for: "0.4.0-beta.1", in: text) == "- First")
+
+        let released = Changelog.adding(version: "0.4.0", date: "2026-10-30", notes: "- All", to: text)
+        #expect(Changelog.section(for: "0.4.0", in: released) == "- All")
+        #expect(Changelog.section(for: "0.4.0-beta.2", in: released) == "- Second")
     }
 
     @Test("Replacing the oldest release runs to the end of the file")

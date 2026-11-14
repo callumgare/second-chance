@@ -6,6 +6,32 @@ conventional commits since the last tag — see
 [AGENTS.md](../AGENTS.md#releasing) for the commit-message rules that decide
 it.
 
+## Pre-releases
+
+`./sc release --pre beta` makes a pre-release instead (any lowercase label
+works: `rc`, `alpha`). Its version is the next release's with the label and a
+number, which cog counts on from the last pre-release of that version:
+`2.1.0-beta.1`, then `2.1.0-beta.2`, and a plain `./sc release` afterwards
+makes `2.1.0`. A commit that warrants a bigger bump moves the next one on
+(`2.1.0-beta.1`, then a `feat!`, gives `3.0.0-beta.1` after 2.x). `--version
+2.1.0-rc.1` names one outright.
+
+A pre-release goes through every step a release does, with these
+differences:
+
+- **Its notes cover the commits since the tag before it**, a pre-release's
+  or a release's, while a release's cover everything since the last release,
+  as its readers may never have had a pre-release. Both get a section in
+  `CHANGELOG.md`, and pre-releases' sections stay when the release is made.
+- **The README's pictures aren't retaken**, as the README shows the latest
+  release.
+- **The GitHub release is marked as a pre-release.** GitHub never makes one
+  the latest release, and installed copies' update feed is the latest
+  release's appcast ([updates.md](updates.md#the-feed)), so they aren't
+  offered it; people trying it download it from its release page. A copy
+  running a pre-release is offered the next release once it's out, since
+  its build number, the commit count, is higher.
+
 ## Lint first
 
 Straight after its preflight checks, before it works out the version or has

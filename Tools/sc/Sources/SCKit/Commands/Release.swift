@@ -14,14 +14,24 @@ struct ReleaseCommand: AsyncParsableCommand {
         runs the unit tests, then builds and zips a Release app, commits and tags \
         it. Pushing and creating the GitHub release are asked first — at the \
         start, if you'd rather it publish once built than wait for you to check \
-        the build — so publishing stays a decision you make.
+        the build — so publishing stays a decision you make. With --pre beta \
+        it makes a pre-release (2.1.0-beta.1), which installed copies aren't \
+        offered.
         """
     )
 
     @OptionGroup var global: GlobalOptions
 
-    @Option(help: ArgumentHelp("Use this version instead of the one cog computes.", valueName: "X.Y.Z"))
+    @Option(help: ArgumentHelp("Use this version instead of the one cog computes.", valueName: "X.Y.Z[-label.N]"))
     var version: String?
+
+    @Option(name: .customLong("pre"), help: ArgumentHelp(
+        "Release a pre-release with this label, such as beta or rc.",
+        discussion: "The version is the next one's, numbered after the last pre-release of it: 2.1.0-beta.1, then 2.1.0-beta.2. "
+            + "It's published as a GitHub pre-release, so installed copies aren't offered it.",
+        valueName: "label"
+    ))
+    var pre: String?
 
     @Flag(name: [.customLong("dry-run"), .customShort("n")], help: "Show what the release would contain; write nothing.")
     var dryRun = false
@@ -65,13 +75,17 @@ struct ReleaseCommand: AsyncParsableCommand {
             throw ValidationError("--notes-effort is low, medium, high, xhigh, max or default.")
         }
         if let version, !ProjectVersion.isSemanticVersion(version.hasPrefix("v") ? String(version.dropFirst()) : version) {
-            throw ValidationError("'\(version)' isn't a three-part semantic version.")
+            throw ValidationError("'\(version)' isn't a three-part semantic version (X.Y.Z, or X.Y.Z-beta.1 for a pre-release).")
+        }
+        if let pre {
+            if version != nil { throw ValidationError("--version names the whole version: give a pre-release as --version X.Y.Z-\(pre).N, without --pre.") }
+            if !ProjectVersion.isPrereleaseLabel(pre) { throw ValidationError("--pre is a lowercase word such as beta or rc.") }
         }
     }
 
     func run() async throws {
         let session = try Session.start(global)
-        let release = Release(session: session, dryRun: dryRun, buildOnly: buildOnly, plainNotes: plainNotes,
+        let release = Release(session: session, dryRun: dryRun, buildOnly: buildOnly, prereleaseLabel: pre, plainNotes: plainNotes,
                               notesModel: notesModel == "default" ? nil : notesModel,
                               notesEffort: notesEffort == "default" ? nil : notesEffort)
         try await release.run(versionOverride: version.map { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 },
@@ -85,6 +99,8 @@ private struct Release {
     /// Build the next version and leave the repo as it was: no changelog,
     /// notes, commit or tag, and the project file put back afterwards.
     let buildOnly: Bool
+    /// `--pre`: the label of the pre-release cog numbers (`beta` → `X.Y.Z-beta.N`).
+    let prereleaseLabel: String?
     /// Skip Claude Code's rewrite of the notes.
     let plainNotes: Bool
     /// `--model` for the rewrite, or nil for Claude Code's default.
@@ -235,16 +251,22 @@ private struct Release {
         let lastTag = try await git(["describe", "--tags", "--abbrev=0", "--match", "v*"])
         let previous = lastTag.succeeded ? lastTag.output.trimmingCharacters(in: .whitespacesAndNewlines) : nil
         let version = try await resolveVersion(override: versionOverride, previous: previous)
+        let isPrerelease = ProjectVersion.isPrerelease(version)
         // CFBundleVersion, kept monotonic off the commit count.
         let buildNumber = try await git(["rev-list", "--count", "HEAD"]).output.trimmingCharacters(in: .whitespacesAndNewlines)
         let origin = versionOverride != nil ? "from --version" : "up from \(previous ?? "no tag")"
-        ui.line(ui.format("\(.primary("🏷  v\(version)"))") + ui.format("\(.muted("  build \(buildNumber), \(origin)"))"))
+        let kind = isPrerelease ? ", a pre-release" : ""
+        ui.line(ui.format("\(.primary("🏷  v\(version)"))") + ui.format("\(.muted("  build \(buildNumber), \(origin)\(kind)"))"))
 
         var notes: String
         if buildOnly {
             notes = ""
         } else {
-            let range = previous.map { "\($0)..HEAD" } ?? "HEAD"
+            // A pre-release's notes say what's new since the one before it; a
+            // release's say everything since the last release, as its readers
+            // may never have had a pre-release.
+            let notesFrom = isPrerelease ? previous : try await lastReleaseTag()
+            let range = notesFrom.map { "\($0)..HEAD" } ?? "HEAD"
             let notesResult = try await Proc.collect("cog", ["changelog", range, "--template", repo.notesTemplate.path], cwd: repo.root)
             notes = Changelog.trimLeadingBlankLines(notesResult.output)
             guard !notes.isEmpty else {
@@ -355,8 +377,10 @@ private struct Release {
 
         if buildOnly { return (version, branch, false) }
 
-        // The README's pictures of the app, retaken from this build.
-        let screenshots = try await retakeReadmeScreenshots(app: app, rollback: rollback)
+        // The README's pictures of the app, retaken from this build. Not from
+        // a pre-release's: the README shows what people download, the latest
+        // release.
+        let screenshots = isPrerelease ? [] : try await retakeReadmeScreenshots(app: app, rollback: rollback)
 
         // 7. Debug symbols, so crash reports from this version can be read.
         try await uploadDebugSymbols()
@@ -679,17 +703,22 @@ private struct Release {
     /// whatever didn't happen can be run by hand.
     private func publish(version: String, branch: String, ask: Bool) async throws {
         let tag = "v\(version)"
+        let isPrerelease = ProjectVersion.isPrerelease(version)
+        let what = isPrerelease ? "pre-release" : "release"
         let push = ["git", "push", "origin", branch, tag]
         // As a draft, published only once both files are seen on it: the
         // apps' update feed is releases/latest/download/appcast.xml, so a
         // published release missing its appcast breaks every update check.
+        // A pre-release is marked as one, which GitHub never makes the
+        // latest, so the feed stays the last release's and installed copies
+        // aren't offered it.
         let release = ["gh", "release", "create", tag, repo.display(zip), repo.display(appcast), "--title", tag,
-                       "--notes-file", repo.display(notesFile), "--draft"]
+                       "--notes-file", repo.display(notesFile), "--draft"] + (isPrerelease ? ["--prerelease"] : [])
         let undraft = ["gh", "release", "edit", tag, "--draft=false"]
         let pushLine = push.map(Self.shellQuoted).joined(separator: " ")
         let releaseLine = (release + ["&&"] + undraft).map(Self.shellQuoted).joined(separator: " ")
 
-        guard try !ask || ui.confirm("Push \(branch) and \(tag) to origin, and create the GitHub release?") == true else {
+        guard try !ask || ui.confirm("Push \(branch) and \(tag) to origin, and create the GitHub \(what)?") == true else {
             ui.success("\(tag) is committed and tagged locally. To publish:", takeaways: [TerminalText(stringLiteral: pushLine), TerminalText(stringLiteral: releaseLine)])
             return
         }
@@ -702,7 +731,7 @@ private struct Release {
                               hints: [pushed.error, "Then run: \(pushLine) && \(releaseLine)"])
             }
         }
-        let created = try await ui.progressStep("GitHub release", success: "Created the \(tag) release") { _ in
+        let created = try await ui.progressStep("GitHub \(what)", success: "Created the \(tag) \(what)") { _ in
             let created = try await gh(Array(release.dropFirst()))
             guard created.succeeded else {
                 throw SCError("gh release create failed — \(tag) is pushed.", hints: [created.error, "Then run: \(releaseLine)"])
@@ -721,7 +750,8 @@ private struct Release {
             }
             return created
         }
-        ui.success("\(tag) is released.", takeaways: [TerminalText(stringLiteral: created.output.trimmingCharacters(in: .whitespacesAndNewlines))])
+        let link = TerminalText(stringLiteral: created.output.trimmingCharacters(in: .whitespacesAndNewlines))
+        ui.success(isPrerelease ? "\(tag) is out as a pre-release." : "\(tag) is released.", takeaways: [link])
     }
 
     private static func shellQuoted(_ word: String) -> String {
@@ -853,7 +883,11 @@ private struct Release {
             // one to give. When no commit warrants a bump it prints an
             // explanation instead and still exits 0, so the output is checked
             // rather than the status.
-            let bumped = try await Proc.collect("cog", ["bump", "--auto", "--dry-run", "--skip-untracked"], cwd: repo.root)
+            // With --pre, cog numbers it after the last pre-release of the
+            // same version (beta.1, beta.2…); without, the version after
+            // pre-releases is theirs without the label.
+            let pre = prereleaseLabel.map { ["--pre", "\($0).*"] } ?? []
+            let bumped = try await Proc.collect("cog", ["bump", "--auto", "--dry-run", "--skip-untracked"] + pre, cwd: repo.root)
             let last = bumped.output.split(separator: "\n").last.map(String.init) ?? ""
             let candidate = last.hasPrefix("v") ? String(last.dropFirst()) : last
             guard ProjectVersion.isSemanticVersion(candidate) else {
@@ -865,10 +899,20 @@ private struct Release {
             version = candidate
         }
         guard ProjectVersion.isSemanticVersion(version) else { throw SCError("'\(version)' isn't a three-part semantic version.") }
+        if prereleaseLabel != nil, !ProjectVersion.isPrerelease(version) {
+            throw SCError("cog gave \(version) for a pre-release, with no pre-release label.", hints: ["Give the version with --version X.Y.Z-label.N."])
+        }
         if try await git(["rev-parse", "-q", "--verify", "refs/tags/v\(version)"]).succeeded {
             try await clearLocalTag("v\(version)")
         }
         return version
+    }
+
+    /// The newest release's tag reachable from HEAD, leaving out
+    /// pre-releases (`v2.1.0-beta.1`), or nil when there's none.
+    private func lastReleaseTag() async throws -> String? {
+        let tag = try await git(["describe", "--tags", "--abbrev=0", "--match", "v*", "--exclude", "v*-*"])
+        return tag.succeeded ? tag.output.trimmingCharacters(in: .whitespacesAndNewlines) : nil
     }
 
     /// A tag for this version is here already. On origin, that version is
