@@ -165,6 +165,33 @@ static CGError belowNotchWarpMouseCursorPosition(CGPoint point) {
     return CGWarpMouseCursorPosition(point);
 }
 
+enum { kMaxImportLibraries = 256 };
+
+static BOOL isDylibLoadCommand(uint32_t cmd) {
+    return cmd == LC_LOAD_DYLIB || cmd == LC_LOAD_WEAK_DYLIB || cmd == LC_REEXPORT_DYLIB
+        || cmd == LC_LOAD_UPWARD_DYLIB || cmd == LC_LAZY_LOAD_DYLIB;
+}
+
+/// The address binding `symbol` (named `name`, without its underscore) in
+/// `image` would give: looked up in the library its two-level ordinal names,
+/// and through what that library re-exports, as dyld does. A flat lookup
+/// could find a same-named function of another image first. Falls back to
+/// that flat lookup for a flat-namespace image, a special ordinal, or a
+/// library that can't be named from here (an @rpath one).
+static void *importedAddress(const struct mach_header_64 *image, const char *const *libraries, uint32_t libraryCount,
+                             const struct nlist_64 *symbol, const char *name) {
+    uint32_t ordinal = GET_LIBRARY_ORDINAL(symbol->n_desc);
+    if ((image->flags & MH_TWOLEVEL) && ordinal >= 1 && ordinal <= libraryCount && ordinal <= kMaxImportLibraries) {
+        void *handle = dlopen(libraries[ordinal - 1], RTLD_NOLOAD | RTLD_LAZY);
+        if (handle) {
+            void *address = dlsym(handle, name);
+            dlclose(handle);
+            return address;
+        }
+    }
+    return dlsym(RTLD_DEFAULT, name);
+}
+
 /// Each entry of `image`'s import pointer sections (__got, __nl_symbol_ptr,
 /// __la_symbol_ptr, whatever their segment) that is `original`: one holding
 /// that address, or a lazy pointer not yet bound (still pointing into the
@@ -178,9 +205,17 @@ static int visitImageImports(const struct mach_header_64 *image, void *original,
     const struct symtab_command *symtab = NULL;
     const struct dysymtab_command *dysymtab = NULL;
     const struct segment_command_64 *linkedit = NULL, *text = NULL;
+    const char *libraries[kMaxImportLibraries];
+    uint32_t libraryCount = 0;
     const struct load_command *command = (const struct load_command *)(image + 1);
     for (uint32_t i = 0; i < image->ncmds; i++, command = (const void *)((const char *)command + command->cmdsize)) {
-        if (command->cmd == LC_SYMTAB) symtab = (const void *)command;
+        if (isDylibLoadCommand(command->cmd)) {
+            // Each library the image links counts as the next ordinal, from 1,
+            // whatever kind of link it is.
+            const struct dylib_command *dylib = (const void *)command;
+            if (libraryCount < kMaxImportLibraries) libraries[libraryCount] = (const char *)dylib + dylib->dylib.name.offset;
+            libraryCount++;
+        } else if (command->cmd == LC_SYMTAB) symtab = (const void *)command;
         else if (command->cmd == LC_DYSYMTAB) dysymtab = (const void *)command;
         else if (command->cmd == LC_SEGMENT_64) {
             const struct segment_command_64 *segment = (const void *)command;
@@ -220,8 +255,7 @@ static int visitImageImports(const struct mach_header_64 *image, void *original,
                     uint32_t index = indirect[sections[j].reserved1 + k];
                     if (index & (INDIRECT_SYMBOL_ABS | INDIRECT_SYMBOL_LOCAL)) continue;
                     const char *name = strings + symbols[index].n_un.n_strx;
-                    // dlsym finds what binding would: through re-exports too.
-                    match = name[0] == '_' && dlsym(RTLD_DEFAULT, name + 1) == original;
+                    match = name[0] == '_' && importedAddress(image, libraries, libraryCount, &symbols[index], name + 1) == original;
                 }
                 if (!match) continue;
                 if (!replacement) { found++; continue; }

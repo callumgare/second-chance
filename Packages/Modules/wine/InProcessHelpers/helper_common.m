@@ -90,9 +90,13 @@ void **imageSlotHolding(const struct mach_header_64 *image, intptr_t slide, void
             if (strncmp(segment->segname, "__DATA", 6) == 0) {
                 const struct section_64 *section = (const struct section_64 *)(segment + 1);
                 for (uint32_t s = 0; s < segment->nsects; s++, section++) {
-                    // The GOT holds what the image imports, not its own functions.
+                    // Import pointers (the GOT, and the lazy and non-lazy
+                    // pointers of a build for an older macOS) hold what the
+                    // image imports, not its own functions.
                     if (strcmp(section->sectname, "__got") == 0) continue;
                     uint8_t type = section->flags & SECTION_TYPE;
+                    if (type == S_NON_LAZY_SYMBOL_POINTERS || type == S_LAZY_SYMBOL_POINTERS
+                        || type == S_LAZY_DYLIB_SYMBOL_POINTERS) continue;
                     if (type == S_ZEROFILL || type == S_GB_ZEROFILL || type == S_THREAD_LOCAL_ZEROFILL) continue;
                     void **slots = (void **)(section->addr + slide);
                     for (uint64_t n = 0; n < section->size / sizeof(void *); n++) {
