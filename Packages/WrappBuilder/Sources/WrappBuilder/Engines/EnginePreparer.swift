@@ -60,7 +60,7 @@ public nonisolated struct EnginePreparer: Sendable {
         defer { try? FileManager.default.removeItem(at: scratch) }
 
         progress("Preparing \(id) \(version)")
-        let job = EngineJob(sources: sources, package: package, tree: tree, scratch: scratch)
+        let job = EngineJob(sources: sources, package: package, has: module.manifest.has(version: version), tree: tree, scratch: scratch)
         let toSign = try await native.prepare(job)
         try await Blocking.run { try EngineTree.writeList(module: id, in: tree) }
         let hash = try await Blocking.run { try EngineTree.hash(of: tree) }
@@ -81,6 +81,9 @@ public nonisolated struct EnginePreparer: Sendable {
 public nonisolated struct EngineJob: Sendable {
     public let sources: [String: URL]
     public let package: EnginePackage
+    /// What the version being prepared has (`ModuleManifest.Version.has`):
+    /// a fix it has needs no patch of ours.
+    public let has: Set<String>
     public let tree: URL
     public let scratch: URL
 
@@ -153,6 +156,9 @@ nonisolated extension WineBuild {
     static let helpersReference = "@loader_path/../../../../../Frameworks/in_process_helpers.dylib"
     /// Contents/Frameworks from SharedSupport/wine/bin.
     static let frameworksRunPath = "@executable_path/../../../Frameworks"
+    /// What a version must have (`has:`) for its ntdll to need no
+    /// `RosettaFaultFix`: both the faults the patch deals with.
+    static let rosettaFaultsFixed: Set<String> = ["rosetta-fs-addr32", "rosetta-softice-probes"]
 
     /// Sikarugir's Wine (`wine`) in `SharedSupport/wine`, and the frameworks
     /// of its wrapper template (`wineskin`) in `Frameworks`: its Mac driver
@@ -220,11 +226,18 @@ nonisolated extension WineBuild {
         // probes, which code takes because Wine on macOS runs 32-bit code in
         // an LDT segment. The patch has Wine's 32-bit ntdll deal with them
         // before any exception handler sees them. A Windows DLL: nothing to sign.
-        // See docs/big-fish.md#armadillo-under-rosetta.
-        let ntdll = wine.appendingPathComponent("lib/wine/i386-windows/ntdll.dll")
-        try await Blocking.run {
-            let (patched, outcome) = try RosettaFaultFix.patch(Data(contentsOf: ntdll))
-            if outcome == .patched { try patched.write(to: ntdll) }
+        // See docs/big-fish.md#armadillo-under-rosetta. A Wine that deals
+        // with both itself is left as it is; one that deals only with the
+        // first still gets the patch, whose own handling of it is then never
+        // reached, as Wine's Unix side sees the fault first.
+        if job.has.isSuperset(of: rosettaFaultsFixed) {
+            logger.notice("[Engine] This Wine deals with Rosetta's faults itself: its ntdll isn't patched")
+        } else {
+            let ntdll = wine.appendingPathComponent("lib/wine/i386-windows/ntdll.dll")
+            try await Blocking.run {
+                let (patched, outcome) = try RosettaFaultFix.patch(Data(contentsOf: ntdll))
+                if outcome == .patched { try patched.write(to: ntdll) }
+            }
         }
 
         // A framework that loses its Swift modules is sealed again, or its

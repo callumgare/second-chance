@@ -28,6 +28,13 @@ nonisolated public struct Wine: Sendable {
     /// session's (`services.exe` passes its own on), not that of whatever
     /// asked it to act.
     public var sessionVariables: [String: String] = [:]
+    /// What this Wine has that Second Chance would otherwise make up for, or
+    /// may use (its module.yaml's `has:`, as the wrapp's lock recorded it):
+    /// `msync`, `cocoa-start-wait`. Nil when that isn't known, as in a
+    /// build's tree, whose lock (an update's) may be another Wine's: then
+    /// everything is done as for a Wine with none of them, msync aside,
+    /// which is asked for as before (docs/modules.md#what-an-engine-has).
+    public var engineHas: Set<String>?
 
     /// The Windows user name: whose folder under `drive_c/users` the saves are in.
     public static let username = "crossover"
@@ -38,12 +45,23 @@ nonisolated public struct Wine: Sendable {
 
     /// The Wine bundled in `wrapp`, running in `prefix`: the wrapp's own
     /// unless given another.
-    public init(wrapp: URL, prefix: URL? = nil) {
+    public init(wrapp: URL, prefix: URL? = nil, engineHas: Set<String>? = nil) {
         let layout = WrappLayout(app: wrapp)
         self.wineDir = layout.wine
         self.binDir = wineDir.appendingPathComponent("bin")
         self.prefix = prefix ?? layout.prefix
         self.frameworksDir = layout.frameworks
+        self.engineHas = engineHas
+    }
+
+    /// Names in a module.yaml's `has:` that this code acts on.
+    public enum Has {
+        /// CrossOver's msync and esync (Sikarugir's), which WineHQ's builds
+        /// don't have: `WINEMSYNC`/`WINEESYNC` are set only for a Wine that may.
+        public static let msync = "msync"
+        /// Wine waits for Cocoa to start for as long as it takes, so the
+        /// cocoa start wait helper stands down.
+        public static let cocoaStartWait = "cocoa-start-wait"
     }
 
     /// The variables Second Chance sets for Wine, and only those.
@@ -103,7 +121,8 @@ nonisolated public struct Wine: Sendable {
             "MTL_HUD_ENABLED": "0",
             "MVK_CONFIG_FAST_MATH_ENABLED": "0",
             "DOTNET_EnableWriteXorExecute": "0"
-        ].merging(Self.syncVariables()) { $1 }
+        ].merging(mayHaveMsync ? Self.syncVariables() : [:]) { $1 }
+            .merging(engineHasVariables) { $1 }
             .merging(sessionVariables) { ours, _ in ours }
     }
 
@@ -130,6 +149,17 @@ nonisolated public struct Wine: Sendable {
         case "none": ["WINEESYNC": "0", "WINEMSYNC": "0"]
         default: ["WINEESYNC": "1", "WINEMSYNC": "1"]
         }
+    }
+
+    /// Whether this Wine may have msync and esync: unless it's known not to.
+    var mayHaveMsync: Bool { engineHas?.contains(Has.msync) ?? true }
+
+    /// `WINE_ENGINE_HAS`, what this Wine has, comma-separated, for the
+    /// in-process helpers: one whose fix it has stands down
+    /// (`helperEngineHas`). Unset when that isn't known.
+    var engineHasVariables: [String: String] {
+        guard let engineHas else { return [:] }
+        return ["WINE_ENGINE_HAS": engineHas.sorted().joined(separator: ",")]
     }
 
     /// What a Wine program runs with: ours over the parent's, less the

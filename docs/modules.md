@@ -57,6 +57,7 @@ release: 1                     # our fixes beneath its versions; counts up
 native: "wine"                 # its Swift: Packages/Modules/wine, compiled into Second Chance
 versions:                      # what this release provides, as a bundle names it with @
   - version: "10.0_8"
+    has: ["msync"]             # an engine's: what it has that the module would make up for (below)
     package: { … }             # an engine's: what it is made from (below)
 data: ["routine-errors.yaml"]
 retired: ["prefix.yaml", "functions/keep-thread-handles"]  # what a release dropped (below)
@@ -298,7 +299,8 @@ it found) on a Wine it doesn't know rather than patching blind.
 
 - **Every Wine gets** `RosettaFaultFix`, in 32-bit `ntdll.dll`, made as the
   engine is prepared, so it is in the engine store
-  ([big-fish.md](big-fish.md#armadillo-under-rosetta)).
+  ([big-fish.md](big-fish.md#armadillo-under-rosetta)), unless its version
+  has both fixes itself ([below](#what-an-engine-has)).
 - **A game that asks gets the patches it names**, through `WINE.PATCH
   <name>…`, in a stage after it has Wine: `keep-thread-handles` and
   `skip-synth-playout` (`WinePatch.all`, in `WineExecutor`), each written
@@ -503,7 +505,9 @@ builds. Wine's:
   which lets programs wrapped in Armadillo, as Big Fish's games are, run
   under Rosetta ([big-fish.md](big-fish.md#armadillo-under-rosetta)). Its
   code goes in the unused end of `.text`, zeros in a GNU-linked Wine
-  (Sikarugir's) and `int3`s in an LLVM-linked one (WineHQ's).
+  (Sikarugir's) and `int3`s in an LLVM-linked one (WineHQ's). A version whose
+  `has:` names both `rosetta-fs-addr32` and `rosetta-softice-probes` is left
+  as it is ([what an engine has](#what-an-engine-has)).
 - The wrapper's Swift modules are dropped, and the framework they were in
   is sealed again.
 - Every unsigned program and DLL is signed, deepest first: signing a
@@ -779,6 +783,39 @@ ADB functions its build exports.
 
 `SECOND_CHANCE_BASILISK_DISPLAY=0` leaves the Mac in Basilisk II's own window.
 A build's `BASILISK.RUN` always uses Basilisk II's own window.
+
+### What an engine has
+
+A version of an engine may have, itself, what its module's code would
+otherwise make up for or may use: a fix one of the wine module's in-process
+helpers or patches makes, or a feature only some builds have. Its `has:`
+says so, by names the module's Swift knows, so nothing has to guess from a
+version number which Wine has what:
+
+```yaml
+versions:
+  - version: "10.0_8"
+    has: ["msync"]
+```
+
+The build records a version's `has:` in the wrapp's lock
+(`WrappLock.ModuleRef.has`), and the wrapp hands it to its Wine
+(`Wine.engineHas`), which passes it on to the in-process helpers as
+`WINE_ENGINE_HAS` (`helperEngineHas`). A wrapp built before it was recorded
+knows nothing, and does everything as before, as does a build's tree, whose
+lock, an update's, may be another Wine's. Preparing an engine reads the
+module's data directly. The wine module's names:
+
+| Name | What the engine has | What stands down |
+| --- | --- | --- |
+| `msync` | CrossOver's msync and esync (Sikarugir's builds; WineHQ's have neither) | `WINEMSYNC` and `WINEESYNC` are set only for a Wine that has it, or that isn't known not to |
+| `cocoa-start-wait` | Wine waits for a program's main thread to start Cocoa for as long as it takes | the [cocoa start wait](wine-in-process-helpers.md#cocoa-start-wait) helper |
+| `rosetta-fs-addr32` | Wine emulates an `fs:` access with the 0x67 prefix, which Rosetta faults on | with `rosetta-softice-probes` too, the [Rosetta fault fix](big-fish.md#armadillo-under-rosetta) to its ntdll when the engine is prepared |
+| `rosetta-softice-probes` | Wine skips the Windows 9x SoftICE probes (`int 68h`, `int 41h`) Armadillo makes | as above |
+
+Only Sikarugir's 10.0_8 has any of these so far (`msync`). A name is added
+here when the code that acts on it is, and to a version when a build of it
+has been seen to have it, not because its version number says it should.
 
 ### The engine store
 

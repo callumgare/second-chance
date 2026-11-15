@@ -50,6 +50,11 @@ public nonisolated struct EngineError: LocalizedError, CustomStringConvertible, 
 }
 
 nonisolated extension ModuleManifest {
+    /// What `version` has (`Version.has`), empty when it says nothing.
+    public func has(version: String) -> Set<String> {
+        Set(versions.first { $0.version == version }?.has ?? [])
+    }
+
     /// The package of `version`, or of the newest version with one when
     /// nil; nil when the module has no engine to prepare.
     public func package(version: String? = nil) -> (version: String, package: EnginePackage)? {

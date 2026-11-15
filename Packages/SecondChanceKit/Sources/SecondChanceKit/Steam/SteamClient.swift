@@ -88,8 +88,11 @@ nonisolated public final class SteamClient: SteamClientDriving, @unchecked Senda
     /// (a read-only wrapp's copy; see the wrapp's `getWinePrefix`). `gameExe`,
     /// the game's .exe, when Steam will launch a game — not while a build
     /// installs one.
-    public init(wrappPath: URL, prefixDir: URL? = nil, gameExe: URL? = nil, launch: RecordedLaunch? = nil, onOutputLine: (@Sendable (String) -> Void)? = nil) {
-        wine = Wine(wrapp: wrappPath, prefix: prefixDir)
+    /// `engineHas` is what the wrapp's Wine has (`Wine.engineHas`), which
+    /// only the wrapp knows.
+    public init(wrappPath: URL, prefixDir: URL? = nil, gameExe: URL? = nil, launch: RecordedLaunch? = nil,
+                engineHas: Set<String>? = nil, onOutputLine: (@Sendable (String) -> Void)? = nil) {
+        wine = Wine(wrapp: wrappPath, prefix: prefixDir, engineHas: engineHas)
         self.gameExe = gameExe
         self.launch = launch
         self.onOutputLine = onOutputLine

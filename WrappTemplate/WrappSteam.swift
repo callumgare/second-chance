@@ -68,7 +68,7 @@ nonisolated final class WrappSteam: @unchecked Sendable {
         let gameExe = getGameLaunchInfo(config).gameExePath.map(URL.init(fileURLWithPath:))
         armsGameHelpers = gameExe != nil
         client = SteamClient(wrappPath: config.appPath, prefixDir: config.winePrefix,
-                             gameExe: gameExe, launch: config.launch, onOutputLine: onOutputLine)
+                             gameExe: gameExe, launch: config.launch, engineHas: config.wineEngineHas, onOutputLine: onOutputLine)
 
         // A wrapp that was force-quit or crashed never stopped its Steam, which
         // is still running here, signed in. This wrapp holds the Steam lock, so

@@ -161,8 +161,12 @@ nonisolated enum ShippedBundles {
                     $0.instruction == "ENGINE" && $0.arguments.first?.hasPrefix("\(id)@") == true
                 }?.arguments.first.map { String($0.dropFirst(id.count + 1)) }
                 let version = planned ?? module.manifest.versions.first?.version
+                // What an engine's version has, which the wrapp reads from here
+                // (`Wine.engineHas`); a module with no engine records nothing.
+                let package = module.manifest.package(version: version)?.package
                 return WrappLock.ModuleRef(id: id, release: module.manifest.release, version: version,
-                                           files: files.isEmpty ? nil : files, package: module.manifest.package(version: version)?.package.prepared)
+                                           files: files.isEmpty ? nil : files, package: package?.prepared,
+                                           has: package == nil ? nil : version.map { module.manifest.has(version: $0).sorted() })
             }
             let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
             // The volumes the plan's launch mounts; for an edition with no

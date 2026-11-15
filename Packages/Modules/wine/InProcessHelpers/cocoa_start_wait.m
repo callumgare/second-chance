@@ -30,7 +30,8 @@
 //
 //  Runs in every Wine process, not armed per game: explorer.exe and Wine's
 //  services start the driver too. SECOND_CHANCE_COCOA_START_WAIT=0 leaves it
-//  off, for comparison.
+//  off, for comparison, and a Wine that waits as long as it takes itself
+//  (WINE_ENGINE_HAS: cocoa-start-wait) gets nothing from it.
 //
 //  Built into in_process_helpers.dylib by WrappTemplate/setup-wine.sh; see
 //  docs/wine-in-process-helpers.md.
@@ -81,6 +82,7 @@ __attribute__((constructor))
 static void cocoaStartWaitInit(void) {
     const char *off = getenv("SECOND_CHANCE_COCOA_START_WAIT");
     if (off && strcmp(off, "0") == 0) return;
+    if (helperEngineHas("cocoa-start-wait")) return;
     Method method = class_getInstanceMethod([NSConditionLock class], @selector(lockWhenCondition:beforeDate:));
     if (!method) {
         helperReport("CocoaStart", "warning", "no -[NSConditionLock lockWhenCondition:beforeDate:]; Wine's 5 s limit on starting Cocoa stays");

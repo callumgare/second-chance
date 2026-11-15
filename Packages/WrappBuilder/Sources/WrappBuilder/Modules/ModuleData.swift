@@ -63,6 +63,12 @@ public nonisolated struct ModuleManifest: Decodable, Hashable, Sendable {
         public let replacedBy: String?
         /// An engine's: what it is made from (`EnginePackage`).
         public let package: EnginePackage?
+        /// An engine's: what this version has that its module's code would
+        /// otherwise make up for, or may use (`msync`, `dmsynth-playout`):
+        /// names the module's Swift knows. Recorded in a wrapp's lock
+        /// (`WrappLock.ModuleRef.has`), so what runs it needn't guess from a
+        /// version number (docs/modules.md#what-an-engine-has).
+        public let has: [String]?
     }
 }
 

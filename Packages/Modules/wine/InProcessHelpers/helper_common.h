@@ -187,6 +187,11 @@ void helperDebugLog(os_log_t log, const char *tag, const char *format, ...);
 /// Seconds on a clock that only goes forward, for timing waits.
 double helperNowSeconds(void);
 
+/// Whether the Wine this runs in has `name` (one of its module.yaml's
+/// `has:`), as the wrapp passes it in WINE_ENGINE_HAS, comma-separated: a
+/// helper, or part of one, whose fix Wine has stands down. NO when unset.
+BOOL helperEngineHas(const char *name);
+
 /// Run `block` on the main thread and wait up to `timeoutSeconds` for its
 /// result. AppKit and Wine's controller are main-thread only, and Wine gives
 /// that thread to a CFRunLoop that drains queued blocks (native_fullscreen.m).

@@ -47,6 +47,22 @@ void helperDebugLog(os_log_t log, const char *tag, const char *format, ...) {
     }
 }
 
+#pragma mark - What Wine has
+
+BOOL helperEngineHas(const char *name) {
+    const char *list = getenv("WINE_ENGINE_HAS");
+    if (!list || !name || !*name) return NO;
+    size_t length = strlen(name);
+    for (const char *item = list; *item;) {
+        const char *end = strchr(item, ',');
+        size_t itemLength = end ? (size_t)(end - item) : strlen(item);
+        if (itemLength == length && strncmp(item, name, length) == 0) return YES;
+        if (!end) break;
+        item = end + 1;
+    }
+    return NO;
+}
+
 #pragma mark - The main thread
 
 double helperNowSeconds(void) {

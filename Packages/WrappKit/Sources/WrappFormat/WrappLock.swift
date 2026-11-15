@@ -72,13 +72,20 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
         /// An engine's: its package's prepared hash, which names the engine
         /// the wrapp holds.
         public var package: String?
+        /// An engine's: what its version has that the module's code would
+        /// otherwise make up for, or may use (its `module.yaml`'s `has:`), so
+        /// the wrapp knows without the module's data. Nil in a wrapp built
+        /// before it was recorded, which doesn't know.
+        public var has: [String]?
 
-        public init(id: String, release: Int, version: String?, files: [String: String]? = nil, package: String? = nil) {
+        public init(id: String, release: Int, version: String?, files: [String: String]? = nil, package: String? = nil,
+                    has: [String]? = nil) {
             self.id = id
             self.release = release
             self.version = version
             self.files = files
             self.package = package
+            self.has = has
         }
     }
 
@@ -161,6 +168,12 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
 
     /// This wrapp's bundle id.
     public var wrappBundleID: String { Self.wrappBundleID(program: bundle.id) }
+
+    /// What the version of `module` the wrapp holds has (`ModuleRef.has`);
+    /// nil when its lock doesn't say.
+    public func has(module: String) -> Set<String>? {
+        modules.first { $0.id == module }?.has.map(Set.init)
+    }
 
     /// The lock of the wrapp at `layout`; nil for a wrapp built before locks.
     public init?(of layout: WrappLayout) throws {

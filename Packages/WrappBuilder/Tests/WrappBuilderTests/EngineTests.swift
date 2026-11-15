@@ -132,6 +132,14 @@ struct EnginePackageTests {
         }
     }
 
+    @Test("What an engine version has comes from its module.yaml; a version that says nothing has nothing")
+    func has() throws {
+        let module = try #require(try ModuleLoader(root: modulesRoot).module("wine"))
+        #expect(module.manifest.has(version: "10.0_8") == ["msync"])
+        #expect(module.manifest.has(version: "11.21").isEmpty)
+        #expect(module.manifest.has(version: "no-such-version").isEmpty)
+    }
+
     @Test("A module with no engine has no package")
     func noPackage() throws {
         let module = try #require(try ModuleLoader(root: modulesRoot).module("steam"))

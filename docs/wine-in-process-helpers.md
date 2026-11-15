@@ -12,7 +12,7 @@ wrapp does not have:
 | Cursor lock | `Packages/Modules/wine/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, when the launch asks for it (`--wine.mouse=grab-early`, [below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
 | Mode scaling | `Packages/Modules/wine/InProcessHelpers/emulated_mode_scaling.m`, with `scaled_picture_window.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to, and puts a GDI program's picture, which Wine scales itself, where the mouse is | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw and its launch sets no display mode ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
 | Quit watch | `Packages/Modules/wine/InProcessHelpers/quit_watch.m` | Tells the wrapp when the game first put a frame on screen and whether anything asked it to quit, so a game that quits before it has started reads as a failure | `QUIT_WATCH_EXE`, for every Wine game ([below](#quit-watch)) | — (it only reports) |
-| Cocoa start wait | `Packages/Modules/wine/InProcessHelpers/cocoa_start_wait.m` | Lets each Wine program's Mac driver wait for its main thread to start Cocoa beyond Wine's 5 s, which a fully loaded Mac runs out, leaving the program with no display driver for good | Nothing: every Wine process ([below](#cocoa-start-wait)) | `SECOND_CHANCE_COCOA_START_WAIT=0` |
+| Cocoa start wait | `Packages/Modules/wine/InProcessHelpers/cocoa_start_wait.m` | Lets each Wine program's Mac driver wait for its main thread to start Cocoa beyond Wine's 5 s, which a fully loaded Mac runs out, leaving the program with no display driver for good | Nothing: every Wine process, unless its Wine has the fix ([below](#cocoa-start-wait)) | `SECOND_CHANCE_COCOA_START_WAIT=0` |
 | Hidden windows | `Packages/Modules/wine/InProcessHelpers/hidden_windows.m` | Keeps Big Fish's Game Manager's windows and Dock icon off the screen, but while the person signs in | `HIDDEN_WINDOWS_EXE`, set on the Game Manager; `*` for everything it runs during a build ([below](#hidden-windows)) | — |
 | Puppet control | `Packages/Modules/wine/InProcessHelpers/puppet_control.m` | Lets the integration tests' WrappPuppeteer capture and click the game window | `PUPPET_CONTROL_EXE`, set only when `SECOND_CHANCE_PUPPET_DIR` is | — (never armed for players) |
 | Audio levels | `Packages/Modules/wine/InProcessHelpers/audio_levels.m` | Measures how loud the game is from the samples it hands Core Audio, for puppet control's `audio`, so a test can tell a game whose sound works from one playing silence | As puppet control is, in a Wine game only ([below](#audio-levels)) | — (never armed for players) |
@@ -1245,7 +1245,10 @@ start that took longer than 5 s logs
 Cocoa, past Wine's 5s limit`, the cases that would have failed before.
 
 It isn't armed per game: it runs in every Wine process, the build's
-installers included, as all of them start the driver the same way.
+installers included, as all of them start the driver the same way. It stands
+down in a wrapp whose Wine waits as long as it takes itself, which its
+module.yaml says with `has: [cocoa-start-wait]`, passed to the helpers in
+`WINE_ENGINE_HAS` ([modules.md](modules.md#what-an-engine-has)).
 
 ### If it happens anyway
 

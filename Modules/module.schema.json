@@ -81,6 +81,12 @@
           "preview": { "description": "Used only where a constraint names it.", "type": "boolean" },
           "withdrawn": { "type": "boolean" },
           "replaced-by": { "type": "string" },
+          "has": {
+            "description": "An engine's: what this version has that the module's code would otherwise make up for, or may use, by names the module's code knows (docs/modules.md#what-an-engine-has).",
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }
+          },
           "package": {
             "description": "An engine's: the downloads it is made from, and the hash of the tree preparing them gives (docs/modules.md#engine-packages).",
             "type": "object",

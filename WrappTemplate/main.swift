@@ -80,7 +80,8 @@ func main() {
     // Returns `nil` for normal launches (double-click, `open`, `--debug`, …),
     // so the regular game-launch flow below is unchanged.
     if let wineArgs = extractWineSubcommand(from: CommandLine.arguments) {
-        exit(runInTerminal(.wine(wineArgs), with: Wine(wrapp: appPath, prefix: winePrefix)))
+        let engineHas = readLock(of: WrappLayout(app: appPath))?.has(module: "wine")
+        exit(runInTerminal(.wine(wineArgs), with: Wine(wrapp: appPath, prefix: winePrefix, engineHas: engineHas)))
     }
 
     // Load configuration

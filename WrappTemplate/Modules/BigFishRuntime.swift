@@ -125,7 +125,7 @@ final class BigFishRuntime: GameStarting {
         let manager = BigFishGameManager(wrappPath: config.appPath, prefixDir: config.winePrefix,
                                          gameExe: launchInfo.gameExePath.map(URL.init(fileURLWithPath:)),
                                          game: GameInfoProvider.shared.gameInfo(for: config.gameSlug),
-                                         launch: config.launch,
+                                         launch: config.launch, engineHas: config.wineEngineHas,
                                          onOutputLine: { line in
                                              diagnostics?.observe(line: line)
                                              watchers.observe(line: line)

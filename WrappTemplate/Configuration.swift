@@ -60,10 +60,13 @@ struct GameConfig {
     /// starts it, and the screen depth a launch's `--wine.colors` asks for.
     /// Empty for every other game.
     var wineSessionVariables: [String: String] = [:]
+    /// What the wrapp's Wine has, as its lock recorded it (`Wine.engineHas`);
+    /// nil for a wrapp built before that was recorded.
+    var wineEngineHas: Set<String>?
 
     /// The wrapp's Wine, running in the prefix the game runs in.
     nonisolated var wine: Wine {
-        var wine = Wine(wrapp: appPath, prefix: winePrefix)
+        var wine = Wine(wrapp: appPath, prefix: winePrefix, engineHas: wineEngineHas)
         wine.sessionVariables = wineSessionVariables
         return wine
     }
@@ -82,7 +85,7 @@ struct GameConfig {
         launch.program = fallback
         launch.fallback = nil
         launch.options["steam.exe"] = nil
-        return GameConfig(
+        var config = GameConfig(
             appPath: appPath, winePrefix: winePrefix, gameExePath: drivePath(of: launch) ?? gameExePath,
             gameInstallerDir: gameInstallerDir, composition: Composition(launcher: launch.launcher()), launch: launch,
             launchRecorded: launchRecorded, steamGameId: nil,
@@ -90,6 +93,8 @@ struct GameConfig {
             gameSource: gameSource, bundleId: bundleId, appSupportPath: appSupportPath, settingsPath: settingsPath,
             scummvmConfigPath: scummvmConfigPath
         )
+        config.wineEngineHas = wineEngineHas
+        return config
     }
 }
 
@@ -289,7 +294,8 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
 
     let winePrefix = customWinePrefix ?? layout.prefix
 
-    let files = userFiles(layout: layout, bundleId: bundleId)
+    let lock = readLock(of: layout)
+    let files = userFiles(layout: layout, bundleId: bundleId, lock: lock)
 
     var config = GameConfig(
         appPath: appPath,
@@ -311,6 +317,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
         bigFishSKU: settings.bigFishSKU,
         bigFishTrial: settings.bigFishTrial ?? false
     )
+    config.wineEngineHas = lock?.has(module: "wine")
     config.wineSessionVariables = BigFishRuntime.sessionVariables(config)
     // A launch that says --wine.colors has every Wine program of the session
     // see a screen of that depth, explorer.exe among them, which registers
@@ -342,6 +349,17 @@ func steamAppID(of launch: RecordedLaunch) -> String? {
     return launch.program.hasPrefix(prefix) ? String(launch.program.dropFirst(prefix.count)) : nil
 }
 
+/// What the wrapp was built from; nil for a wrapp built before locks, or one
+/// whose lock can't be read, which is logged.
+func readLock(of layout: WrappLayout) -> WrappLock? {
+    do {
+        return try WrappLock(of: layout)
+    } catch {
+        configLogger.error("Couldn't read what the wrapp was built from (\(layout.lockFile.lastPathComponent)): \(error)")
+        return nil
+    }
+}
+
 /// Where the wrapp keeps what's the person's, moving it in first from the
 /// folders the program's wrapps kept under former bundle ids
 /// (`UserFilesMove`, docs/wrapp-launch.md#user-files).
@@ -349,7 +367,7 @@ func steamAppID(of launch: RecordedLaunch) -> String? {
 /// Support: WrappPuppeteer gives each test launch an empty one, so a test
 /// neither reads nor changes the player's saves and settings -- a game set
 /// to play in a window there fails the fullscreen check.
-func userFiles(layout: WrappLayout, bundleId: String) -> (saves: URL, settings: URL, scummvmConfig: URL) {
+func userFiles(layout: WrappLayout, bundleId: String, lock: WrappLock?) -> (saves: URL, settings: URL, scummvmConfig: URL) {
     let fileManager = FileManager.default
     let underTest = ProcessInfo.processInfo.environment["SECOND_CHANCE_APP_SUPPORT_DIR"].map { !$0.isEmpty } ?? false
     let userFiles = UserFilesLayout(appSupport: UserFilesLayout.appSupport(), bundleID: bundleId)
@@ -358,13 +376,6 @@ func userFiles(layout: WrappLayout, bundleId: String) -> (saves: URL, settings: 
         if try userFiles.moveVolumesIntoStores() { configLogger.notice("Moved the app's volumes/ into stores/app/") }
     } catch {
         configLogger.error("Couldn't move the app's volumes/ into stores/app/: \(error)")
-    }
-    let lock: WrappLock?
-    do {
-        lock = try WrappLock(of: layout)
-    } catch {
-        configLogger.error("Couldn't read what the wrapp was built from (\(layout.lockFile.lastPathComponent)): \(error)")
-        lock = nil
     }
     let preferences = fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Preferences")
 

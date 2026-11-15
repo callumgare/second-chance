@@ -82,8 +82,8 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
     /// `gameExe`, the game's .exe, when the Game Manager will start a game
     /// (a trial's Play Now) — not while a build installs one.
     public init(wrappPath: URL, prefixDir: URL? = nil, gameExe: URL? = nil, game: GameInfo? = nil, launch: RecordedLaunch? = nil,
-                onOutputLine: (@Sendable (String) -> Void)? = nil) {
-        wine = Wine(wrapp: wrappPath, prefix: prefixDir)
+                engineHas: Set<String>? = nil, onOutputLine: (@Sendable (String) -> Void)? = nil) {
+        wine = Wine(wrapp: wrappPath, prefix: prefixDir, engineHas: engineHas)
         self.gameExe = gameExe
         self.launch = launch
         self.game = game
