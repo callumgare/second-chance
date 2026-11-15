@@ -107,12 +107,19 @@ protocol GameStarting: RuntimeModule {
     /// Fish's) runs as two, the first running the second under its own
     /// debugger.
     var windowMayBeAnotherProcess: Bool { get }
+
+    /// For a game whose screen the wrapp shows in a window of its own
+    /// (Basilisk II's Mac, MacScreenWindow): waits until it's first shown
+    /// there (true), or won't be, the program's own window showing it
+    /// instead (false). Nil for a game the wrapp never shows.
+    func waitUntilShownInWrapp() async -> Bool?
 }
 
 extension GameStarting {
     func abandonWaitingIf() -> ((Set<ProcessList.Entry>) -> String?)? { nil }
     func whileWaitingForGame(_ launch: LaunchContext) -> (() -> Void)? { nil }
     var windowMayBeAnotherProcess: Bool { false }
+    func waitUntilShownInWrapp() async -> Bool? { nil }
 }
 
 /// How a started game is found and watched.

@@ -633,7 +633,10 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
     fullscreen-capable and resizable (keeping the screen's shape), and in
     fullscreen its pointer grab and hidden menu bar are undone, so the title bar
     can be reached to leave it;
-  - shuts the Mac down when the wrapp quits (SIGUSR2), or Basilisk II's own
+  - shuts the Mac down when the wrapp quits (SIGUSR2, or the SIGTERM a
+    quitting app sends what it started, which SDL would otherwise make its
+    quit event and Basilisk II the power key: SDL's own signal handlers are
+    kept out, `SDL_NO_SIGNAL_HANDLERS`), or Basilisk II's own
     Quit is chosen (⌘Q, which SDL alone would turn into the power key, leaving
     the Mac asking "shut down now?" with a beep), as Special ▸ Shut Down does,
     asking nothing: the Mac's Finder is sent its Shut Down Apple event
@@ -651,7 +654,7 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
     than `ShutDwnPower`, which, called from the filter, powers off without
     asking the applications to quit. Where the filter can't be set up, the
     send fails, or no application asks for an event in 5 s, it's the power
-    key and Return on Shut Down instead.
+    key and Return on Shut Down instead, both pressed on the Mac's ADB.
   - with `LAUNCH --basilisk.shut-down=with-program` (`BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM`),
     shuts the Mac down the same way (as the end of a build's automation does)
     once the program it opened has quit, so the app closes with it rather
@@ -719,6 +722,63 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
     A black desktop pattern inside the Mac would add nothing: the cover hides
     the whole boot, which no setting inside the Mac can, and Ingenious fills
     the screen while it runs.
+
+#### The Mac in the wrapp's window
+
+A launch shows the Mac in a window of the wrapp's own (`MacScreenWindow`), not
+Basilisk II's, so the game's window is its app's: the wrapp's menu bar and Dock
+icon, its Window menu and fullscreen, and Basilisk II out of the Dock and
+Cmd-Tab. Nothing of Basilisk II is rebuilt for it: the helper
+`basilisk_display.m` works through Basilisk II's imports of SDL2 (a framework
+of its own, so each call is an import that can be pointed elsewhere) and the
+ADB functions its build exports.
+
+- **The socket.** `BasiliskRuntime` listens on a Unix socket in a private
+  temporary directory (`MacScreenServer`, BasiliskKit) and names it to the
+  helper (`BASILISK_MAC_DISPLAY`). Messages each way are 24 bytes, a kind and
+  five numbers (`MacScreenMessage`, and `DisplayMessage` in the helper). The
+  helper says `hello` first, armed or not: when anything it needs is missing,
+  Basilisk II's own window shows the Mac as before, and the launch waits for
+  that window instead.
+- **The picture.** Basilisk II converts what changed on the Mac's screen to
+  32-bit pixels and copies it into an SDL texture between `SDL_LockTexture` and
+  `SDL_UnlockTexture`. The helper copies each such area into shared memory
+  (`shm_open`, unlinked at once, its descriptor sent over the socket with the
+  screen's size), and at `SDL_RenderPresent` tells the wrapp what changed and
+  whether the Mac is covered (`--basilisk.mac=hidden`, above, shown black by
+  the wrapp). The wrapp pictures that memory on the socket's thread and shows
+  only the latest picture on the main thread, scaled to fit, its pixels kept
+  sharp at a whole multiple, keeping the Mac's shape (black either side in
+  fullscreen on a wider screen).
+  The window opens at the biggest whole multiple
+  that fits the screen, keeps the Mac's shape as it's resized, and shows
+  itself at the first picture. The picture never depends on a window being
+  seen, so the "getting the window drawing" above isn't needed, nor done.
+- **Basilisk II's own window** is made hidden (`SDL_CreateWindow`'s flags) and
+  never fullscreen, and nothing is drawn into it (`SDL_RenderCopy`,
+  `SDL_RenderClear` and `SDL_RenderPresent` do nothing). Its process is an
+  accessory app (SDL's `SDL_MAC_BACKGROUND_APP`, set by the helper before SDL
+  starts), kept from App Nap.
+- **The keys and the mouse** go from the wrapp's window to the Mac's ADB
+  (`ADBKeyDown`, `ADBKeyUp`, `ADBMouseMoved`, `ADBMouseDown`, `ADBMouseUp`),
+  on one thread, as Basilisk II's own event loop calls them. A key is its Mac
+  key code, which is the ADB code but for the right-hand modifiers, Control
+  and the arrows (`basiliskDisplayADBCode`); Caps Lock is down while it's on;
+  the Mac repeats held keys itself. The pointer is a position on the Mac's
+  screen, and the Mac draws it, so the Mac's own is hidden over the window.
+  Command combinations go to the Mac but for the wrapp's menus' (⌘Q, ⌘H, ⌥⌘H,
+  ⌘M, ⌃⌘F), released 60 ms later, as macOS sends no release for them. Keys and
+  buttons held as the window loses the keyboard are let go.
+- **Closing the window** quits the app, which shuts the Mac down. The helper
+  takes its socket closing as the wrapp gone, and shuts the Mac down itself.
+- **Puppet control** answers for the wrapp's window (`helperRemoteScreen`): its
+  pictures are the shared memory (black while covered), at scale 1, so its
+  points are the Mac's pixels; clicks and keys go to the ADB as the window's
+  do; `focus` and `yield` are asked of the wrapp; and `hello` names the wrapp
+  (`shownby=`), whose window WrappPuppeteer waits for and judges focus by.
+
+`SECOND_CHANCE_BASILISK_DISPLAY=0` leaves the Mac in Basilisk II's own window.
+A build's `BASILISK.RUN` always uses Basilisk II's own window.
 
 ### The engine store
 

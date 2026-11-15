@@ -88,6 +88,12 @@ struct PuppetReplyTests {
         #expect(PuppetHello(PuppetReply("error unknown request: hello")).version == 1)
     }
 
+    @Test("hello names the process whose window shows the screen, when another's does")
+    func helloShownBy() {
+        #expect(PuppetHello(PuppetReply("ok version=6 pid=12 exe=BasiliskII commands=hello shownby=34")).shownBy == 34)
+        #expect(PuppetHello(PuppetReply("ok version=6 pid=12 exe=Game.exe commands=hello")).shownBy == nil)
+    }
+
     @Test("state reads the game window")
     func state() throws {
         let state = try #require(PuppetWindowState(PuppetReply(

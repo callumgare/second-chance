@@ -6,6 +6,11 @@
 //  Armed by BASILISK_MAC_EXE (set by the wrapp's BasiliskRuntime on every
 //  launch), in the process running the executable it names:
 //
+//  - **Where the Mac is shown.** With BASILISK_MAC_DISPLAY, the wrapp shows
+//    the Mac's screen in a window of its own (basilisk_display.m), and
+//    Basilisk II's window is hidden: then the picture, the first pointer
+//    position and the green button below are the wrapp's, and nothing here
+//    watches Basilisk II's window. The rest is the same either way.
 //  - **Its picture.** Basilisk II presents a frame only when the Mac's screen
 //    changes, and macOS drops what a window presents while it counts the
 //    window as occluded, which it does from the start for a window on a
@@ -32,7 +37,8 @@
 //    (keeping the screen's shape), and in fullscreen Basilisk II's pointer
 //    grab and hidden menu bar are undone, so the title bar can be reached to
 //    leave it. It starts windowed.
-//  - **Shutting the Mac down.** SIGUSR2 (the wrapp's, when it quits), and
+//  - **Shutting the Mac down.** SIGUSR2 (the wrapp's, when it quits), SIGTERM
+//    (which SDL would make its quit event, and so the power key), and
 //    the app's own Quit (⌘Q, which SDL would turn into the power key alone,
 //    leaving the Mac asking "shut down now?"), shut the Mac down as its
 //    Special ▸ Shut Down does, asking nothing: a few bytes of 68k put in
@@ -41,8 +47,8 @@
 //    for, so its applications are asked to quit, its disk is left clean,
 //    the person's files on it safe, and it powers off, which Basilisk II
 //    answers by exiting. Where that can't be set up or sent, or the Mac
-//    asks for no event, it's the power key instead, as Basilisk II makes
-//    SIGTERM, and Return on the dialog's Shut Down. The wrapp ends Basilisk II only if this hasn't in its time.
+//    asks for no event, it's the power key instead, pressed on the Mac's
+//    ADB, and Return on the dialog's Shut Down. The wrapp ends Basilisk II only if this hasn't in its time.
 //  - **Shutting down with the program.** With
 //    BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM=1 (`LAUNCH
 //    --basilisk.shut-down=with-program`), once the program the Mac opened
@@ -54,7 +60,8 @@
 //    --basilisk.mac=hidden`), the Mac's own screens (its boot, the Finder and
 //    its windows) are kept from the window: every frame Basilisk II presents
 //    is cleared to black first (its import of SDL_RenderPresent is pointed
-//    here) until the program the Mac opened is in front and has drawn over
+//    here; with the wrapp showing the Mac, each frame is told to it as
+//    covered instead) until the program the Mac opened is in front and has drawn over
 //    the Finder's screen (its frame buffer, sampled), and again once the
 //    program shows the menu bar it hid or quits, or the Mac shuts down. Never
 //    in a build's automation, which reads the screen.
@@ -347,14 +354,22 @@ static void pressReturn(NSWindow *window) {
     }
 }
 
-/// The fallback: the Mac's power key, as Basilisk II makes SIGTERM, which
-/// asks "shut down now?" (with a beep), Shut Down being its default; then
-/// Return once the dialog may be up, again every two seconds, while the
-/// process lasts. The wrapp ends it if the Mac never shuts down.
+void basiliskDisplayPressADBKey(int code);
+
+/// The fallback: the Mac's power key (pressed on its ADB, as Basilisk II
+/// makes SDL's quit, which SIGTERM no longer is: armBasiliskMac), which asks
+/// "shut down now?" (with a beep), Shut Down being its default; then Return
+/// once the dialog may be up, again every two seconds, while the process
+/// lasts. The wrapp ends it if the Mac never shuts down.
 static void shutDownByPowerKey(void) {
-    kill(getpid(), SIGTERM);
+    basiliskDisplayPressADBKey(0x7F);
     for (int i = 0; i < 8; i++) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 + 2 * i) * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            if (helperRemoteScreen) {
+                // Basilisk II's own window is hidden: Return goes to the ADB.
+                basiliskDisplayPressADBKey(0x24);
+                return;
+            }
             NSWindow *window = macWindow();
             if (window) pressReturn(window);
         });
@@ -1111,6 +1126,32 @@ static void coverForGood(const char *why) {
     redrawAll(NULL);
 }
 
+/// For basilisk_display.m, at each frame Basilisk II presents while the
+/// wrapp shows the Mac's screen: the cover moved as the Mac says, as
+/// presentHidden does, and whether this frame is covered. NO when the Mac
+/// isn't hidden.
+BOOL basiliskMacCoverAtFrame(void) {
+    if (!hideArmed) return NO;
+    os_unfair_lock_lock(&coverLock);
+    updateCover(YES);
+    os_unfair_lock_unlock(&coverLock);
+    int state = coverState;
+    BOOL covered = state == CoverUntilProgram || state == CoverForGood;
+    if (covered) framesCovered++;
+    return covered;
+}
+
+/// For basilisk_display.m: the whole screen again. Main thread.
+void basiliskMacRedrawAll(const char *why) {
+    redrawAll(why);
+}
+
+/// For basilisk_display.m: the Mac shut down, as SIGUSR2 does. Main thread.
+void basiliskMacShutDown(const char *why) {
+    helperReport(kHelper, "notice", "shutting the Mac down: %s", why);
+    startShutDown();
+}
+
 /// The cover moved between frames too (Basilisk II presents only when the
 /// Mac's screen changes), with a frame asked for when it moves or may come
 /// off; until it's on for good.
@@ -1133,14 +1174,19 @@ static void watchCover(void) {
     dispatch_resume(timer);
 }
 
-/// In the constructor, before Basilisk II presents its first frame.
-static void armHiding(void) {
+/// In the constructor, before Basilisk II presents its first frame. When
+/// the wrapp shows the Mac's screen (`shownByWrapp`), its frames are told to
+/// the wrapp by basilisk_display.m, which asks the cover at each
+/// (basiliskMacCoverAtFrame), so Basilisk II's present is left to it.
+static void armHiding(BOOL shownByWrapp) {
     hidingArmedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
-    realPresent = (RenderPresent)dlsym(RTLD_DEFAULT, "SDL_RenderPresent");
-    int replaced = realPresent ? rebindMainImport("_SDL_RenderPresent", (void *)presentHidden) : 0;
-    if (replaced == 0) {
-        helperReport(kHelper, "warning", "can't hide the Mac: Basilisk II's SDL_RenderPresent can't be redirected");
-        return;
+    if (!shownByWrapp) {
+        realPresent = (RenderPresent)dlsym(RTLD_DEFAULT, "SDL_RenderPresent");
+        int replaced = realPresent ? rebindMainImport("_SDL_RenderPresent", (void *)presentHidden) : 0;
+        if (replaced == 0) {
+            helperReport(kHelper, "warning", "can't hide the Mac: Basilisk II's SDL_RenderPresent can't be redirected");
+            return;
+        }
     }
     hideArmed = YES;
     helperReport(kHelper, "notice", "the Mac is hidden until its program shows");
@@ -1473,20 +1519,48 @@ static void runAutomation(NSString *path) {
     });
 }
 
+/// While the wrapp shows the Mac's screen: once Basilisk II has its app,
+/// the app's Quit made to shut the Mac down (a minute at most). There's no
+/// window of its own to watch for.
+static void watchForApp(int tries) {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        if (NSApp) quitShutsDown();
+        else if (tries < 240) watchForApp(tries + 1);
+        else helperReport(kHelper, "warning", "no app after a minute: its Quit doesn't shut the Mac down");
+    });
+}
+
+BOOL basiliskDisplayArm(void);
+
 __attribute__((constructor))
 static void armBasiliskMac(void) {
     if (!processRunsExeNamedBy("BASILISK_MAC_EXE")) return;
-    signal(SIGUSR2, SIG_IGN);
-    static dispatch_source_t shutDown;
-    shutDown = dispatch_source_create(DISPATCH_SOURCE_TYPE_SIGNAL, SIGUSR2, 0, dispatch_get_main_queue());
-    dispatch_source_set_event_handler(shutDown, ^{ startShutDown(); });
-    dispatch_resume(shutDown);
-    dispatch_async(dispatch_get_main_queue(), ^{ watchForWindow(0); });
+    // SIGUSR2, the wrapp's, and SIGTERM, which a quitting app sends what it
+    // started, shut the Mac down cleanly. Left to SDL, SIGTERM is its quit
+    // event, which Basilisk II makes the power key: "shut down now?", with a
+    // beep, which holds the Mac until it's killed, its disk left unclean.
+    // SDL installs its handlers only where there's none (and not at all with
+    // SDL_NO_SIGNAL_HANDLERS), so ignoring them here keeps them ours.
+    setenv("SDL_NO_SIGNAL_HANDLERS", "1", 1);
+    static dispatch_source_t shutDownSignals[2];
+    int signals[2] = { SIGUSR2, SIGTERM };
+    for (int i = 0; i < 2; i++) {
+        signal(signals[i], SIG_IGN);
+        shutDownSignals[i] = dispatch_source_create(DISPATCH_SOURCE_TYPE_SIGNAL, (uintptr_t)signals[i], 0, dispatch_get_main_queue());
+        dispatch_source_set_event_handler(shutDownSignals[i], ^{ startShutDown(); });
+        dispatch_resume(shutDownSignals[i]);
+    }
     helperReport(kHelper, "notice", "armed in %s", getenv("BASILISK_MAC_EXE"));
+    // The wrapp's window shows the Mac's screen (basilisk_display.m) when it
+    // can; Basilisk II's own window does otherwise, made to draw, given its
+    // green button and the Mac its first pointer here.
+    BOOL shownByWrapp = basiliskDisplayArm();
+    if (shownByWrapp) dispatch_async(dispatch_get_main_queue(), ^{ watchForApp(0); });
+    else dispatch_async(dispatch_get_main_queue(), ^{ watchForWindow(0); });
     const char *withProgram = getenv("BASILISK_MAC_SHUT_DOWN_WITH_PROGRAM");
     if (withProgram && strcmp(withProgram, "1") == 0) watchProgram();
     const char *hidden = getenv("BASILISK_MAC_HIDDEN");
-    if (hidden && strcmp(hidden, "1") == 0) armHiding();
+    if (hidden && strcmp(hidden, "1") == 0) armHiding(shownByWrapp);
     const char *automation = getenv("BASILISK_MAC_AUTOMATION");
     if (automation && *automation) {
         NSString *path = @(automation);

@@ -22,8 +22,10 @@
 //  window, top-left origin -- a capture's pixels divided by its `scale`.
 //  Options are `name=value` words after the arguments.
 //
-//    hello            -> ok version=6 pid=<n> exe=<name> commands=<list>   (version 1 helpers say error;
-//                                       2 has no scroll, 3 no audio, 4 no key sequences' steps)
+//    hello            -> ok version=6 pid=<n> exe=<name> commands=<list> [shownby=<pid>]
+//                                       (version 1 helpers say error; 2 has no scroll, 3 no audio,
+//                                       4 no key sequences' steps; shownby: the process whose
+//                                       window shows this one's screen, below)
 //    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 native=0|1 key=0|1 active=0|1 onspace=0|1
 //                           cursor=held|free cursorlock=off|waiting|locked|not-locked
 //    windows          -> ok <n> windows, then a line each: id=<n> frame=<x>,<y>,<w>,<h> level=<n> visible=0|1
@@ -128,7 +130,119 @@ static NSWindow *gameWindow(void) {
     return best;
 }
 
+#pragma mark - A screen the wrapp shows
+//
+// When another process shows the program's screen (basilisk_display.m: the
+// wrapp draws Basilisk II's Mac in a window of its own), this process has no
+// window to capture or post to. The requests act on that screen instead,
+// through helperRemoteScreen: its pixels are the window's points, at scale 1,
+// and `hello` names the process whose window it is (`shownby=`), for
+// WrappPuppeteer's window and focus checks.
+
+static NSString *remoteStateCommand(void) {
+    int width = 0, height = 0;
+    if (!helperRemoteScreen->size(&width, &height)) return @"error no game window";
+    BOOL fullscreen = NO, key = NO, active = NO;
+    double windowWidth = 0, windowHeight = 0;
+    helperRemoteScreen->windowState(&fullscreen, &key, &active, &windowWidth, &windowHeight);
+    return [NSString stringWithFormat:@"ok window=0 size=%dx%d scale=1.00 fullscreen=%d native=%d key=%d active=%d onspace=1 cursor=free cursorlock=off",
+            width, height, fullscreen, fullscreen, key, active];
+}
+
+/// The screen, or a part of it, scaled by `scale`, written as a PNG.
+static NSString *remoteCaptureCommand(NSString *path, NSDictionary<NSString *, NSString *> *options) {
+    double scale = 1;
+    if (options[@"scale"]) {
+        scale = options[@"scale"].doubleValue;
+        if (scale <= 0 || scale > 4) return @"error scale is between 0 and 4";
+    }
+    CGImageRef image = helperRemoteScreen->copyPicture();
+    if (!image) return @"error no game window";
+    CGRect whole = CGRectMake(0, 0, CGImageGetWidth(image), CGImageGetHeight(image));
+    CGRect region = whole;
+    if (options[@"region"]) {
+        NSArray<NSString *> *numbers = [options[@"region"] componentsSeparatedByString:@","];
+        if (numbers.count != 4) {
+            CGImageRelease(image);
+            return @"error region is <x>,<y>,<w>,<h>";
+        }
+        region = CGRectIntersection(CGRectIntegral(CGRectMake(numbers[0].doubleValue, numbers[1].doubleValue,
+                                                              numbers[2].doubleValue, numbers[3].doubleValue)), whole);
+        if (CGRectIsEmpty(region)) {
+            CGImageRelease(image);
+            return @"error region is outside the window";
+        }
+    }
+    CGImageRef part = CGImageCreateWithImageInRect(image, region);
+    CGImageRelease(image);
+    if (!part) return @"error could not crop the picture";
+    size_t width = (size_t)lround(region.size.width * scale), height = (size_t)lround(region.size.height * scale);
+    CGImageRef output = part;
+    if (scale != 1) {
+        CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+        CGContextRef context = CGBitmapContextCreate(NULL, width, height, 8, 0, space,
+                                                     (CGBitmapInfo)kCGImageAlphaNoneSkipFirst | (CGBitmapInfo)kCGBitmapByteOrder32Little);
+        CGColorSpaceRelease(space);
+        if (!context) {
+            CGImageRelease(part);
+            return @"error could not scale the picture";
+        }
+        // Whole Mac pixels stay whole: a scaled Mac screen is shown blocky too.
+        CGContextSetInterpolationQuality(context, kCGInterpolationNone);
+        CGContextDrawImage(context, CGRectMake(0, 0, width, height), part);
+        output = CGBitmapContextCreateImage(context);
+        CGContextRelease(context);
+        CGImageRelease(part);
+        if (!output) return @"error could not scale the picture";
+    }
+    NSURL *url = [NSURL fileURLWithPath:path];
+    CGImageDestinationRef destination = CGImageDestinationCreateWithURL((__bridge CFURLRef)url, CFSTR("public.png"), 1, NULL);
+    if (!destination) {
+        CGImageRelease(output);
+        return @"error could not write the capture";
+    }
+    CGImageDestinationAddImage(destination, output, NULL);
+    BOOL written = CGImageDestinationFinalize(destination);
+    CFRelease(destination);
+    CGImageRelease(output);
+    return written ? [NSString stringWithFormat:@"ok %zux%zu", width, height] : @"error could not write the capture";
+}
+
+/// A mouse event on the screen, as the wrapp's window would hand it on.
+static NSString *remoteMouseEvent(NSEventType type, double x, double y) {
+    int width = 0, height = 0;
+    if (!helperRemoteScreen->size(&width, &height)) return @"error no game window";
+    int macX = (int)lround(x), macY = (int)lround(y);
+    switch (type) {
+        case NSEventTypeLeftMouseDown:
+        case NSEventTypeRightMouseDown:
+            helperRemoteScreen->mouseMoved(macX, macY);
+            helperRemoteScreen->button(type == NSEventTypeRightMouseDown ? 1 : 0, YES);
+            break;
+        case NSEventTypeLeftMouseUp:
+        case NSEventTypeRightMouseUp:
+            helperRemoteScreen->mouseMoved(macX, macY);
+            helperRemoteScreen->button(type == NSEventTypeRightMouseUp ? 1 : 0, NO);
+            break;
+        default:
+            helperRemoteScreen->mouseMoved(macX, macY);
+            break;
+    }
+    return nil;
+}
+
+static NSString *remoteWindowsCommand(void) {
+    int width = 0, height = 0;
+    if (!helperRemoteScreen->size(&width, &height)) return @"ok 0 windows";
+    BOOL fullscreen = NO, key = NO, active = NO;
+    double windowWidth = 0, windowHeight = 0;
+    helperRemoteScreen->windowState(&fullscreen, &key, &active, &windowWidth, &windowHeight);
+    return [NSString stringWithFormat:@"ok 1 windows\nid=0 frame=0,0,%d,%d level=0 visible=1 key=%d main=%d kind=game title=",
+            width, height, key, key];
+}
+
 static NSString *stateCommand(void) {
+    if (helperRemoteScreen) return remoteStateCommand();
     __block NSString *reply = @"error no game window";
     onMainThread(^BOOL {
         NSWindow *window = gameWindow();
@@ -321,6 +435,7 @@ static BOOL canListOwnWindows(void) {
 }
 
 static NSString *captureCommand(NSString *path, NSDictionary<NSString *, NSString *> *options) {
+    if (helperRemoteScreen) return remoteCaptureCommand(path, options);
     if (!canListOwnWindows()) return @"error capturing needs macOS 14.4";
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
@@ -408,6 +523,7 @@ static NSEvent *mouseEvent(NSEventType type, NSPoint point, NSWindow *window, NS
 /// origin. Wine ignores mouse events not tied to one of its windows, so each
 /// must come out on the game window (as in cursor_lock.m). nil when posted.
 static NSString *postMouseEvent(NSEventType type, double x, double y, NSInteger clickCount) {
+    if (helperRemoteScreen) return remoteMouseEvent(type, x, y);
     __block NSString *error = @"error no game window";
     onMainThread(^BOOL {
         NSWindow *window = gameWindow();
@@ -486,6 +602,7 @@ static NSString *dragCommand(double x1, double y1, double x2, double y2, NSDicti
 /// mouse wheel's notches are. Like the mouse events it comes out on the game
 /// window, marked as ours.
 static NSString *scrollCommand(double x, double y, int lines, int across) {
+    if (helperRemoteScreen) return @"error the program's screen has no scroll wheel";
     NSString *error = postMouseEvent(NSEventTypeMouseMoved, x, y, 0);
     if (error) return error;
     usleep(kHoverBeforeClickMicroseconds);
@@ -537,8 +654,22 @@ static const useconds_t kKeyRepeatMicroseconds = 50 * 1000;
 /// up. With `repeat`, the hold repeats as a held Mac key does.
 static NSString *postKey(int code, NSString *characters, NSEventModifierFlags flags, useconds_t hold, BOOL repeat) {
     __block NSString *error = @"error no game window";
-    NSEvent *(^keyEvent)(NSEventType, NSEventModifierFlags, unsigned short, NSString *, BOOL) =
-        ^NSEvent *(NSEventType type, NSEventModifierFlags held, unsigned short keyCode, NSString *chars, BOOL isRepeat) {
+    BOOL (^keyEvent)(NSEventType, NSEventModifierFlags, unsigned short, NSString *, BOOL) =
+        ^BOOL(NSEventType type, NSEventModifierFlags held, unsigned short keyCode, NSString *chars, BOOL isRepeat) {
+            if (helperRemoteScreen) {
+                // Keys by keycode alone; a modifier's flags-changed is down
+                // when its flag is among those held, and repeats are the
+                // program's own to make, as the Mac's keyboard driver did.
+                if (isRepeat) return YES;
+                BOOL down = type == NSEventTypeKeyDown;
+                if (type == NSEventTypeFlagsChanged) {
+                    for (int i = 0; i < 4; i++) {
+                        if (helperModifierKeys[i].code == keyCode) down = (held & helperModifierKeys[i].flag) != 0;
+                    }
+                }
+                helperRemoteScreen->key(keyCode, down);
+                return YES;
+            }
             __block NSEvent *event = nil;
             onMainThread(^BOOL {
                 NSWindow *window = gameWindow();
@@ -550,7 +681,7 @@ static NSString *postKey(int code, NSString *characters, NSEventModifierFlags fl
                 if (event) [NSApp postEvent:event atStart:NO];
                 return event != nil;
             });
-            return event;
+            return event != nil;
         };
     NSEventModifierFlags held = 0;
     for (int i = 0; i < 4; i++) {
@@ -627,6 +758,7 @@ static NSString *typeCommand(NSString *encoded) {
 #pragma mark - Windows
 
 static NSString *windowsCommand(void) {
+    if (helperRemoteScreen) return remoteWindowsCommand();
     __block NSString *reply = @"error timed out";
     onMainThread(^BOOL {
         NSMutableArray<NSString *> *lines = [NSMutableArray array];
@@ -649,6 +781,10 @@ static NSString *windowsCommand(void) {
 }
 
 static NSString *focusCommand(void) {
+    if (helperRemoteScreen) {
+        helperRemoteScreen->focus();
+        return @"ok";
+    }
     __block NSString *reply = @"error no game window";
     onMainThread(^BOOL {
         NSWindow *window = gameWindow();
@@ -663,8 +799,11 @@ static NSString *focusCommand(void) {
 
 static NSString *helloCommand(void) {
     const char *exe = getprogname();
-    return [NSString stringWithFormat:@"ok version=6 pid=%d exe=%s commands=hello,state,windows,capture,click,move,down,up,drag,scroll,key,type,focus,yield,quit,audio",
-            getpid(), exe ? exe : "?"];
+    NSString *reply = [NSString stringWithFormat:@"ok version=6 pid=%d exe=%s commands=hello,state,windows,capture,click,move,down,up,drag,scroll,key,type,focus,yield,quit,audio",
+                       getpid(), exe ? exe : "?"];
+    // The wrapp started this process, so it is the parent.
+    if (helperRemoteScreen) reply = [reply stringByAppendingFormat:@" shownby=%d", getppid()];
+    return reply;
 }
 
 /// Hand activation to the app with `pid`, so it can make itself active:
@@ -674,6 +813,10 @@ static NSString *helloCommand(void) {
 /// (`canListOwnWindows`): in ScummVM, linked against the 10.14 SDK,
 /// @available said macOS 14 wasn't there on macOS 15.
 static NSString *yieldCommand(pid_t pid) {
+    if (helperRemoteScreen) {
+        helperRemoteScreen->yield(pid);
+        return @"ok";
+    }
     if (![NSApplication instancesRespondToSelector:@selector(yieldActivationToApplication:)]) return @"error needs macOS 14";
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"

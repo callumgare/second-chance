@@ -542,7 +542,14 @@ class GameLauncher {
             let engine = config.composition.launcher?.rawValue ?? Composition.coreTag
             _ = await gameMonitor.waitForGameToStart(gameExeName: engine, gamePid: gamePid)
             logger.notice("[Game Launch] Waiting for \(engine)'s window...")
-            if await gameMonitor.activateGameWindow(gamePid: gamePid, infoWindow: infoWindow) {
+            if await launcher.waitUntilShownInWrapp() == true {
+                // The wrapp's own window shows it: the wrapp stays the
+                // game's app, in the Dock, and there's nothing to bring
+                // forward but its own window.
+                logger.notice("[Game Launch] \(engine)'s screen is shown in the wrapp's window")
+                windowAppeared = true
+                helperReport?.gameWindowAppeared()
+            } else if await gameMonitor.activateGameWindow(gamePid: gamePid, infoWindow: infoWindow) {
                 windowAppeared = true
                 let pid = gamePid
                 gameWindowPid.withLock { $0 = pid }

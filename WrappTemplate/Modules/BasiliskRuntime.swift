@@ -26,6 +26,12 @@ final class BasiliskRuntime: GameStarting {
 
     /// Basilisk II's process, once started, for ending it on quit.
     private let emulator = Mutex<pid_t?>(nil)
+    /// The socket the helper shows the Mac's screen through, and the window
+    /// it's shown in (MacScreenWindow), for a launch that shows it there.
+    private let screenServer = Mutex<MacScreenServer?>(nil)
+    private var screenWindow: MacScreenWindowController?
+    /// Told when Basilisk II exits, to end the screen's socket.
+    private var exitWatch: DispatchSourceProcess?
 
     required init(config: GameConfig) {
         self.config = config
@@ -49,6 +55,9 @@ final class BasiliskRuntime: GameStarting {
         } else {
             logger.notice("[Basilisk] The Mac shut down")
         }
+        // Only now: the helper takes its socket closing as the wrapp gone,
+        // and shuts the Mac down without waiting.
+        screenServer.withLock { $0 }?.close()
     }
 
     /// Where the build left the Mac's files in the app (`BASILISK.SETUP`, `CDROM`).
@@ -139,6 +148,60 @@ final class BasiliskRuntime: GameStarting {
         return variables
     }
 
+    /// Whether the Mac is shown in the wrapp's own window (MacScreenWindow)
+    /// rather than Basilisk II's: unless `SECOND_CHANCE_BASILISK_DISPLAY=0`.
+    private nonisolated static var showsMacInWrapp: Bool {
+        ProcessInfo.processInfo.environment["SECOND_CHANCE_BASILISK_DISPLAY"] != "0"
+    }
+
+    /// The socket and window that show the Mac, ready for the helper; its
+    /// variable, or none when Basilisk II's own window is to show it.
+    private func prepareScreen() -> [String: String] {
+        guard Self.showsMacInWrapp else {
+            logger.notice("[Basilisk] SECOND_CHANCE_BASILISK_DISPLAY=0: Basilisk II's own window shows the Mac")
+            return [:]
+        }
+        do {
+            let server = try MacScreenServer()
+            screenServer.withLock { $0 = server }
+            let window = MacScreenWindowController(server: server, title: config.gameTitle)
+            window.start()
+            screenWindow = window
+            return ["BASILISK_MAC_DISPLAY": server.socketPath]
+        } catch {
+            logger.error("[Basilisk] Basilisk II's own window shows the Mac: \(error)")
+            return [:]
+        }
+    }
+
+    func waitUntilShownInWrapp() async -> Bool? {
+        guard let screenWindow else { return nil }
+        return await screenWindow.waitUntilShown()
+    }
+
+    /// The screen's socket ended once Basilisk II has: a helper that never
+    /// connected leaves nothing else to end the wait for it.
+    private func watchForExit(_ pid: pid_t) {
+        guard let server = screenServer.withLock({ $0 }) else { return }
+        exitWatch = Self.exitWatch(pid, closing: server, logger: logger)
+    }
+
+    /// Made here, nonisolated: a handler made in main-actor code would be
+    /// the main actor's, and run on the source's queue it stops the wrapp
+    /// with SIGILL.
+    private nonisolated static func exitWatch(_ pid: pid_t, closing server: MacScreenServer, logger: Logger) -> DispatchSourceProcess {
+        let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .global(qos: .userInitiated))
+        source.setEventHandler {
+            logger.notice("[Basilisk] Basilisk II has exited: closing the Mac's screen")
+            server.close()
+            source.cancel()
+        }
+        source.resume()
+        // Gone (and reaped) before the watch began: it would never fire.
+        if kill(pid, 0) != 0 { server.close() }
+        return source
+    }
+
     func armWatchers(_ watchers: LaunchWatchers, gameExe: URL?) {
         let variables = helperVariables
         guard variables["PUPPET_CONTROL_EXE"] != nil else { return }
@@ -209,7 +272,9 @@ final class BasiliskRuntime: GameStarting {
         task.executableURL = URL(fileURLWithPath: launchInfo.executable)
         task.arguments = launchInfo.arguments
         task.currentDirectoryURL = config.appSupportPath
-        task.environment = ProcessInfo.processInfo.environment.merging(helperVariables) { $1 }
+        var variables = helperVariables
+        if !variables.isEmpty { variables.merge(prepareScreen()) { $1 } }
+        task.environment = ProcessInfo.processInfo.environment.merging(variables) { $1 }
         let helperReport = launch.watchers.helperReport
         let activity = launch.watchers.activity
         task.onLine = { line in
@@ -222,9 +287,11 @@ final class BasiliskRuntime: GameStarting {
             logger.notice("[Basilisk] Started with PID \(task.processIdentifier)")
             let pid = task.processIdentifier
             emulator.withLock { $0 = pid }
+            watchForExit(pid)
             return LaunchResult(process: task.process, gamePid: task.processIdentifier, gameExeName: nil)
         } catch {
             logger.critical("ERROR: Failed to launch Basilisk II: \(error.localizedDescription)")
+            screenServer.withLock { $0 }?.close()
             return .failed
         }
     }

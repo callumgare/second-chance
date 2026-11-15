@@ -108,6 +108,10 @@ itself: it's black from its first frame, through the boot and the Finder,
 until the program has drawn its first picture (about 4 s after Basilisk II
 starts), and black again from the moment the program quits, or the app's
 Quit, until the app closes (about a second later, as the Mac shuts down).
+The Mac is shown in a window of the wrapp's own, not Basilisk II's, so the
+wrapp stays in the Dock as the game's app and Basilisk II is never seen
+there; the loading window goes at its first picture
+([modules.md](modules.md#the-mac-in-the-wrapps-window)).
 
 **The core** (`ProgramRuntime`) starts a program the app carries, when no
 module does: `LAUNCH /MacOS/tool`, a composition with no launcher. It runs the

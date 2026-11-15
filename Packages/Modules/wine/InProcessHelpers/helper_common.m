@@ -17,6 +17,8 @@
 
 #include "helper_common.h"
 
+const HelperRemoteScreen *helperRemoteScreen = NULL;
+
 #pragma mark - The debug log
 
 void helperDebugLog(os_log_t log, const char *tag, const char *format, ...) {

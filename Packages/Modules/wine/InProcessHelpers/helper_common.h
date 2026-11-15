@@ -419,6 +419,34 @@ typedef struct {
 /// presser's usual gap spelled out, in Swift (KeySequence) before a helper
 /// sees it.
 NSData *helperKeySteps(NSString *canonical, NSString **error);
+
+// ## A screen another process shows (basilisk_display.m)
+
+/// A game whose screen is shown in a window of another process's: Basilisk
+/// II's Mac, drawn in the wrapp's window. Puppet control acts on this rather
+/// than on the process's own windows when it's set, in the screen's pixels
+/// (a capture's scale is 1).
+typedef struct {
+    /// The screen's size in pixels; NO before there's a screen.
+    BOOL (*size)(int *width, int *height);
+    /// The screen as the window shows it, or NULL before there's one.
+    CGImageRef (*copyPicture)(void);
+    /// The pointer moved to a pixel of the screen.
+    void (*mouseMoved)(int x, int y);
+    /// A mouse button (0 the main one) down or up.
+    void (*button)(int button, BOOL down);
+    /// A key, by its virtual keycode, down or up.
+    void (*key)(int virtualKeyCode, BOOL down);
+    /// The showing window: fullscreen, key, its app active, its size in points.
+    void (*windowState)(BOOL *fullscreen, BOOL *key, BOOL *active, double *width, double *height);
+    /// The showing window made key and its app active.
+    void (*focus)(void);
+    /// Activation handed to the app with this pid by the showing app.
+    void (*yield)(pid_t pid);
+} HelperRemoteScreen;
+
+/// Set when this process's screen is shown by another (basilisk_display.m).
+extern const HelperRemoteScreen *helperRemoteScreen;
 #endif
 
 #endif

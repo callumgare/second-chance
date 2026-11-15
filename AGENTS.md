@@ -269,7 +269,8 @@ depends on and re-exports, and `WineExecutor`, with winetricks, the
 in-process helpers' source and their build script; the nancy-drew module's
 has `NancyDrewExecutor`, the scummvm module's `ScummVMExecutor` and
 `ScummVMKit`, the dosbox and big-fish modules' `DOSBoxKit` and
-`BigFishKit`, and the basilisk module's `BasiliskExecutor` and `BasiliskKit`. Each kit answers where its module's path types' paths are
+`BigFishKit`, and the basilisk module's `BasiliskExecutor` and `BasiliskKit`
+(which `SecondChanceKit` re-exports too, for the wrapp's window that shows the Mac). Each kit answers where its module's path types' paths are
 (`ModulePaths`, [docs/wrappfile.md](docs/wrappfile.md#path-types)), which
 `SecondChanceKit` gathers as `PathPlaces.shipped`. An executor needs nothing of Second Chance's: it
 is written against `WrappKit`'s `WrappModuleKit` ([docs/modules.md](docs/modules.md#executors)).
@@ -580,6 +581,9 @@ direct assignment.
   `SECOND_CHANCE_ROSETTA_FIXES=0` leaves a game's code unpatched by the
   nancy-drew module's Rosetta fixes
   ([docs/modules.md](docs/modules.md#rosetta-fixes)),
+  `SECOND_CHANCE_BASILISK_DISPLAY=0` shows a classic Mac program in Basilisk
+  II's own window rather than the wrapp's
+  ([docs/modules.md](docs/modules.md#the-mac-in-the-wrapps-window)),
   `SECOND_CHANCE_COCOA_START_WAIT=0` puts back Wine's 5 s limit on a
   program's main thread starting Cocoa, which a fully loaded Mac runs out,
   leaving the program with no display driver for good

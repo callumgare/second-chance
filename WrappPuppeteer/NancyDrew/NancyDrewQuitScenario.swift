@@ -131,9 +131,11 @@ struct NancyDrewQuitScenario {
         }
 
         let gamePid: Int32
+        let windowPid: Int32
         switch waitForGameWindow(directory: directory, launchedAt: launchedAt) {
-        case .found(let pid, _):
+        case .found(let pid, let shownBy, _):
             gamePid = pid
+            windowPid = shownBy
         case .failed(let reason):
             forceQuit(app)
             return .failed(reason)
@@ -145,7 +147,7 @@ struct NancyDrewQuitScenario {
         // that runs as two processes, as Armadillo's do, has it in both, and
         // the one to talk to is the one with the window.
         let game = WindowControl(socket: ControlSocket(path: directory + "/game-\(gamePid).sock"))
-        let context = Context(directory: directory, wrapp: wrappSocket, game: game)
+        let context = Context(directory: directory, wrapp: wrappSocket, game: game, windowPid: windowPid)
 
         // The game refuses captures until its window is in its fullscreen
         // Space, so the frames start there.
@@ -164,7 +166,7 @@ struct NancyDrewQuitScenario {
             return .failed("The wrapp's info window was still open \(Int(options.infoWindowCloseTimeout))s after the game's window appeared")
         }
 
-        switch waitForGameFocus(pid: gamePid, context: context) {
+        switch waitForGameFocus(pid: windowPid, context: context) {
         case .focused:
             break
         case .timedOut:
@@ -247,6 +249,10 @@ struct NancyDrewQuitScenario {
         let directory: String
         let wrapp: ControlSocket
         let game: WindowControl
+        /// The process whose window is the game's, whose focus is the
+        /// game's: the game's own, or the wrapp's when it shows the game's
+        /// screen (Basilisk II's Mac).
+        let windowPid: Int32
     }
 
     /// A private directory for the sockets, short enough for a socket's path.
@@ -337,7 +343,7 @@ struct NancyDrewQuitScenario {
         // something else having taken over the screen.
         let strategy = focusStrategy(context)
         let isBack = { (state: ControlledWindowState?) in
-            state?.active == true && state?.onActiveSpace != false && FocusDetector.isFocused(pid: gamePid, strategy: strategy)
+            state?.active == true && state?.onActiveSpace != false && FocusDetector.isFocused(pid: context.windowPid, strategy: strategy)
         }
         let back = Date().addingTimeInterval(Self.switchBackSeconds)
         while !isBack(context.game.state()), Date() < back {
@@ -421,8 +427,8 @@ struct NancyDrewQuitScenario {
     /// Show the click ring where a window point is on screen. The game's
     /// window position comes from the on-screen window list, which needs no
     /// permission.
-    private func showClick(at point: CGPoint, gamePid: Int32) {
-        guard let window = WindowFinder.mainWindow(ofPid: gamePid) else { return }
+    private func showClick(at point: CGPoint, windowPid: Int32) {
+        guard let window = WindowFinder.mainWindow(ofPid: windowPid) else { return }
         InputControl.showClick(at: CGPoint(x: window.bounds.minX + point.x, y: window.bounds.minY + point.y))
     }
 
@@ -432,7 +438,8 @@ struct NancyDrewQuitScenario {
     }
 
     private enum GameWindowWait {
-        case found(pid: Int32, windows: [WindowInfo])
+        /// `pid` serves the game's socket; `windowPid` has its window.
+        case found(pid: Int32, windowPid: Int32, windows: [WindowInfo])
         case failed(String)
     }
 
@@ -470,6 +477,24 @@ struct NancyDrewQuitScenario {
         }
         let firstPid = first[0]
         logger.notice("✅ \(processName) process detected (PID: \(first.map(String.init).joined(separator: ", ")))")
+        // A program whose screen another process shows (the wrapp, for
+        // Basilisk II's Mac) has no window of its own: its helper names the
+        // process whose window it is.
+        let shownBy = ControlSocket(path: directory + "/game-\(firstPid).sock").request(.hello, timeout: 10)
+            .flatMap { PuppetHello($0).shownBy }
+        if let shownBy {
+            logger.notice("   Its screen is shown in another process's window (PID: \(shownBy))")
+        }
+        // That process has other windows (the wrapp's loading window): the
+        // game's is the one at least as big as the screen it shows, once
+        // the helper knows the screen's size.
+        let gameSocket = ControlSocket(path: directory + "/game-\(firstPid).sock")
+        var screenSize: CGSize?
+        let showsScreen = { (window: WindowInfo) -> Bool in
+            if screenSize == nil { screenSize = gameSocket.request(.state, timeout: 5).flatMap(PuppetWindowState.init)?.size }
+            guard let screenSize, screenSize.width > 0 else { return false }
+            return window.bounds.width >= screenSize.width && window.bounds.height >= screenSize.height
+        }
 
         // Any process serving a socket here counts, not only the first: a
         // game wrapped in Armadillo (Big Fish's) runs as two, and the window
@@ -482,7 +507,7 @@ struct NancyDrewQuitScenario {
         var lastAlive = Date()
         let windows = WindowFinder.waitForWindows(
             timeout: options.windowDetectTimeout,
-            where: { games.pids().contains($0.ownerPid) },
+            where: { $0.ownerPid == shownBy ? showsScreen($0) : games.pids().contains($0.ownerPid) },
             giveUp: {
                 if !games.pids().isEmpty { lastAlive = Date() }
                 return Date().timeIntervalSince(lastAlive) > 10
@@ -501,10 +526,13 @@ struct NancyDrewQuitScenario {
             logger.notice("   [\(index + 1)] \(window.title) - \(Int(window.bounds.width))x\(Int(window.bounds.height))")
         }
         let owner = windows.first?.ownerPid ?? firstPid
+        if owner == shownBy {
+            return .found(pid: firstPid, windowPid: owner, windows: windows.filter { $0.ownerPid == owner })
+        }
         if owner != firstPid {
             logger.notice("   The window is another \(processName) process's (PID: \(owner)), not the first's (PID: \(firstPid))")
         }
-        return .found(pid: owner, windows: windows.filter { $0.ownerPid == owner })
+        return .found(pid: owner, windowPid: owner, windows: windows.filter { $0.ownerPid == owner })
     }
 
     /// Why no game served a socket in time, when it was started all the same:
@@ -720,7 +748,7 @@ struct NancyDrewQuitScenario {
                 heldBefore = before.held
             }
             context.game.click(at: point)
-            showClick(at: point, gamePid: gamePid)
+            showClick(at: point, windowPid: context.windowPid)
             if heldBefore == false, firstClickWasSwallowed(context) {
                 logger.error(
                     "❌ The first click is what took the cursor: cnc-ddraw swallowed it, so the wrapp's cursor lock didn't take hold — see '[CursorLock]' in the wrapp's log"
@@ -783,8 +811,9 @@ struct NancyDrewQuitScenario {
 
             // Losing focus after the ending click means the game is shutting
             // down; losing it before means something else took over the screen.
-            guard FocusDetector.isFocused(pid: gamePid, strategy: strategy) else {
+            guard FocusDetector.isFocused(pid: context.windowPid, strategy: strategy) else {
                 if ended { return nil }
+                logger.error("❌ The game lost focus before its goal (in front: \(WindowFinder.describeFront()))")
                 forceQuit(app)
                 return notFound
             }
@@ -928,7 +957,7 @@ struct NancyDrewQuitScenario {
                         case .finished(let failure): return failure
                         }
                     case .click, .clickAt:
-                        guard FocusDetector.isFocused(pid: gamePid, strategy: strategy) else {
+                        guard FocusDetector.isFocused(pid: context.windowPid, strategy: strategy) else {
                             if ended { return nil }
                             forceQuit(app)
                             return notFound
@@ -975,8 +1004,8 @@ struct NancyDrewQuitScenario {
                             // for. So the sequence is given up, the game brought
                             // back, and the handler starts it again from its
                             // screen, not having acted.
-                            guard FocusDetector.isFocused(pid: gamePid, strategy: strategy) else {
-                                switch regainFocus(before: pressing, gamePid: gamePid, strategy: strategy, context: context) {
+                            guard FocusDetector.isFocused(pid: context.windowPid, strategy: strategy) else {
+                                switch regainFocus(before: pressing, strategy: strategy, context: context) {
                                 case .focused: continue attemptLoop
                                 case .timedOut, .blocked:
                                     forceQuit(app)
@@ -1091,9 +1120,9 @@ struct NancyDrewQuitScenario {
     /// Bring the game back in front after something else took it during a
     /// sequence of keys, saying what was in front, so the log tells a lost
     /// key from one the program ignored.
-    private func regainFocus(before key: String, gamePid: Int32, strategy: FocusStrategy, context: Context) -> FocusWaitResult {
+    private func regainFocus(before key: String, strategy: FocusStrategy, context: Context) -> FocusWaitResult {
         logger.warning("    ⚠️  The game isn't in front before \(key) (\(WindowFinder.describeFront()) is): bringing it back to start its keys again")
-        let result = FocusDetector.waitForFocus(pid: gamePid, strategy: strategy, activate: wrapp.activatesForFocus, timeout: 60, settleDelay: 1)
+        let result = FocusDetector.waitForFocus(pid: context.windowPid, strategy: strategy, activate: wrapp.activatesForFocus, timeout: 60, settleDelay: 1)
         // What the game's own window says: in front and key, yet a program
         // may still ignore its keys after being switched away from (Iji does).
         if result == .focused, let state = context.game.state() {

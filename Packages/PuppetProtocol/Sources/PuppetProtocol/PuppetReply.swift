@@ -67,6 +67,10 @@ nonisolated public struct PuppetHello: Sendable, Equatable {
     public let pid: Int32?
     public let exe: String?
     public let commands: [String]
+    /// The process whose window shows the program's screen, when it isn't
+    /// the helper's own: the wrapp, for Basilisk II's Mac
+    /// (basilisk_display.m). Its windows and focus are the game's.
+    public let shownBy: Int32?
 
     /// From a `hello` reply; a version 1 helper, which has no `hello`, says error.
     public init(_ reply: PuppetReply) {
@@ -75,6 +79,7 @@ nonisolated public struct PuppetHello: Sendable, Equatable {
         pid = fields["pid"].flatMap(Int32.init)
         exe = fields["exe"]
         commands = fields["commands"]?.split(separator: ",").map(String.init) ?? []
+        shownBy = fields["shownby"].flatMap(Int32.init)
     }
 
     /// Whether it answers this request.

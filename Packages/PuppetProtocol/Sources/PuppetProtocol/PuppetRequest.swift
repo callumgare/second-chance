@@ -34,7 +34,7 @@ nonisolated public enum ScrollDirection: String, Sendable, CaseIterable {
 /// A request to the in-process helper, which answers for the game's window
 /// from inside the game's process.
 nonisolated public enum PuppetRequest: Sendable, Equatable {
-    /// `ok version=<n> pid=<n> exe=<name> commands=<list>`.
+    /// `ok version=<n> pid=<n> exe=<name> commands=<list> [shownby=<pid>]`.
     case hello
     /// The game window: its number, size, scale, fullscreen, focus and cursor.
     case state

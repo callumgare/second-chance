@@ -108,6 +108,7 @@
 				LastSession.swift,
 				main.swift,
 				MainLogger.swift,
+				MacScreenWindow.swift,
 				Modules/BasiliskRuntime.swift,
 				Modules/BigFishRuntime.swift,
 				Modules/DOSBoxRuntime.swift,
@@ -614,6 +615,7 @@
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/key_names.m",
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/audio_levels.m",
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/basilisk_mac.m",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/basilisk_display.m",
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/screen_depth.m",
 			);
 			name = "Build In-Process Helpers";

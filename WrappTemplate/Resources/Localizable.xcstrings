@@ -139,6 +139,9 @@
     "Engine" : {
 
     },
+    "Enter Full Screen" : {
+
+    },
     "Exit code" : {
 
     },
@@ -224,6 +227,9 @@
 
     },
     "Message" : {
+
+    },
+    "Minimize" : {
 
     },
     "No" : {
@@ -521,6 +527,9 @@
     "Which part of the code each thread was running when it crashed" : {
 
     },
+    "Window" : {
+
+    },
     "Yes" : {
 
     },
@@ -531,6 +540,9 @@
 
     },
     "Your name, your Mac's name and your folders are taken out of everything above." : {
+
+    },
+    "Zoom" : {
 
     },
     "macOS version" : {
