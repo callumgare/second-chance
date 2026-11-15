@@ -748,9 +748,13 @@ private struct Release {
                 throw SCError("The \(tag) release was created as a draft, but publishing it failed.",
                               hints: [published.error, "Then run: \(undraft.joined(separator: " "))"])
             }
-            return created
+            // Its address now, published: the one `gh release create` printed
+            // is the draft's (…/releases/tag/untagged-…), which stops working.
+            let view = try await gh(["release", "view", tag, "--json", "url", "--jq", ".url"])
+            let url = view.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            return view.succeeded && !url.isEmpty ? url : "gh release view \(tag) --web"
         }
-        let link = TerminalText(stringLiteral: created.output.trimmingCharacters(in: .whitespacesAndNewlines))
+        let link = TerminalText(stringLiteral: created)
         ui.success(isPrerelease ? "\(tag) is out as a pre-release." : "\(tag) is released.", takeaways: [link])
     }
 
