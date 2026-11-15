@@ -51,7 +51,8 @@ their bundle's. A wrapp keeps the Wine it was built with, until it's updated.
 | [Allegro's exit hang](#allegros-exit-hang) | Every Wine so far | Not fixed | `WINE.PATCH keep-thread-handles` (Icy Tower) |
 | [Steam's bootstrapper](#steams-bootstrapper) | Kegworks' Wine 9 (CX24) | 10.0_8 | Steam runs on 10.0_8 |
 | [Armadillo under Rosetta](#armadillo-under-rosetta) | Every Wine (Rosetta's) | Not Wine's to fix | The prepared 32-bit `ntdll` is patched |
-| [Direct3D not scaled](#direct3d-not-scaled-in-an-emulated-mode) | 10's Mac driver | Not checked | The wrapp's mode scaling helper |
+| [Direct3D not scaled](#direct3d-not-scaled-in-an-emulated-mode) | 10's Mac driver | 10.8 | The wrapp's mode scaling helper |
+| [Direct3D zoomed](#direct3d-zoomed-in-an-emulated-mode) | 11.x (WineHQ's) | Not fixed upstream | Direct3D games stay on 10.0_8 |
 | [Cocoa's 5 s start](#cocoas-5-s-start) | Every Wine | Not fixed | The Cocoa start wait helper |
 
 ### WMI deadlock
@@ -148,7 +149,22 @@ With `EmulateModeset` on (a 4:3 mode on a display that lacks it), Wine 10's
 Mac driver scales a program's windows but not what Direct3D draws in them.
 The wrapp's mode scaling helper does
 ([wine-in-process-helpers.md](wine-in-process-helpers.md#mode-scaling)).
-Not checked on Wine 11.
+From 10.8 Wine scales it itself, and the helper leaves it alone, but on 11.x
+it gets it wrong (next).
+
+### Direct3D zoomed in an emulated mode
+
+On WineHQ's 11.x (11.21 checked, 2026-11-15), a Direct3D game in an emulated
+mode is shown zoomed into the bottom-left of its picture: The White Wolf of
+Icicle Creek's 800x600 on a 2560x1440 display showed its bottom-left 800x600
+at 2.4 times. win32u draws the game into a framebuffer of the mode's size and
+stretches it to the display's on each present (`framebuffer_surface`, which
+logs `Using experimental framebuffer OpenGL surface`), while the Mac driver
+has sized the window's OpenGL surface to the mode's, so the stretched picture
+overflows it. The helper can't put it right from outside. Wine's X11 driver
+sizes the surface to the display; a Mac driver fix that does the same makes
+White Wolf pass. Until a Wine the module offers has it, Direct3D games stay
+on 10.0_8.
 
 ### Cocoa's 5 s start
 
