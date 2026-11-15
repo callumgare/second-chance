@@ -293,8 +293,8 @@ int virtualPointerWrapsMouseLocation(void);
 // ## Redirecting what winemac.so imports
 //
 // display_below_notch.m and virtual_pointer.m both wrap winemac.so's
-// CGEventGetLocation and CGWarpMouseCursorPosition, by rewriting its __got
-// entries. virtual_pointer.m's constructor runs after display_below_notch.m's
+// CGEventGetLocation and CGWarpMouseCursorPosition, by rewriting its import
+// pointers (__got, or __la_symbol_ptr in a build for macOS before 12). virtual_pointer.m's constructor runs after display_below_notch.m's
 // (it is linked later), so it wraps whatever is there: below-notch's wrapper
 // when that's in, else the function itself.
 
@@ -303,8 +303,13 @@ int virtualPointerWrapsMouseLocation(void);
 /// Point `image`'s imported address of `original` at `replacement`. An
 /// image's imports are bound before this dylib's constructors run (dyld binds
 /// a whole batch of images before running any initializer), so the entries
-/// already hold the real addresses. Returns how many entries it replaced.
+/// already hold the real addresses, except lazy pointers (a build for a
+/// macOS before 12), which are found by their symbol's name until their
+/// first call binds them. Returns how many entries it replaced.
 int replaceImageImport(const struct mach_header_64 *image, void *original, void *replacement);
+
+/// How many of `image`'s import entries `replaceImageImport` would replace.
+int imageImports(const struct mach_header_64 *image, void *original);
 
 /// Point every import of `symbol` ("_SDL_RenderPresent", with its leading
 /// underscore) the main executable has at `replacement`, found by name
