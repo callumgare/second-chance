@@ -26,7 +26,8 @@
 //    positions from the true top of the display, are shifted by the strip.
 //
 //  The first is a method replacement that looks at its caller; the others
-//  replace winemac.so's imported addresses (its __got entries) with wrappers,
+//  replace winemac.so's imported addresses (its __got or lazy pointer
+//  entries) with wrappers,
 //  so nothing else in the process is affected. It acts in every Wine process
 //  rather than only the game's because the Win32 desktop's displays are
 //  registered by explorer.exe, and the game takes them from there.
@@ -47,6 +48,7 @@
 #include <dlfcn.h>
 #include <mach-o/dyld.h>
 #include <mach-o/getsect.h>
+#include <mach-o/nlist.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -163,20 +165,83 @@ static CGError belowNotchWarpMouseCursorPosition(CGPoint point) {
     return CGWarpMouseCursorPosition(point);
 }
 
-int replaceImageImport(const struct mach_header_64 *image, void *original, void *replacement) {
-    unsigned long size = 0;
-    void **entries = (void **)getsectiondata(image, "__DATA_CONST", "__got", &size);
-    long pageSize = getpagesize();
-    int replaced = 0;
-    for (unsigned long i = 0; entries && i < size / sizeof(void *); i++) {
-        if (entries[i] != original) continue;
-        void *page = (void *)((uintptr_t)&entries[i] & ~(uintptr_t)(pageSize - 1));
-        if (mprotect(page, pageSize, PROT_READ | PROT_WRITE) != 0) continue;
-        entries[i] = replacement;
-        mprotect(page, pageSize, PROT_READ);
-        replaced++;
+/// Each entry of `image`'s import pointer sections (__got, __nl_symbol_ptr,
+/// __la_symbol_ptr, whatever their segment) that is `original`: one holding
+/// that address, or a lazy pointer not yet bound (still pointing into the
+/// image's own stub helper) whose symbol resolves to it. A build for macOS 12
+/// or later binds every import up front, into __got; one for an older macOS
+/// (Gcenx's, wine-mac-builds') binds its calls lazily, through
+/// __la_symbol_ptr, so until the first call the address isn't there to find.
+/// With `replacement`, points each at it; without, only counts them.
+static int visitImageImports(const struct mach_header_64 *image, void *original, void *replacement) {
+    if (!image || !original) return 0;
+    const struct symtab_command *symtab = NULL;
+    const struct dysymtab_command *dysymtab = NULL;
+    const struct segment_command_64 *linkedit = NULL, *text = NULL;
+    const struct load_command *command = (const struct load_command *)(image + 1);
+    for (uint32_t i = 0; i < image->ncmds; i++, command = (const void *)((const char *)command + command->cmdsize)) {
+        if (command->cmd == LC_SYMTAB) symtab = (const void *)command;
+        else if (command->cmd == LC_DYSYMTAB) dysymtab = (const void *)command;
+        else if (command->cmd == LC_SEGMENT_64) {
+            const struct segment_command_64 *segment = (const void *)command;
+            if (strcmp(segment->segname, SEG_LINKEDIT) == 0) linkedit = segment;
+            else if (strcmp(segment->segname, SEG_TEXT) == 0) text = segment;
+        }
     }
-    return replaced;
+    if (!text) return 0;
+    uintptr_t slide = (uintptr_t)image - (uintptr_t)text->vmaddr;
+    uintptr_t textStart = (uintptr_t)image, textEnd = textStart + (uintptr_t)text->vmsize;
+    const struct nlist_64 *symbols = NULL;
+    const char *strings = NULL;
+    const uint32_t *indirect = NULL;
+    if (symtab && dysymtab && linkedit) {
+        uintptr_t linkeditBase = slide + (uintptr_t)linkedit->vmaddr - (uintptr_t)linkedit->fileoff;
+        symbols = (const void *)(linkeditBase + symtab->symoff);
+        strings = (const char *)(linkeditBase + symtab->stroff);
+        indirect = (const void *)(linkeditBase + dysymtab->indirectsymoff);
+    }
+    long pageSize = getpagesize();
+    int found = 0;
+    command = (const struct load_command *)(image + 1);
+    for (uint32_t i = 0; i < image->ncmds; i++, command = (const void *)((const char *)command + command->cmdsize)) {
+        if (command->cmd != LC_SEGMENT_64) continue;
+        const struct segment_command_64 *segment = (const void *)command;
+        // A segment dyld makes read-only once it's bound goes back to that.
+        BOOL readOnlyAfter = strcmp(segment->segname, "__DATA_CONST") == 0 || strcmp(segment->segname, "__AUTH_CONST") == 0;
+        const struct section_64 *sections = (const void *)(segment + 1);
+        for (uint32_t j = 0; j < segment->nsects; j++) {
+            uint32_t type = sections[j].flags & SECTION_TYPE;
+            BOOL lazy = type == S_LAZY_SYMBOL_POINTERS;
+            if (!lazy && type != S_NON_LAZY_SYMBOL_POINTERS) continue;
+            void **entries = (void **)(slide + (uintptr_t)sections[j].addr);
+            for (uint64_t k = 0; k < sections[j].size / sizeof(void *); k++) {
+                BOOL match = entries[k] == original;
+                if (!match && lazy && indirect && (uintptr_t)entries[k] >= textStart && (uintptr_t)entries[k] < textEnd) {
+                    uint32_t index = indirect[sections[j].reserved1 + k];
+                    if (index & (INDIRECT_SYMBOL_ABS | INDIRECT_SYMBOL_LOCAL)) continue;
+                    const char *name = strings + symbols[index].n_un.n_strx;
+                    // dlsym finds what binding would: through re-exports too.
+                    match = name[0] == '_' && dlsym(RTLD_DEFAULT, name + 1) == original;
+                }
+                if (!match) continue;
+                if (!replacement) { found++; continue; }
+                void *page = (void *)((uintptr_t)&entries[k] & ~(uintptr_t)(pageSize - 1));
+                if (mprotect(page, pageSize, PROT_READ | PROT_WRITE) != 0) continue;
+                entries[k] = replacement;
+                if (readOnlyAfter) mprotect(page, pageSize, PROT_READ);
+                found++;
+            }
+        }
+    }
+    return found;
+}
+
+int replaceImageImport(const struct mach_header_64 *image, void *original, void *replacement) {
+    return replacement ? visitImageImports(image, original, replacement) : 0;
+}
+
+int imageImports(const struct mach_header_64 *image, void *original) {
+    return visitImageImports(image, original, NULL);
 }
 
 static int replaceWinemacImport(void *original, void *replacement) {
@@ -214,11 +279,7 @@ static void displayBelowNotchInit(void) {
     // All or nothing: a display shrunk for some of Wine's conversions and
     // not others would put clicks in the wrong place everywhere.
     for (size_t i = 0; i < sizeof(imports) / sizeof(*imports); i++) {
-        unsigned long size = 0;
-        void **entries = (void **)getsectiondata(gWinemac, "__DATA_CONST", "__got", &size);
-        BOOL found = NO;
-        for (unsigned long j = 0; entries && j < size / sizeof(void *); j++) found |= entries[j] == imports[i].original;
-        if (!found) {
+        if (imageImports(gWinemac, imports[i].original) == 0) {
             if (inGame) helperReport("NativeFullscreen", "warning", "winemac.so doesn't import %s; a notched display is shown to the game whole", imports[i].name);
             return;
         }

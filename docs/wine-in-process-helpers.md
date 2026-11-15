@@ -363,8 +363,14 @@ the wrapp, for Wine's Mac driver (`winemac.so`) only:
 | `CGEventGetLocation`, `CGWarpMouseCursorPosition` | Positions shifted by the strip's height, since these count from the true top of the display. |
 
 The first is a method replacement that checks its caller is `winemac.so`. The
-others replace `winemac.so`'s imported addresses (its `__got` entries), so the
-rest of the process, AppKit included, sees the display as it is.
+others replace `winemac.so`'s imported addresses, so the rest of the process,
+AppKit included, sees the display as it is. A Wine built for macOS 12 or later
+binds them all up front, into `__got`. One built for an older macOS binds its
+calls lazily, through `__la_symbol_ptr`, whose entries point at a stub until
+the first call. `replaceImageImport` therefore finds an entry by its
+address, or, while it's unbound, by its symbol's name in the indirect symbol
+table, resolved with `dlsym`. The virtual pointer and the audio levels helper
+replace imports the same way.
 
 It has to act in `explorer.exe` too, not only in the game: in Wine 10 the
 desktop process registers the displays, and the game takes them from there.
