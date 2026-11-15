@@ -10,7 +10,7 @@
 //  GetDeviceCaps(BITSPIXEL) of the screen. Wine 10's Mac driver answers that
 //  with the depth of the Mac display's own mode, read once
 //  (winemac.drv/gdi.c's device_init): always 32, whatever mode the session
-//  is in. (Wine 10.20 stopped overriding it, upstream 1907a5b039, so
+//  is in. (Wine 10.19 stopped overriding it, upstream 1907a5b039, so
 //  BITSPIXEL follows the emulated mode there; Director's projector dies at
 //  once under Rosetta on every Wine since, so Wine 10 is what such a program
 //  runs on.)

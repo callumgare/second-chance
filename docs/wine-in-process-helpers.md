@@ -591,7 +591,11 @@ blits it up; winemac has nothing like it.) In the game's process the helper:
   win32u.so, unlike the version-specific `NtUserCall*` codes, and like every
   Unix-side export it uses the normal calling convention, not `ms_abi`. The
   display's size is what Wine sees (`wineMainDisplaySize`, below the notch when
-  [that helper](#on-a-display-with-a-notch) is on).
+  [that helper](#on-a-display-with-a-notch) is on). From Wine 10.8
+  (`271fcfd7`) Wine does this itself: it passes the game's own size and sets
+  the backing size to it. So once Wine's method has set the backing to the
+  size it was given, the helper leaves it to Wine (`Wine sizes Direct3D's
+  picture itself` in the log) rather than dividing it again.
 - leaves a borderless Wine window where Wine put it, replacing
   `-[WineWindow constrainFrameRect:toScreen:]`. Wine maps a window up to the
   whole display only if it exactly covers the emulated screen, and a game
@@ -617,7 +621,10 @@ blits it up; winemac has nothing like it.) In the game's process the helper:
   which leaves the bars black without this
   ([the cursor and the title bar](testing.md#the-cursor-and-the-title-bar)).
   (An ordinary titled window's OpenGL view fills it, so it has no bars to
-  paint.)
+  paint.) Wine 11.22 draws a window's picture from an IOSurface and has no
+  `setColorImage:`; it masks the bars beside a fullscreen picture in black
+  itself, as it has since 10.17 (`-[WineWindow setMask:]`), and the helper
+  says so (`Wine draws the bars beside a scaled picture itself`).
 
 - keeps the game's mode and window while the game is in the background.
   When a fullscreen Direct3D game loses focus, wined3d puts the desktop mode
@@ -942,11 +949,13 @@ program asks `GetDeviceCaps(BITSPIXEL)` of the screen. The prefix's
 one at every size it emulates, but Wine 10's Mac driver answers `BITSPIXEL`
 itself (`macdrv_GetDeviceCaps`, `dlls/winemac.drv/gdi.c`), with the depth
 of the Mac display's own mode, read once: always 32, whatever mode the
-session is in. Upstream stopped overriding it in Wine 10.20 (commit
+session is in. Upstream stopped overriding it in Wine 10.19 (commit
 `1907a5b039`), so there `BITSPIXEL` follows the emulated mode, but
 Director's projector dies at once under Rosetta on every later Wine the wine
 module has (`rosetta error: LDT … not supported`), so a program like it
-runs on Wine 10.
+runs on Wine 10. From 10.19 that answer reaches win32u's own
+`CreateCompatibleBitmap` as well, which is what gave the speckled pictures
+described below; whether an 8-bit program speckles there is untested.
 
 ### What it does
 

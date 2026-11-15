@@ -321,6 +321,16 @@ static char kScaledBackingKey;   // the size this file last gave the context's s
 /// Whether a picture is being scaled up now: set and cleared on Wine's
 /// threads, read on the main thread.
 static _Atomic BOOL gScaling;
+static _Atomic BOOL gReportedWineScales;
+
+/// Whether Wine's -wine_updateBackingSize: has just given the surface the
+/// backing size it was passed, which Wine 10.8 and later always do.
+static BOOL wineSizedBacking(CGLContextObj cgl, const CGSize *size) {
+    GLint enabled = 0, backing[2] = {0, 0};
+    if (CGLIsEnabled(cgl, kCGLCESurfaceBackingSize, &enabled) != kCGLNoError || !enabled) return NO;
+    if (CGLGetParameter(cgl, kCGLCPSurfaceBackingSize, backing) != kCGLNoError) return NO;
+    return backing[0] == (GLint)lround(size->width) && backing[1] == (GLint)lround(size->height);
+}
 
 static void scaledUpdateBackingSize(NSOpenGLContext *self, SEL _cmd, const CGSize *size) {
     ((void (*)(id, SEL, const CGSize *))gWineUpdateBackingSize)(self, _cmd, size);
@@ -332,6 +342,24 @@ static void scaledUpdateBackingSize(NSOpenGLContext *self, SEL _cmd, const CGSiz
     CGLContextObj cgl = self.CGLContextObj;
     NSValue *previous = objc_getAssociatedObject(self, &kScaledBackingKey);
     CGFloat scale = size ? wineScale() : 1.0;
+
+    // From Wine 10.8 (271fcfd7) Wine passes the game's own size, in the
+    // window's DPI, and sets the backing size to it itself, scaling the
+    // picture as this file does; 10.0 leaves it alone with Retina mode off.
+    // Scaling that size down again would draw the game at a fraction of its
+    // size, so when Wine has just set the backing to the size it was given,
+    // it is Wine's.
+    BOOL oursMatches = previous && lround(previous.sizeValue.width) == lround(size ? size->width : 0)
+        && lround(previous.sizeValue.height) == lround(size ? size->height : 0);
+    if (size && !oursMatches && wineSizedBacking(cgl, size)) {
+        if (previous) objc_setAssociatedObject(self, &kScaledBackingKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        gScaling = fabs(scale - 1.0) >= 0.01;
+        if (!atomic_exchange(&gReportedWineScales, YES)) {
+            helperReport("EmulatedMode", "notice", "Wine sizes Direct3D's picture itself (%.0fx%.0f); leaving it to Wine",
+                         size->width, size->height);
+        }
+        return;
+    }
 
     if (!size || fabs(scale - 1.0) < 0.01) {
         if (previous) {
@@ -490,6 +518,7 @@ static void blackOutsideGLView(NSView *self, SEL _cmd, CGImageRef image) {
 
 static IMP gWineUpdateLayer;
 static BOOL gArmed = NO;
+static _Atomic BOOL gReportedIOSurface;
 static char kReportedCentringKey;   // the client frame and painted size last reported for the window
 static char kReportedSkipKey;       // why the window's picture was last not placed
 
@@ -616,7 +645,16 @@ static void centredUpdateLayer(NSView *self, SEL _cmd) {
     BOOL smaller = windowIsScaledPictureWindow(window);
     if (smaller) image = wineColorImage(self);
     CGRect surface;
-    if (!image || CFGetTypeID(image) != CGImageGetTypeID() || !wineSurfaceRect(self, &surface)) return;
+    if (image && CFGetTypeID(image) != CGImageGetTypeID()) {
+        // Wine 11.22 and later give the layer an IOSurface (b77a5f9b), which
+        // this crop isn't written for yet: the picture stays where Wine puts
+        // it, off-centre from the mouse.
+        if (!atomic_exchange(&gReportedIOSurface, YES)) {
+            helperReport("EmulatedMode", "warning", "Wine draws this window from an IOSurface; its scaled picture isn't placed");
+        }
+        return;
+    }
+    if (!image || !wineSurfaceRect(self, &surface)) return;
 
     // The picture starts at the image's top left; the image is in pixels,
     // and the content view counts y from the top. What shows is the part of
@@ -784,6 +822,11 @@ static void emulatedModeScalingInit(void) {
     Method setColorImage = class_getInstanceMethod(NSClassFromString(@"WineContentView"), @selector(setColorImage:));
     if (setColorImage) {
         gWineSetColorImage = replaceOwnMethod(NSClassFromString(@"WineContentView"), @selector(setColorImage:), (IMP)blackOutsideGLView);
+    } else if (class_getInstanceMethod(NSClassFromString(@"WineWindow"), NSSelectorFromString(@"setMask:"))) {
+        // Wine 11.22 draws a window's picture from an IOSurface (no
+        // -setColorImage:), and since 10.17 masks the bars beside a
+        // fullscreen picture in black itself (-[WineWindow setMask:]).
+        helperReport("EmulatedMode", "notice", "Wine draws the bars beside a scaled picture itself");
     } else {
         helperReport("EmulatedMode", "warning", "no -[WineContentView setColorImage:]; bars beside a scaled picture are grey");
     }
