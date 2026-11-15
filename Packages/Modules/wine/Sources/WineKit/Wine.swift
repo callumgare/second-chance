@@ -86,6 +86,8 @@ nonisolated public struct Wine: Sendable {
             // every other wrapp's GStreamer left stale (GStreamerCache).
             "GST_REGISTRY": gstreamerRegistry.path,
             "WINETRICKS_FALLBACK_LIBRARY_PATH": dyldFallbackLibraryPath,
+            // Only Sikarugir's 10.0 wineboot reads this (to keep its dialog
+            // hidden); WineHQ's and wine-mac-binaries' builds don't.
             "WINEBOOT_HIDE_DIALOG": "1",
             // winemenubuilder turns each Start menu entry and file association
             // an installer makes into a Linux `.desktop` file in
@@ -93,7 +95,6 @@ nonisolated public struct Wine: Sendable {
             // wrapp, and of no use on a Mac. Winetricks adds its own overrides
             // to this rather than replacing it.
             "WINEDLLOVERRIDES": "winemenubuilder.exe=d",
-            "CX_ROOT": wineDir.path,
             "MVK_CONFIG_RESUME_LOST_DEVICE": "1",
             // MoltenVK logs at info by default: ~160 lines of extension and
             // GPU listings per launch. Warnings and errors still come through.
