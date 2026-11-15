@@ -789,6 +789,14 @@ public nonisolated struct WrappfileChecker {
         return version == constraint || version.hasPrefix(constraint + ".") || version.hasPrefix(constraint + "_")
     }
 
+    /// Whether a stage asking for `constraint` (nil: any) may be given
+    /// `version`. A preview only where the constraint names it exactly, so a
+    /// build being tried never becomes what `wine` or `wine@11` picks.
+    static func picks(_ version: String, preview: Bool, for constraint: String?) -> Bool {
+        guard let constraint else { return !preview }
+        return preview ? version == constraint : matches(version, constraint)
+    }
+
     /// Versions compared part by part, numbers as numbers (`10.0_8` < `10.0_10`).
     static func compare(_ lhs: String, _ rhs: String) -> ComparisonResult {
         lhs.compare(rhs, options: .numeric)

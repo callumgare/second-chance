@@ -711,8 +711,9 @@ public nonisolated struct BuildPlanner {
         func addModule(_ id: String, constraint: String?, as alias: String?, to scope: inout Scope, origin: String) throws(PlanError) {
             let id = id.lowercased()
             let module = planner.modules[id]
-            let versions = (module?.manifest.versions ?? []).map(\.version)
-                .filter { version in constraint.map { WrappfileChecker.matches(version, $0) } ?? true }
+            let versions = (module?.manifest.versions ?? [])
+                .filter { WrappfileChecker.picks($0.version, preview: $0.preview == true, for: constraint) }
+                .map(\.version)
                 .sorted { WrappfileChecker.compare($0, $1) == .orderedAscending }
             if let had = scope.modules.versions[id], let constraint, !WrappfileChecker.matches(had, constraint) {
                 throw PlanError(description: "\(origin): the stage has \(id) \(had) already, which isn't \(constraint)")

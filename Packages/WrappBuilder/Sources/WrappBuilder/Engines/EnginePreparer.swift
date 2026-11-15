@@ -176,16 +176,22 @@ nonisolated extension WineBuild {
     /// GStreamer and MoltenVK among them, found through its own run paths)
     /// goes in `SharedSupport/wine` in its place, and only the wrapper's
     /// cabextract is taken from the template: its frameworks are Sikarugir's
-    /// Wine's.
+    /// Wine's. A build from wine-mac-builds (`wine-mac-builds`, the same
+    /// kind of Wine, its tree at the archive's top) goes in as a WineHQ one
+    /// does, with its licences.
     public static func prepare(_ job: EngineJob) async throws -> [URL] {
         var toSign: [URL] = []
         let wine = job.tree.appendingPathComponent("SharedSupport/wine")
         let frameworks = job.tree.appendingPathComponent("Frameworks")
         try FileManager.default.createDirectory(at: wine, withIntermediateDirectories: true)
-        let winehq = job.sources["winehq"] != nil
-        if winehq {
+        // Gcenx's and wine-mac-builds' bring every library Wine needs.
+        let winehq = job.sources["winehq"] != nil || job.sources["wine-mac-builds"] != nil
+        if job.sources["winehq"] != nil {
             try await job.run("/usr/bin/tar", ["-xf", try job.source("winehq").path, "-C", wine.path,
                                                "--strip-components=4", "--include=*/Contents/Resources/wine/*"])
+        } else if job.sources["wine-mac-builds"] != nil {
+            try await job.run("/usr/bin/tar", ["-xf", try job.source("wine-mac-builds").path, "-C", wine.path,
+                                               "--strip-components=1"])
         } else {
             try await job.run("/usr/bin/tar", ["-xf", try job.source("wine").path, "-C", wine.path, "--strip-components=1"])
         }

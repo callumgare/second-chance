@@ -59,6 +59,8 @@ versions:                      # what this release provides, as a bundle names i
   - version: "10.0_8"
     has: ["msync"]             # an engine's: what it has that the module would make up for (below)
     package: { … }             # an engine's: what it is made from (below)
+  - version: "11.21-macfixes.1"
+    preview: true              # only where a constraint names it exactly (wine@11.21-macfixes.1), never `wine` or `wine@11`
 data: ["routine-errors.yaml"]
 retired: ["prefix.yaml", "functions/keep-thread-handles"]  # what a release dropped (below)
 stages: ["stages/prefix", "stages/update"]  # Wrappfiles a bundle builds FROM (FROM --module=wine@10 prefix)
@@ -476,7 +478,10 @@ builds. Wine's:
   `Contents/Resources/wine` holds Wine and every library it needs, GStreamer
   and MoltenVK among them, found through its own `@loader_path` run paths:
   that folder goes in `SharedSupport/wine`, `Frameworks` stays empty, and
-  only the template's `cabextract` is taken. `Wine` points GStreamer at the
+  only the template's `cabextract` is taken. A build from wine-mac-builds
+  (source `wine-mac-builds`) is the same kind of Wine,
+  with its tree, licences and all, at the top of its archive, and goes in
+  the same way. `Wine` points GStreamer at the
   engine's own plugins when it has them (`gstreamerPlugins`), with a plugin
   cache for each copy of them
   ([wrapp-launch.md](wrapp-launch.md#gstreamers-plugin-cache)).

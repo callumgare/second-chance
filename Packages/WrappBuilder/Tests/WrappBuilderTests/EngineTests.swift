@@ -140,6 +140,16 @@ struct EnginePackageTests {
         #expect(module.manifest.has(version: "no-such-version").isEmpty)
     }
 
+    @Test("A preview version is picked only where a constraint names it exactly")
+    func previewVersions() {
+        #expect(WrappfileChecker.picks("11.21-macfixes.1", preview: true, for: "11.21-macfixes.1"))
+        #expect(!WrappfileChecker.picks("11.21-macfixes.1", preview: true, for: nil))
+        #expect(!WrappfileChecker.picks("11.21-macfixes.1", preview: true, for: "11"))
+        #expect(!WrappfileChecker.picks("11.21-macfixes.1", preview: true, for: ">=11"))
+        #expect(WrappfileChecker.picks("11.21", preview: false, for: "11"))
+        #expect(WrappfileChecker.picks("11.21", preview: false, for: nil))
+    }
+
     @Test("A module with no engine has no package")
     func noPackage() throws {
         let module = try #require(try ModuleLoader(root: modulesRoot).module("steam"))
