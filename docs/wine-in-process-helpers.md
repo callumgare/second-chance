@@ -1084,9 +1084,11 @@ failure if nothing asked the game to quit and the game:
   `Modules/big-fish/routine-errors.yaml`: a launcher's output comes down the
   game's stream, so the check can't tell its errors from the game's), nor one
   the game had been logging since 10 s or more before it quit
-  (`recurringLead`): an error logged all along says nothing about the exit.
-  The Deadly Device on Wine 11.22 logs a GL error from its first frame on, so
-  every quit from its menu landed within a second of one. Errors count as the
+  (`recurringLead`), or had logged 20 times before that second
+  (`floodCount`): an error logged all along says nothing about the exit.
+  The Deadly Device on Wine 11.22 logs a GL error hundreds of times a second
+  from its first frame on, so every quit from its menu landed within a second
+  of one, and a test reaching the menu quit 9 s after that frame. Errors count as the
   same with the thread that logged them and any address taken out
   (`GameQuitCheck.kind(of:)`), and the check keeps when it first and last saw
   each, so an error logged every frame doesn't crowd out a new one;

@@ -102,7 +102,7 @@ struct GameQuitCheckTests {
         #expect(failure.summary == "it quit 0.5 s after Wine reported an error")
     }
 
-    @Test("An error that started less than recurringLead before the exit still counts")
+    @Test("An error that started less than recurringLead before the exit, and seldom, still counts")
     func errorStartingNearTheExit() {
         let check = started()
         check.observe(line: firstFrame, at: start + 1)
@@ -110,6 +110,28 @@ struct GameQuitCheckTests {
             check.observe(line: drawError, at: start + second)
         }
         #expect(check.failure(exitedAt: start + 60.3) != nil)
+    }
+
+    @Test("An error logged floodCount times before the exit's window doesn't explain it, however recently it began")
+    func ignoresFloods() {
+        // The Deadly Device on Wine 11.22: the flood from its first frame,
+        // quit from its menu 9.3 s later.
+        let check = started()
+        check.observe(line: firstFrame, at: start + 40.4)
+        for frame in 0..<3_400 {
+            check.observe(line: drawError, at: start + 40.4 + Double(frame) * 0.0027)
+        }
+        #expect(check.failure(exitedAt: start + 49.7) == nil)
+    }
+
+    @Test("A flood that begins within the exit's window still counts")
+    func floodJustBeforeTheExit() {
+        let check = started()
+        check.observe(line: firstFrame, at: start + 1)
+        for frame in 0..<200 {
+            check.observe(line: drawError, at: start + 59.5 + Double(frame) * 0.002)
+        }
+        #expect(check.failure(exitedAt: start + 60) != nil)
     }
 
     @Test("Two of the same error are one kind, whichever thread logged them and wherever")

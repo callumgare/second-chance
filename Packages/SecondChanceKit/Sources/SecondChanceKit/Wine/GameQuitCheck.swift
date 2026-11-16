@@ -21,7 +21,8 @@
 //    game does, so its frames say nothing about the game);
 //  - quit within `errorWindow` of Wine reporting an error that isn't one of
 //    the routine ones every launch logs, nor one the game had been logging
-//    since `recurringLead` or more before it quit;
+//    since `recurringLead` or more before it quit, or `floodCount` times
+//    before the `errorWindow`;
 //  - quit within `crashWindow` of an exception nothing handled: with no crash
 //    dialog, the program ends once winedbg has written its backtrace.
 //
@@ -57,6 +58,14 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
     /// White Wolf's refused mode was logged 0.8 s before it quit.
     static let recurringLead: TimeInterval = 10
 
+    /// How many times an error must have been logged, before the
+    /// `errorWindow` ahead of an exit, to count as one the game logs all
+    /// along however recently it began. The Deadly Device on Wine 11.22 logs
+    /// a GL error thousands of times from its first frame, and quitting from
+    /// its menu 9 s after that frame was blamed on it. White Wolf's refused
+    /// mode is logged once, just before it quits.
+    static let floodCount = 20
+
     /// How soon after an exception nothing handled an exit counts as that
     /// crash. The prefix has no crash dialog (the wine module's
     /// `nocrashdialog`), so a crashed program ends once winedbg has written
@@ -79,10 +88,17 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
     private var quitRequest: String?
     /// Enough to explain an exit; a game logging errors all along doesn't grow it.
     private let errorLimit = 50
-    /// When each kind of error (`kind(of:)`) was first and last logged. Kept
-    /// apart from `errors`, which an error logged every frame would fill,
-    /// pushing out a new one just before the exit.
-    private var errorKinds: [String: (first: Date, last: Date)] = [:]
+    /// When each kind of error (`kind(of:)`) was first and last logged, how
+    /// often, and when it was logged for the `floodCount`th time. Kept apart
+    /// from `errors`, which an error logged every frame would fill, pushing
+    /// out a new one just before the exit.
+    private var errorKinds: [String: ErrorKind] = [:]
+    private struct ErrorKind {
+        let first: Date
+        var last: Date
+        var count = 1
+        var flooded: Date?
+    }
     /// Enough kinds for any launch; one whose text varies past what `kind(of:)`
     /// takes out doesn't grow it.
     private let errorKindLimit = 200
@@ -109,10 +125,13 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
         state.withLock {
             errors.append((time, line))
             if errors.count > errorLimit { errors.removeFirst(errors.count - errorLimit) }
-            if let seen = errorKinds[kind] {
-                errorKinds[kind] = (seen.first, time)
+            if var seen = errorKinds[kind] {
+                seen.last = time
+                seen.count += 1
+                if seen.count == Self.floodCount { seen.flooded = time }
+                errorKinds[kind] = seen
             } else if errorKinds.count < errorKindLimit {
-                errorKinds[kind] = (time, time)
+                errorKinds[kind] = ErrorKind(first: time, last: time)
             }
         }
     }
@@ -166,10 +185,15 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
 
     /// When the last error that could explain an exit at `exitTime` was
     /// logged: one within `errorWindow` of it, of a kind first logged less
-    /// than `recurringLead` before it. Called holding `state`.
+    /// than `recurringLead` before it and not logged `floodCount` times
+    /// before the `errorWindow`. Called holding `state`.
     private func lastTellingError(before exitTime: Date) -> Date? {
         errorKinds.values
-            .filter { exitTime.timeIntervalSince($0.last) <= Self.errorWindow && exitTime.timeIntervalSince($0.first) < Self.recurringLead }
+            .filter { kind in
+                let flooded = kind.flooded.map { exitTime.timeIntervalSince($0) > Self.errorWindow } ?? false
+                return exitTime.timeIntervalSince(kind.last) <= Self.errorWindow
+                    && exitTime.timeIntervalSince(kind.first) < Self.recurringLead && !flooded
+            }
             .map(\.last)
             .max()
     }
