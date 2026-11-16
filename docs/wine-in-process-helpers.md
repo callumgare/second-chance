@@ -1082,7 +1082,14 @@ failure if nothing asked the game to quit and the game:
   Fish, the Direct3D errors the Game Manager's window logs whenever it
   redraws, as it does when a fullscreen game quits,
   `Modules/big-fish/routine-errors.yaml`: a launcher's output comes down the
-  game's stream, so the check can't tell its errors from the game's);
+  game's stream, so the check can't tell its errors from the game's), nor one
+  the game had been logging since 10 s or more before it quit
+  (`recurringLead`): an error logged all along says nothing about the exit.
+  The Deadly Device on Wine 11.22 logs a GL error from its first frame on, so
+  every quit from its menu landed within a second of one. Errors count as the
+  same with the thread that logged them and any address taken out
+  (`GameQuitCheck.kind(of:)`), and the check keeps when it first and last saw
+  each, so an error logged every frame doesn't crowd out a new one;
 - quit within 30 s of an exception nothing handled (`Unhandled page fault`,
   `Unhandled exception`). The prefix has no Wine crash dialog (the wine
   module's `nocrashdialog`, in `functions/prefix-settings`), so a crashed
@@ -1223,7 +1230,7 @@ A game that quits unexpectedly logs, after the usual `■ Game exited …` line:
 ```
 
 A healthy launch that gets reported this way has met a Wine error that's
-routine after all: the line it names belongs in `Modules/wine/routine-errors.yaml`
+routine after all, and that it didn't log all along: the line it names belongs in `Modules/wine/routine-errors.yaml`
 (or `Modules/steam/`'s, for a line only Steam's launches log), then `sc
 generate`, which compiles them into the wrapp (`GameQuitCheck+RoutineErrors.swift`).
 

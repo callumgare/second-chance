@@ -75,6 +75,51 @@ struct GameQuitCheckTests {
         #expect(check.failure(exitedAt: start + 10 + GameQuitCheck.errorWindow + 1) == nil)
     }
 
+    // From The Deadly Device on Wine 11.22 (2026-11-16), which logs this from
+    // its first frame on and was blamed for quitting from its own menu.
+    private let drawError = #"0378:err:d3d:wined3d_check_gl_call >>>>>>> GL_INVALID_OPERATION (0x502) from glDrawArrays @ dlls\wined3d\context_gl.c / 4437."#
+
+    @Test("An error the game logged all along doesn't explain its quit")
+    func ignoresRecurringErrors() {
+        let check = started()
+        check.observe(line: firstFrame, at: start + 1)
+        for second in stride(from: 1.0, through: 60, by: 0.5) {
+            check.observe(line: drawError, at: start + second)
+        }
+        #expect(check.failure(exitedAt: start + 60.3) == nil)
+    }
+
+    @Test("A new error just before the exit counts, however many old ones follow it")
+    func newErrorAmongRecurring() throws {
+        let check = started()
+        check.observe(line: firstFrame, at: start + 1)
+        check.observe(line: drawError, at: start + 1)
+        check.observe(line: refusedMode, at: start + 59.5)
+        for frame in 0..<200 {
+            check.observe(line: drawError, at: start + 59.5 + Double(frame) * 0.002)
+        }
+        let failure = try #require(check.failure(exitedAt: start + 60))
+        #expect(failure.summary == "it quit 0.5 s after Wine reported an error")
+    }
+
+    @Test("An error that started less than recurringLead before the exit still counts")
+    func errorStartingNearTheExit() {
+        let check = started()
+        check.observe(line: firstFrame, at: start + 1)
+        for second in stride(from: 55.0, through: 60, by: 0.5) {
+            check.observe(line: drawError, at: start + second)
+        }
+        #expect(check.failure(exitedAt: start + 60.3) != nil)
+    }
+
+    @Test("Two of the same error are one kind, whichever thread logged them and wherever")
+    func errorKinds() {
+        #expect(GameQuitCheck.kind(of: drawError) == GameQuitCheck.kind(of: drawError.replacingOccurrences(of: "0378:", with: "03a8:")))
+        #expect(GameQuitCheck.kind(of: "037c:err:d3d:resource_unload Resource 02359C68 is being unloaded while mapped.")
+            == GameQuitCheck.kind(of: "0388:err:d3d:resource_unload Resource 01201578 is being unloaded while mapped."))
+        #expect(GameQuitCheck.kind(of: drawError) != GameQuitCheck.kind(of: refusedMode))
+    }
+
     @Test("Routine Wine errors every launch logs don't count", arguments: [
         "0130:err:vulkan:init_vulkan Failed to load Wine graphics driver supporting Vulkan.",
         "0144:err:vulkan:vulkan_init_once Failed to load libvulkan.1.dylib",

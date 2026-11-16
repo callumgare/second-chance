@@ -20,7 +20,8 @@
 //    watch reports the first; cnc-ddraw presents on a timer whatever the
 //    game does, so its frames say nothing about the game);
 //  - quit within `errorWindow` of Wine reporting an error that isn't one of
-//    the routine ones every launch logs;
+//    the routine ones every launch logs, nor one the game had been logging
+//    since `recurringLead` or more before it quit;
 //  - quit within `crashWindow` of an exception nothing handled: with no crash
 //    dialog, the program ends once winedbg has written its backtrace.
 //
@@ -49,6 +50,13 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
     /// stays just above the quickest real one.
     static let errorWindow: TimeInterval = 1
 
+    /// How long before an exit an error must first have been logged to count
+    /// as one the game logs all along, which says nothing about why it quit.
+    /// The Deadly Device on Wine 11.22 logs a GL error from its first frame
+    /// on, and quitting from its menu, 40 s to 3 min in, was blamed on it.
+    /// White Wolf's refused mode was logged 0.8 s before it quit.
+    static let recurringLead: TimeInterval = 10
+
     /// How soon after an exception nothing handled an exit counts as that
     /// crash. The prefix has no crash dialog (the wine module's
     /// `nocrashdialog`), so a crashed program ends once winedbg has written
@@ -71,6 +79,13 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
     private var quitRequest: String?
     /// Enough to explain an exit; a game logging errors all along doesn't grow it.
     private let errorLimit = 50
+    /// When each kind of error (`kind(of:)`) was first and last logged. Kept
+    /// apart from `errors`, which an error logged every frame would fill,
+    /// pushing out a new one just before the exit.
+    private var errorKinds: [String: (first: Date, last: Date)] = [:]
+    /// Enough kinds for any launch; one whose text varies past what `kind(of:)`
+    /// takes out doesn't grow it.
+    private let errorKindLimit = 200
 
     public init(graphicsAPI: GameGraphicsAPI, throughSteam: Bool, throughBigFish: Bool = false) {
         drawsWithDirect3D = graphicsAPI == .direct3D
@@ -90,9 +105,15 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
             return
         }
         guard Self.isWineError(line), !routine.contains(where: line.contains) else { return }
+        let kind = Self.kind(of: line)
         state.withLock {
             errors.append((time, line))
             if errors.count > errorLimit { errors.removeFirst(errors.count - errorLimit) }
+            if let seen = errorKinds[kind] {
+                errorKinds[kind] = (seen.first, time)
+            } else if errorKinds.count < errorKindLimit {
+                errorKinds[kind] = (time, time)
+            }
         }
     }
 
@@ -128,8 +149,8 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
             } else if drawsWithDirect3D, quitWatchArmed, !drewFrame {
                 summary = "it quit before it drew anything"
                 situation = String(localized: "The game quit before it showed anything.")
-            } else if let last = errors.last, exitTime.timeIntervalSince(last.at) <= Self.errorWindow {
-                summary = String(format: "it quit %.1f s after Wine reported an error", exitTime.timeIntervalSince(last.at))
+            } else if let last = lastTellingError(before: exitTime) {
+                summary = String(format: "it quit %.1f s after Wine reported an error", exitTime.timeIntervalSince(last))
                 // For the player, so no "Wine": the summary, for the log, has that.
                 situation = String(localized: "The game quit just after something went wrong in it.")
             } else if let crash = errors.last(where: { Self.isCrash($0.line) }),
@@ -141,6 +162,23 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
             }
             return Failure(summary: summary, explanation: cause ?? situation, wineErrors: lines)
         }
+    }
+
+    /// When the last error that could explain an exit at `exitTime` was
+    /// logged: one within `errorWindow` of it, of a kind first logged less
+    /// than `recurringLead` before it. Called holding `state`.
+    private func lastTellingError(before exitTime: Date) -> Date? {
+        errorKinds.values
+            .filter { exitTime.timeIntervalSince($0.last) <= Self.errorWindow && exitTime.timeIntervalSince($0.first) < Self.recurringLead }
+            .map(\.last)
+            .max()
+    }
+
+    /// An error's text without what changes between two of the same: the
+    /// thread that logged it (`0378:err:…`) and addresses and handles.
+    static func kind(of line: String) -> String {
+        line.replacingOccurrences(of: #"^[0-9a-fA-F]{4}:"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\b(0x)?[0-9a-fA-F]{6,}\b"#, with: "#", options: .regularExpression)
     }
 
     /// Whether a line of Wine's output is an error: an `err:` channel line, or
