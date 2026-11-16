@@ -250,7 +250,9 @@ CGSize wineMainDisplaySize(void);
 /// from an emulated display mode: it has no title bar and no OpenGL or Metal
 /// view, Wine counts it as covering the screen (or it's in a fullscreen
 /// Space), and its one subview, the client view where the picture belongs,
-/// is off its top left. Native fullscreen takes such a window into a Space,
+/// is off its top left; or, on a Wine whose Mac driver centres the picture
+/// itself (`has: gdi-scaled-centred`), it has no subview at all while the
+/// game's mode is smaller than the display. Native fullscreen takes such a window into a Space,
 /// as it does a Direct3D game's. Main thread only; 0 in a process where
 /// emulated_mode_scaling.m isn't armed.
 int windowShowsScaledPicture(NSWindow *window);

@@ -817,6 +817,7 @@ module's data directly. The wine module's names:
 | `cocoa-start-wait` | Wine waits for a program's main thread to start Cocoa for as long as it takes | the [cocoa start wait](wine-in-process-helpers.md#cocoa-start-wait) helper |
 | `rosetta-fs-addr32` | Wine emulates an `fs:` access with the 0x67 prefix, which Rosetta faults on | with `rosetta-softice-probes` too, the [Rosetta fault fix](big-fish.md#armadillo-under-rosetta) to its ntdll when the engine is prepared |
 | `rosetta-softice-probes` | Wine skips the Windows 9x SoftICE probes (`int 68h`, `int 41h`) Armadillo makes | as above |
+| `gdi-scaled-centred` | Wine 11's Mac driver puts a GDI picture win32u scaled up from an emulated mode at the window's rect, with black bars, in the window's own surface rather than a client view | nothing stands down; [native fullscreen](wine-in-process-helpers.md#mode-scaling) takes such a window, which has no client view to recognise it by, into a Space |
 
 Only Sikarugir's 10.0_8 has any of these so far (`msync`). A name is added
 here when the code that acts on it is, and to a version when a build of it

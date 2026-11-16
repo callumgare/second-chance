@@ -730,6 +730,17 @@ image to the client view's size and moves the layer to the client view's
 place after Wine's `updateLayer`, and makes the window's background, which
 the bars show, black.
 
+Wine 11 draws it differently: win32u stretches the picture into the
+window's own surface, with no client view, and WineHQ's Mac driver put it at
+the window's top left with a white strip beside it (Bioscopia on 11.21 and
+11.22, 2026-11-16). A Mac driver that puts it at the window's rect itself,
+with black bars, says so in its version's `has:` (`gdi-scaled-centred`,
+[modules.md](modules.md#what-an-engine-has)). There the helper places nothing,
+and a borderless window covering the screen with no subview at all, while
+the game's mode is smaller than the display, counts as showing a scaled
+picture, so native fullscreen takes it into a Space as before. On a Wine 11
+without it the picture stays off-centre and the window out of a Space.
+
 The picture Wine paints can also be a little smaller than the client view.
 win32u places the client view by the display's size over the mode's exactly,
 but stretches the surface by a whole-number DPI, 96 times that ratio rounded

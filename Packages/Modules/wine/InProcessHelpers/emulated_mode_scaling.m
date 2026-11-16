@@ -582,9 +582,29 @@ static BOOL scaledPictureFrame(NSWindow *window, NSRect *frame) {
     return scaledPictureFrameWhy(window, frame, NULL);
 }
 
+/// Whether `window` shows a scaled GDI picture that Wine places itself: on
+/// a Wine 11 whose Mac driver centres it (`has: gdi-scaled-centred`), win32u
+/// draws the picture into the window's own surface rather than a client view,
+/// and the Mac driver puts it at the window's rect with black bars beside it,
+/// so there's no subview to find or to place. Borderless, counted by Wine as
+/// covering the screen (or in a Space), with no subview at all (an OpenGL
+/// or Metal one is Direct3D's), while the game's mode is smaller than the
+/// display.
+static BOOL wineShowsScaledPicture(NSWindow *window) {
+    if (!gArmed || !window || !helperEngineHas("gdi-scaled-centred")) return NO;
+    if (window.styleMask & NSWindowStyleMaskTitled) return NO;
+    BOOL inSpace = (window.styleMask & NSWindowStyleMaskFullScreen) != 0;
+    BOOL coversScreen = [window respondsToSelector:@selector(isFullscreen)] && [(id)window isFullscreen];
+    if (!inSpace && !coversScreen) return NO;
+    if (!window.contentView || window.contentView.subviews.count != 0) return NO;
+    CGSize mode, display = wineMainDisplaySize();
+    if (!knownModeSize(&mode) || mode.width < 1 || mode.height < 1) return NO;
+    return mode.width < display.width || mode.height < display.height;
+}
+
 int windowShowsScaledPicture(NSWindow *window) {
     NSRect frame;
-    return scaledPictureFrame(window, &frame);
+    return scaledPictureFrame(window, &frame) || wineShowsScaledPicture(window);
 }
 
 /// How much of a client view of `client` points win32u's scaled surface
