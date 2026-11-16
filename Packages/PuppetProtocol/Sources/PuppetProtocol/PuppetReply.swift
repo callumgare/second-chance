@@ -105,6 +105,9 @@ nonisolated public struct PuppetWindowState: Sendable, Equatable {
     public let cursorHeld: Bool
     /// What the app's own cursor locking says it's doing; nil when it doesn't say.
     public let cursorLock: String?
+    /// Seconds until native fullscreen, still looking for a window to put in
+    /// a Space, gives up, after which captures work; nil when it isn't looking.
+    public let settlingSeconds: Int?
 
     /// From a `state` reply; nil for an error or a reply missing the window.
     public init?(_ reply: PuppetReply) {
@@ -122,6 +125,7 @@ nonisolated public struct PuppetWindowState: Sendable, Equatable {
         onActiveSpace = fields["onspace"].map { $0 == "1" }
         cursorHeld = fields["cursor"] == "held"
         cursorLock = fields["cursorlock"]
+        settlingSeconds = fields["settling"].flatMap(Int.init)
     }
 }
 

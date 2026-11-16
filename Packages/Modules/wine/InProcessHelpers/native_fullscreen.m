@@ -62,6 +62,8 @@ static os_log_t gLog;
 static BOOL gEntered = NO;
 /// Set once this helper has given up on finding a window to put in a Space.
 static volatile BOOL gGaveUp = NO;
+/// When the watch gives up looking for a window to put in a Space; 0 until it starts.
+static volatile double gGiveUpAt = 0;
 static NSWindow *gCandidate = nil;
 static NSRect gCandidateFrame;
 static double gStableSince = 0.0;
@@ -840,6 +842,7 @@ static void *watcherMain(void *unused) {
     }
 
     double giveUpAt = helperNowSeconds() + kGiveUpSeconds;
+    gGiveUpAt = giveUpAt;
     BOOL reportedGivingUp = NO;
     // One attempt queued at a time: a main thread that is busy (a game
     // loading) would otherwise collect a block every interval and then run
@@ -959,6 +962,15 @@ static BOOL windowIsMovingSpaces(NSWindow *window) {
 
 int windowIsEnteringFullscreen(NSWindow *window) {
     return window && [gEnteringWindows containsObject:window] && (window.styleMask & NSWindowStyleMaskFullScreen) != 0;
+}
+
+/// How many seconds until native fullscreen gives up on putting a window in
+/// a Space, and so is settled, while it's still looking for one; 0 when it
+/// is settled, or is moving a window, which takes no longer than the move.
+int nativeFullscreenSecondsToGiveUp(void) {
+    if (nativeFullscreenSettled() || gEntered || gDecidedWindowed || gGaveUp || gGiveUpAt <= 0) return 0;
+    double left = gGiveUpAt - helperNowSeconds();
+    return left > 0 ? (int)ceil(left) : 1;
 }
 
 int nativeFullscreenSettled(void) {

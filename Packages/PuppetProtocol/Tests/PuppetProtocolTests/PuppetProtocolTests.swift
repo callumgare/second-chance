@@ -100,7 +100,11 @@ struct PuppetReplyTests {
             "ok window=7 size=800x600 scale=2 fullscreen=0 native=0 key=1 active=1 onspace=1 cursor=held cursorlock=locked")))
         #expect(state.windowNumber == 7 && state.size == CGSize(width: 800, height: 600) && state.scale == 2)
         #expect(state.key && state.cursorHeld && state.cursorLock == "locked" && state.onActiveSpace == true)
+        #expect(state.settlingSeconds == nil)
         #expect(PuppetWindowState(PuppetReply("error timed out")) == nil)
+        let settling = try #require(PuppetWindowState(PuppetReply(
+            "ok window=7 size=2560x1440 scale=1 fullscreen=1 native=0 key=1 active=1 onspace=1 cursor=free cursorlock=off settling=63")))
+        #expect(settling.settlingSeconds == 63)
     }
 
     @Test("windows lists each window, its title decoded")

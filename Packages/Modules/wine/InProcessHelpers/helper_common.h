@@ -171,6 +171,9 @@ int windowIsEnteringFullscreen(NSWindow *window);
 /// other is on its way), or it gave up. Before then a ScreenCaptureKit capture
 /// can wedge, even one finished just before the move begins. Main thread only.
 int nativeFullscreenSettled(void);
+/// Seconds until native fullscreen, still looking for a window to put in a
+/// Space, gives up and so is settled; 0 otherwise. Main thread only.
+int nativeFullscreenSecondsToGiveUp(void);
 
 // ## Shared code (helper_common.m)
 

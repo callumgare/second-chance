@@ -28,6 +28,10 @@
 //                                       window shows this one's screen, below)
 //    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 native=0|1 key=0|1 active=0|1 onspace=0|1
 //                           cursor=held|free cursorlock=off|waiting|locked|not-locked
+//                           [settling=<s>]
+//                                       (settling: native fullscreen is still looking for a window to
+//                                       put in a Space, and gives up in <s> seconds; until then, or
+//                                       until the window is in its Space, capture refuses)
 //    windows          -> ok <n> windows, then a line each: id=<n> frame=<x>,<y>,<w>,<h> level=<n> visible=0|1
 //                           key=0|1 main=0|1 kind=game|panel|other title=<percent-encoded>
 //                                       (`game` is the window the other requests act on:
@@ -260,6 +264,8 @@ static NSString *stateCommand(void) {
                  window.backingScaleFactor, native || coversScreen, native, window.isKeyWindow, NSApp.isActive,
                  window.isOnActiveSpace,
                  cursorLockHeld() ? "held" : "free", cursorLockStatus()];
+        int settling = nativeFullscreenSecondsToGiveUp();
+        if (settling > 0) reply = [reply stringByAppendingFormat:@" settling=%d", settling];
         return YES;
     });
     return reply;
@@ -444,12 +450,14 @@ static NSString *captureCommand(NSString *path, NSDictionary<NSString *, NSStrin
         __block NSSize size = NSZeroSize;
         __block CGFloat scale = 1;
         __block BOOL settled = NO;
+        __block int settling = 0;
         onMainThread(^BOOL {
             NSWindow *window = gameWindow();
             windowID = (CGWindowID)window.windowNumber;
             size = window.frame.size;
             scale = window.backingScaleFactor;
             settled = nativeFullscreenSettled();
+            settling = nativeFullscreenSecondsToGiveUp();
             return window != nil;
         });
         if (!windowID) return @"error no game window";
@@ -472,6 +480,10 @@ static NSString *captureCommand(NSString *path, NSDictionary<NSString *, NSStrin
         // Recording were denied, and then left out of this process's windows
         // for good. So nothing is captured until native fullscreen is done
         // with it.
+        if (!settled && settling > 0) {
+            return [NSString stringWithFormat:@"error the game window isn't in its fullscreen Space yet; "
+                    "native fullscreen gives up looking for one in %d s, and captures work then", settling];
+        }
         if (!settled) return @"error the game window isn't in its fullscreen Space yet";
 
         NSString *error = nil;

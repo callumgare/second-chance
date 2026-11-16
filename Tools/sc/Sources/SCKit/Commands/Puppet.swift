@@ -180,8 +180,8 @@ struct PuppetStartCommand: AsyncParsableCommand {
                         + "screen \(SessionPool.screenName()) leased; stops after \(idle) idle or \(max)")
         session.ui.line("helper: \(hello)")
         session.ui.line("state: \(state.summary)")
-        if !window.native, window.fullscreen {
-            session.ui.line("waiting: native fullscreen is still settling; shots work once state says native=1")
+        if let line = PuppetWaitCommand.settlingLine(window) {
+            session.ui.line("waiting: \(line)")
         }
     }
 }
@@ -913,7 +913,25 @@ struct PuppetWaitCommand: AsyncParsableCommand {
             last = now
         }
         session.ui.line("timed out after \(Int(timeout)) s")
+        // Measuring needs pictures, which the helper refuses until native
+        // fullscreen has settled: say so, rather than leave a bare timeout.
+        if last == nil, let reply = try? puppet.ask(.state, timeout: 10), let window = PuppetWindowState(reply),
+           let line = Self.settlingLine(window) {
+            session.ui.line("no pictures yet: \(line)")
+        }
         throw ExitCode(3)
+    }
+
+    /// Why pictures can't be taken yet, while native fullscreen is settling.
+    static func settlingLine(_ window: PuppetWindowState) -> String? {
+        if let seconds = window.settlingSeconds {
+            return "native fullscreen is still looking for a window to put in a Space; "
+                + "shots work once state says native=1, or once it gives up, in \(seconds) s"
+        }
+        if !window.native, window.fullscreen {
+            return "native fullscreen is still settling; shots work once state says native=1"
+        }
+        return nil
     }
 
     static func seconds(_ since: Date) -> String { String(format: "%.1f s", Date().timeIntervalSince(since)) }

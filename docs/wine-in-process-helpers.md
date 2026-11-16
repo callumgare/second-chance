@@ -1442,7 +1442,12 @@ learned building it:
   (`NSWindowDidEnterFullScreenNotification`, which `native_fullscreen.m`
   watches for every helper — `helper_common.h`), or it gave up, or it isn't
   armed. `state` likewise says `native=0` until the move has finished, so
-  WrappPuppeteer starts on the game once it's there.
+  WrappPuppeteer starts on the game once it's there. While native fullscreen
+  is still looking for a window to move (one that never qualifies, as
+  Bioscopia's on Wine 11, keeps it looking until it gives up, after 90 s),
+  `state` adds `settling=<s>`, the seconds until it gives up, and `capture`'s
+  refusal says the same; `sc puppet start` and a `sc puppet wait` that timed
+  out without a picture print it.
 
 Keys and mouse buttons are posted as clicks are, so they need nothing more. Posted
 keys reach a Wine game (SkiFree turns at the arrows and restarts at F2) and ScummVM
