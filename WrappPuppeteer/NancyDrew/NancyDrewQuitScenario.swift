@@ -739,7 +739,9 @@ struct NancyDrewQuitScenario {
         /// Click a window point, checking the first click wasn't swallowed;
         /// the failure if it was. Only cnc-ddraw swallows a first click, so
         /// only a Wine game that may draw through it has one to check.
-        func click(at point: CGPoint) -> String? {
+        /// `untilEnded`: nothing has yet been done to end the game, so a click
+        /// it has gone before is a game that quit by itself.
+        func click(at point: CGPoint, untilEnded: Bool) -> String? {
             var heldBefore: Bool?
             if firstClickToCheck {
                 firstClickToCheck = false
@@ -747,7 +749,15 @@ struct NancyDrewQuitScenario {
                 if let failure = before.failure { return failure }
                 heldBefore = before.held
             }
-            context.game.click(at: point)
+            // A click that can't land because the game has already gone, before
+            // anything was done to end it, means the game quit by itself, which
+            // waiting for it to exit would take for its Quit working. The
+            // Deadly Device on Wine 11.22 quit 2 s after being switched away
+            // from, as the menu's Quit was about to be clicked.
+            if !context.game.click(at: point), untilEnded, !ProcessControl.isAlive(gamePid) {
+                logger.error("❌ The game had quit by itself before it could be clicked")
+                return "The game quit by itself before it could be clicked"
+            }
             showClick(at: point, windowPid: context.windowPid)
             if heldBefore == false, firstClickWasSwallowed(context) {
                 logger.error(
@@ -886,7 +896,7 @@ struct NancyDrewQuitScenario {
                     logger.notice("  ✓ [\(elapsed)s] Screen '\(name)' (distance \(String(format: "%.3f", match.distance))), \(handler.id) clicking...")
                     remembered.actedOn = fingerprint
                 }
-                if let failure = click(at: point) {
+                if let failure = click(at: point, untilEnded: !ended) {
                     forceQuit(app)
                     return failure
                 }
@@ -967,7 +977,7 @@ struct NancyDrewQuitScenario {
                             clickAt = CGPoint(x: state.size.width * fraction.x, y: state.size.height * fraction.y)
                         }
                         logger.notice(remembered.acted ? "  ✓ \(handler.id): clicking its \(handler.when) again..." : "  ✓ \(handler.id): found its \(handler.when), clicking...")
-                        if let failure = click(at: clickAt) {
+                        if let failure = click(at: clickAt, untilEnded: !ended) {
                             forceQuit(app)
                             return failure
                         }

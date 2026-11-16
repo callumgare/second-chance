@@ -668,7 +668,12 @@ whatever app was behind it. Positions found in a capture are window points
 display's shape — a notch, the window's position — never comes into it. The
 game's fullscreen state comes from the game too. A failed run logs
 `WRAPP_PUPPETEER: run_failed: <reason>`, and the integration test quotes that
-reason in its failure.
+reason in its failure. A click that can't land because the game has already
+gone, before the run has clicked anything that ends it (a splash screen, or
+the menu's Quit itself), fails the run: "The game quit by itself before it
+could be clicked". Waiting for the game to exit would otherwise take that for
+its Quit working, as it did when The Deadly Device on Wine 11.22 quit by
+itself just as its Quit was about to be clicked.
 
 WrappPuppeteer always starts a new instance of the wrapp, and kills any
 instance of the same bundle ID still running first. LaunchServices would
