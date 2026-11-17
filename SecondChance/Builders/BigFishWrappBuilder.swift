@@ -534,6 +534,9 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
 
     func build(input: WrappBuildInput) async throws -> URL {
         await bus.publishWrappBuild(.started(source: .bigFish))
+        // The next step shows at once: what's before the first step that says
+        // what it's doing (the engine, Windows set up) can take minutes.
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: BuildEventTranslator.gettingReady)))
 
         let trial = input.isBigFishTrial
         let preselected: GameInfo?
@@ -594,7 +597,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
 
             let executor = BigFishExecutor(builder: self, game: gameInfo, chosen: chosen, input: input, trial: trial,
                                            usesKeptSignIn: usesKeptSignIn)
-            let (configuration, emitter) = runnerConfiguration(game: gameInfo, input: input, executor: executor)
+            let (configuration, emitter) = await runnerConfiguration(game: gameInfo, input: input, executor: executor)
             let wrappPath: URL
             do {
                 wrappPath = try await PlanRunner(plan: plan, configuration: configuration).build(in: folder)
@@ -639,9 +642,9 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
 
     /// What the runner is given: Second Chance's, with the big-fish executor
     /// and Wine's steps through the preparer, which a test stands in for.
-    private func runnerConfiguration(game: GameInfo, input: WrappBuildInput, executor: BigFishExecutor)
+    private func runnerConfiguration(game: GameInfo, input: WrappBuildInput, executor: BigFishExecutor) async
         -> (RunnerConfiguration, OrderedEmitter) {
-        var (configuration, emitter) = AppRunner.configuration(bus: bus, input: input, game: game, inputs: GivenInputs([:]),
+        var (configuration, emitter) = await AppRunner.configuration(bus: bus, input: input, game: game, inputs: GivenInputs([:]),
                                                                downloader: DownloadWrappBuilder.standardDownloader(), helper: helper,
                                                                executors: ["big-fish": executor])
         if let wine = configuration.executors["wine"] { configuration.executors["wine"] = preparer.wineExecutor(wine) }
@@ -657,7 +660,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
     private func identify(in folder: URL, input: WrappBuildInput, usesKeptSignIn: Bool) async throws -> BigFishGameChoice {
         let executor = BigFishExecutor(builder: self, game: .unknownGame, chosen: nil, input: input, trial: false,
                                        usesKeptSignIn: usesKeptSignIn)
-        let (configuration, emitter) = runnerConfiguration(game: .unknownGame, input: input, executor: executor)
+        let (configuration, emitter) = await runnerConfiguration(game: .unknownGame, input: input, executor: executor)
         let tree: URL
         do {
             tree = try await preparer.prepare(in: folder, runner: configuration)

@@ -21,7 +21,8 @@ enum AppRunner {
     static func configuration(
         bus: EventBus<AppEvent>, input: WrappBuildInput, game: GameInfo, inputs: any InputProvider,
         downloader: Downloader, helper: WrappBuildHelper, executors more: [String: any ModuleExecutor] = [:]
-    ) -> (RunnerConfiguration, OrderedEmitter) {
+    ) async -> (RunnerConfiguration, OrderedEmitter) {
+        let modules = await Blocking.run { ModuleSteps.Modules.load() }
         let translator = BuildEventTranslator(game: game)
         let emitter = OrderedEmitter { event in
             for translated in translator.translate(event) { await bus.publishWrappBuild(translated) }
@@ -32,7 +33,7 @@ enum AppRunner {
         // The wine module's in-process helpers, as the template carries them.
         let helpers = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app")?
             .appendingPathComponent("Contents/Frameworks/in_process_helpers.dylib")
-        let executors = ModuleSteps.executors(helpers: helpers).merging(more) { $1 }
+        let executors = ModuleSteps.executors(helpers: helpers, modules: modules).merging(more) { $1 }
         var configuration = RunnerConfiguration(
             executors: executors, inputs: inputs, emitter: emitter,
             ask: { question in try await answer(question, input: input, game: slug) },
@@ -48,12 +49,12 @@ enum AppRunner {
                 }
             },
             engine: { module, version in try await helper.engine(module, version: version, input: input) },
-            pathTypes: ModuleSteps.pathTypes(), places: helper.places,
-            moduleFolders: ModuleSteps.moduleFolders())
+            pathTypes: modules.pathTypes, places: helper.places,
+            moduleFolders: modules.folders)
         // Layers (docs/wrapp-build.md#the-layer-cache): the store builds
         // share, with the policy `SECOND_CHANCE_LAYER_CACHE` sets, a module's
         // suggestion where its `build:` says an instruction is expensive.
-        let declarations = ModuleSteps.moduleDeclarations()
+        let declarations = modules.declarations
         configuration.layers = WineManager.shared.layers
         configuration.layerPolicy = LayerCachePolicy.current().runnerPolicy
         configuration.layerEveryStep = ProcessInfo.processInfo.environment["SECOND_CHANCE_LAYER_EVERY_STEP"] == "1"
@@ -128,6 +129,19 @@ nonisolated final class BuildEventTranslator: @unchecked Sendable {
         "STEAM.INSTALL": "installing-game", "BIG-FISH.INSTALL": "installing-game",
     ]
 
+    /// What the progress screen says as a build starts, before a step says more.
+    static let gettingReady = String(localized: "Getting ready")
+
+    /// What the progress screen says during an instruction that can take a
+    /// while and whose Wrappfile emits no substep for it, so a step that
+    /// runs for minutes never leaves the screen saying nothing new: an
+    /// engine, the first time a build on this Mac needs it, is downloaded
+    /// and prepared, and setting Windows up takes up to a minute on a busy Mac.
+    static let substepByInstruction: [String: String] = [
+        "ENGINE": String(localized: "Getting ready to run the game"),
+        "WINE.PREFIX": String(localized: "Setting up Windows for the game"),
+    ]
+
     func translate(_ event: BuildEvent) -> [WrappBuildEvent] {
         switch event {
         case .stepStarted(let ref), .stepRestored(let ref):
@@ -135,10 +149,12 @@ nonisolated final class BuildEventTranslator: @unchecked Sendable {
                 ? .stepRestored(name: ref.name, keyword: ref.step.keyword)
                 : .stepStarted(name: ref.name, keyword: ref.step.keyword)]
             let reached = Self.phaseByInstruction[ref.step.keyword].flatMap(SecondChanceEmits.phases.firstIndex(of:))
+            // A step restored from a layer is over at once: it says nothing of its own.
+            let substep = nextSubstep ?? (event.isRestored ? nil : Self.substepByInstruction[ref.step.keyword])
             if let reached, reached > (phase ?? -1) {
                 phase = reached
-                events.append(.progress(state(substep: nextSubstep)))
-            } else if let substep = nextSubstep {
+                events.append(.progress(state(substep: substep)))
+            } else if let substep {
                 events.append(.progress(state(substep: substep)))
             }
             nextSubstep = nil

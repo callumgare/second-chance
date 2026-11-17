@@ -108,7 +108,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             }
             let installer = InstallerExecutor(runner: installerRunner, gameInfo: gameInfo, source: .disk,
                                               installerName: installerName, input: input)
-            let (configuration, emitter) = AppRunner.configuration(bus: bus, input: input, game: gameInfo, inputs: inputs,
+            let (configuration, emitter) = await AppRunner.configuration(bus: bus, input: input, game: gameInfo, inputs: inputs,
                                                                    downloader: DownloadWrappBuilder.standardDownloader(), helper: helper,
                                                                    executors: ["installer": installer])
             let wrappPath: URL

@@ -128,7 +128,7 @@ final class UpdateWrappBuilder {
             for (index, plan) in plans.enumerated() {
                 try Self.checkNeedsNoSource(plan, source: source)
                 let installer = InstallerExecutor(runner: installerRunner, gameInfo: gameInfo, source: source, installerName: nil, input: input)
-                let (configuration, emitter) = AppRunner.configuration(
+                let (configuration, emitter) = await AppRunner.configuration(
                     bus: bus, input: input, game: gameInfo, inputs: GivenInputs(["previous": previous]),
                     downloader: DownloadWrappBuilder.standardDownloader(), helper: helper, executors: ["installer": installer])
                 do {

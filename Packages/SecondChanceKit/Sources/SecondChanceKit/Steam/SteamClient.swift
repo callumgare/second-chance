@@ -7,6 +7,7 @@
 //  docs/steam.md for what each step was found to need.
 
 import Foundation
+import ProcessKit
 import Logging
 import WrappFormat
 
@@ -103,7 +104,10 @@ nonisolated public final class SteamClient: SteamClientDriving, @unchecked Senda
     }
 
     public func restoreLogin(from store: SteamSessionStore) async throws -> Bool {
-        guard let fragment = try store.restore(into: wine.prefix) else { return false }
+        // Off the caller's thread: the store is copied under its lock, which
+        // another app or build may be holding.
+        let prefix = wine.prefix
+        guard let fragment = try await Blocking.run({ try store.restore(into: prefix) }) else { return false }
         defer { try? FileManager.default.removeItem(at: fragment) }
         try await wine.run(.wine(["reg", "import", SteamSessionStore.fragmentWindowsPath]), timeout: 120)
         return true

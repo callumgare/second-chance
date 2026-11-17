@@ -38,6 +38,17 @@ struct BuildEventTranslatorTests {
                 == [.settingUpWrapp(substep: nil), .settingUpWrapp(substep: WineManager.progressText("display"))])
     }
 
+    @Test("A step that can run for minutes says what it's doing, unless it was restored or a substep was emitted for it")
+    func slowStepsSayWhatTheyDo() {
+        let restored = BuildEvent.stepRestored(StepRef(stage: "x", index: 0, step: PlannedStep(
+            instruction: "PREFIX", module: "wine", options: [:], arguments: [], name: nil, origin: "Wrappfile:1")))
+        #expect(states([restored, started("ENGINE"), started("PREFIX", module: "wine"), started("DRIVES", module: "wine")])
+                == [.settingUpWrapp(substep: BuildEventTranslator.substepByInstruction["ENGINE"]),
+                    .settingUpWrapp(substep: BuildEventTranslator.substepByInstruction["WINE.PREFIX"])])
+        #expect(states([.emitted("second-chance.substep.display"), started("PREFIX", module: "wine")])
+                == [.settingUpWrapp(substep: WineManager.progressText("display"))])
+    }
+
     @Test("Every string is passed on as it was, and another caller's means nothing here")
     func everyStringIsPassedOn() {
         let translated = BuildEventTranslator().translate(.emitted("someone-else.thing")).map { "\($0)" }

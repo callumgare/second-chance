@@ -452,6 +452,8 @@ configuration asks a step's question through
 a download from those Second Chance ships first, then through the download
 cache; provides AutoIt as `module:installer:/autoit`; and gives the layer
 store, its policy, each module's suggestions and revisions, and the stores.
+It reads the modules once, off the main thread (`ModuleSteps.Modules`), as
+reading every module's data takes most of a second.
 Its `BuildEventTranslator` turns the runner's events into `WrappBuildEvent`s
 on the build's bus, reading the `EMIT` strings Second Chance knows
 (`emit-vocabulary.yaml`, [wrappfile.md](wrappfile.md#emit)):
@@ -465,6 +467,11 @@ on the build's bus, reading the `EMIT` strings Second Chance knows
 - a `second-chance.substep.<key>` is shown as the **next** step's substep,
   in Second Chance's own words for the key (`WineManager.progressText`),
   as the wine module's prefix stage and its `cnc-ddraw` function emit;
+- with none emitted, an instruction that can run for minutes has a substep
+  of Second Chance's own (`substepByInstruction`): `ENGINE`, which downloads
+  and prepares an engine the first time a build on the Mac needs it, and
+  `WINE.PREFIX`, which sets Windows up. A step restored from a layer is
+  over at once, so it gets none;
 - a `second-chance.progress.<done>/<total>` is the current step's progress;
 - a step of the nancy-drew module's `patch` function done or skipped is also
   `patchApplied` or `patchFailed`, as the builders always published;
@@ -474,7 +481,7 @@ on the build's bus, reading the `EMIT` strings Second Chance knows
 **`ModuleSteps`** (`SecondChance/Builders/ModuleSteps.swift`) carries out a
 lone wine step for code outside a plan (Steam's `REMOVE` undoing its client
 stage's registry settings), with the shipped modules'
-executors (`ModuleSteps.executors()`). A `StepFailure` from one becomes
+executors (`ModuleSteps.executors(modules:)`). A `StepFailure` from one becomes
 a `WrappBuildError` through `WrappBuildError(stepFailure:)`: `.recipe` is
 `buildRecipeProblem`, `.failed` is `stepFailed`.
 

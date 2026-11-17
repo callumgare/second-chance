@@ -147,7 +147,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             let executor = HerDownloadExecutor(builder: self, gameInfo: gameInfo, package: package, input: input)
             let installers = InstallerExecutor(runner: installerRunner, gameInfo: gameInfo, source: .herDownload,
                                                installerName: installerName, input: input, everyDiscOnOne: everyDiscOnOne)
-            let (configuration, emitter) = AppRunner.configuration(
+            let (configuration, emitter) = await AppRunner.configuration(
                 bus: bus, input: input, game: gameInfo, inputs: inputs,
                 downloader: DownloadWrappBuilder.standardDownloader(), helper: helper,
                 executors: ["her-download": executor, "installer": installers])

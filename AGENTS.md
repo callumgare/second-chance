@@ -425,6 +425,13 @@ direct assignment.
   (`Packages/WrappKit/Sources/ProcessKit/Blocking.swift`); what such a closure calls must be `nonisolated`.
   Code on a plain thread — a GCD queue, a `Thread`, a signal handler — calls
   async code through `Blocking.wait`, never from inside an async function. Wine still starts through `runWithoutCrashHandler()`.
+- **A build always says what it's doing.** Choosing a source and clicking
+  Continue goes straight to the progress screen: a builder publishes its
+  first `.progress` state before any work that can take time, and a step
+  that can run for minutes has a substep, from an `EMIT`, the builder or
+  `BuildEventTranslator.substepByInstruction`
+  ([docs/wrapp-build.md](docs/wrapp-build.md#the-runner)). A screen left
+  unchanged reads as frozen even when nothing blocks.
 - **Main-actor code that runs off the main thread crashes.** Swift 6 checks
   at run time, closures included, and stops the process with SIGILL
   (`dispatch_assert_queue`) — a crash only a launch shows, as the compiler

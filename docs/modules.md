@@ -378,7 +378,7 @@ lays the new Wine in without either patch, as that stage doesn't run the
 bundle's own stages.
 
 Second Chance's builders have the shipped executors through `ModuleSteps`
-(`ModuleSteps.executors()`), which gives the wine executor the wine engine's
+(`ModuleSteps.executors(modules:)`), which gives the wine executor the wine engine's
 `build-tools` ([below](#engine-packages)) and each executor its module's
 folder in the app's resources. `wrapp-builder build` has none yet, so it
 refuses a plan with any module's instruction. Each package's

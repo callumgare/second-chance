@@ -184,7 +184,7 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
     /// each stage in its own tree in `folder`: the input is the download,
     /// unpacked. The target's tree, which becomes the wrapp.
     private func run(_ plan: BuildPlan, inputs: [String: URL], folder: URL, game: GameInfo, input: WrappBuildInput) async throws -> URL {
-        let (configuration, emitter) = AppRunner.configuration(bus: bus, input: input, game: game, inputs: GivenInputs(inputs),
+        let (configuration, emitter) = await AppRunner.configuration(bus: bus, input: input, game: game, inputs: GivenInputs(inputs),
                                                                downloader: downloader, helper: helper)
         let tree: URL
         do {

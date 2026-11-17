@@ -265,6 +265,9 @@ final class SteamWrappBuilder: WrappBuildStrategy {
 
     func build(input: WrappBuildInput) async throws -> URL {
         await bus.publishWrappBuild(.started(source: .steam))
+        // The next step shows at once: what's before the first step that says
+        // what it's doing (the engine, Windows set up) can take minutes.
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: BuildEventTranslator.gettingReady)))
 
         // A game named up front (headless, tests) is queued before Steam's
         // first start; otherwise the user picks once Steam has signed in, from
@@ -330,7 +333,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
 
             let executor = SteamExecutor(builder: self, game: gameInfo, appID: steam.appID, installDir: steam.installDir, plan: plan,
                                          input: input, releaseLock: { lock.release() })
-            let (configuration, emitter) = runnerConfiguration(game: gameInfo, input: input, executors: ["steam": executor],
+            let (configuration, emitter) = await runnerConfiguration(game: gameInfo, input: input, executors: ["steam": executor],
                                                                lockToken: lockToken)
             let wrappPath: URL
             do {
@@ -373,8 +376,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     /// What the runner is given: Second Chance's, with the steam executor
     /// and Wine's steps through the preparer, which a test stands in for.
     private func runnerConfiguration(game: GameInfo, input: WrappBuildInput, executors: [String: any ModuleExecutor],
-                                     lockToken: UUID) -> (RunnerConfiguration, OrderedEmitter) {
-        var (configuration, emitter) = AppRunner.configuration(bus: bus, input: input, game: game, inputs: GivenInputs([:]),
+                                     lockToken: UUID) async -> (RunnerConfiguration, OrderedEmitter) {
+        var (configuration, emitter) = await AppRunner.configuration(bus: bus, input: input, game: game, inputs: GivenInputs([:]),
                                                                downloader: DownloadWrappBuilder.standardDownloader(), helper: helper,
                                                                executors: executors)
         configuration.buildToken = lockToken
@@ -391,7 +394,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                           lockToken: UUID) async throws -> (game: GameInfo, launchMode: String?) {
         let executor = SteamExecutor(builder: self, game: .unknownGame, appID: 0, installDir: "", plan: BuildPlan(edition: "", stages: []),
                                      input: input, releaseLock: {})
-        let (configuration, emitter) = runnerConfiguration(game: GameInfo.unknownGame, input: input, executors: ["steam": executor],
+        let (configuration, emitter) = await runnerConfiguration(game: GameInfo.unknownGame, input: input, executors: ["steam": executor],
                                                            lockToken: lockToken)
         let tree: URL
         do {
@@ -601,10 +604,18 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 } catch {
                     logger.error("Couldn't sign out of Steam: \(error)")
                 }
-                SteamSessionStore.strip(from: prefix)
+                await Blocking.run { SteamSessionStore.strip(from: prefix) }
                 try await startAgain(SteamStartupStage.starting.message)
             }
-            for event in watch.check() {
+            // Off the main thread: a check lists the processes (`ps`) and
+            // reads Steam's logs, every couple of seconds while it updates.
+            let (checked, events) = await Blocking.run { [watch] in
+                var watch = watch
+                let events = watch.check()
+                return (watch, events)
+            }
+            watch = checked
+            for event in events {
                 try await carryOut(policy.handle(event))
                 switch event {
                 case .signedIn:
@@ -778,13 +789,16 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     func stopSteam(_ client: SteamClientDriving, prefix: URL, signedIn: Bool, keepSignIn: Bool = false,
                    timeout: TimeInterval = 90) async {
         await client.shutdown(timeout: timeout)
+        // Off the main thread: the store is copied under its lock, which
+        // another app or build may be holding.
+        let sessionStore = sessionStore
         do {
-            let result = try client.saveLogin(to: sessionStore, signedIn: signedIn)
+            let result = try await Blocking.run { try client.saveLogin(to: sessionStore, signedIn: signedIn) }
             logger.notice("Steam session: \(String(describing: result))")
         } catch {
             logger.warning("Couldn't save the Steam session: \(error.localizedDescription)")
         }
-        if !keepSignIn { SteamSessionStore.strip(from: prefix) }
+        if !keepSignIn { await Blocking.run { SteamSessionStore.strip(from: prefix) } }
     }
 
     /// `STEAM.REMOVE`: each link `STEAM.INSTALL` made replaced by the game

@@ -86,7 +86,11 @@ public nonisolated final class EngineStore: Sendable {
 
     /// The tree of `version` of `module` (its newest with a package when
     /// nil): the store's, or prepared now. `progress` hears each step of a
-    /// preparation, in words for the log and `sc`.
+    /// preparation, in words for the log and `sc`. Off the caller's actor:
+    /// checking a stored tree reads every file's details (and hashes the
+    /// whole tree when another user prepared it), and preparing one writes
+    /// it, neither of which may hold up an app's main thread.
+    @concurrent
     public func engine(_ module: ModuleFolder, version: String? = nil,
                        progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> Engine {
         let id = module.manifest.id

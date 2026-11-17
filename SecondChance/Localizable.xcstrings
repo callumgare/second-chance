@@ -423,6 +423,12 @@
     "Games from Big Fish take a minute or two to start." : {
 
     },
+    "Getting ready" : {
+
+    },
+    "Getting ready to run the game" : {
+
+    },
     "Getting the discs ready" : {
 
     },
@@ -807,6 +813,9 @@
 
     },
     "Sending a failure report…" : {
+
+    },
+    "Setting up Windows for the game" : {
 
     },
     "Setting up the game's Mac" : {
