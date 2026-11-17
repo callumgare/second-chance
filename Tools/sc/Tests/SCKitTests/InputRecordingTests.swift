@@ -67,6 +67,18 @@ struct InputRecordingTests {
         #expect(InputRecording.frameRates(in: log) == [55.9, 0.48])
         #expect(PuppetReplayCommand.rateSummary([55.9, 0.48, 30]) == "fps median 30.0, min 0.5")
     }
+
+    @Test("A picture given by hand is read as state's picture= is, and a malformed one refused")
+    func givenPicture() throws {
+        #expect(try PuppetReplayCommand.rect("101,0,1309,982") == CGRect(x: 101, y: 0, width: 1309, height: 982))
+        #expect(throws: (any Error).self) { try PuppetReplayCommand.rect("101,0,1309") }
+    }
+
+    @Test("A game slower to answer each step as it's played shows it quarter by quarter")
+    func reactionTrend() {
+        #expect(PuppetReplayCommand.reactionTrend([0.6, 0.8, 2.0, 2.2, 3.5, 3.8, 5.0, 4.9]) == "0.8 s, 2.2 s, 3.8 s, 5.0 s")
+        #expect(PuppetReplayCommand.reactionTrend([1, 2]) == nil)
+    }
 }
 
 @Suite("A puppet session started with the player's saves")

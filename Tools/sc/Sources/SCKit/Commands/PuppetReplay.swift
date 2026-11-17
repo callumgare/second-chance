@@ -163,9 +163,11 @@ struct PuppetReplayCommand: AsyncParsableCommand {
         abstract: "Give the game a recording's clicks and keys again (sc wrapp run --debug record-input), saying how long each took to settle.",
         discussion: """
         Each step waits for the picture to go still after the step before \
-        (--settle seconds, up to --timeout) and at least the recording's own \
-        gap, up to --max-gap, so a slow scene is waited for rather than \
-        clicked through. Clicks are placed by their share of the game's \
+        (--settle seconds, up to --timeout), once it has changed from before \
+        the step (up to --react-timeout: a slow scene doesn't look still \
+        before it starts), and until as long after that \
+        step as the person waited (up to --max-gap), so a scene is never \
+        clicked through faster than the person played it. Clicks are placed by their share of the game's \
         picture, so they land where the person clicked on a screen of any \
         shape. Started with --debug wine=+fps, each step also says the frame \
         rates Wine logged until the next. See docs/dev-cli.md#replaying-a-recording.
@@ -181,8 +183,11 @@ struct PuppetReplayCommand: AsyncParsableCommand {
     @Option(help: "The last step to do.") var to: Int?
     @Option(help: "Seconds the picture must be still for before the next step.") var settle: Double = 1.0
     @Option(help: "Seconds to wait for it to go still before going on anyway.") var timeout: Double = 30
-    @Option(help: "Most of the recording's own gap between two steps to wait, in seconds.") var maxGap: Double = 2
+    @Option(help: "Seconds to wait for a step to change the picture at all before waiting for stillness.") var reactTimeout: Double = 15
+    @Option(help: "Most of the recording's own gap between two steps to keep, in seconds.") var maxGap: Double = 15
     @Option(help: "How much of the picture may change, in %, and still count as still (snow, flicker).") var stillThreshold: Int = 2
+    @Option(help: "The game's picture in its window, x,y,w,h in points, for a game that says it wrongly (state's picture=).")
+    var picture: String?
 
     func run() async throws {
         let session = try Session.start(global)
@@ -192,6 +197,7 @@ struct PuppetReplayCommand: AsyncParsableCommand {
         let recorded = try InputRecording.read(file)
         let last = min(to ?? recorded.steps.count, recorded.steps.count)
         guard from >= 1, from <= last else { throw ValidationError("The recording has \(recorded.steps.count) steps: --from and --to are within them.") }
+        let givenPicture = try picture.map(Self.rect)
         session.ui.line("\(file.lastPathComponent): \(recorded.steps.count) steps from \(recorded.exe ?? "?"), recorded \(recorded.started ?? "?")")
 
         // The game's opening (its logos, a video) plays out before the first
@@ -218,35 +224,44 @@ struct PuppetReplayCommand: AsyncParsableCommand {
         // log, which wrapp.log names as the wrapp starts.
         let log = Self.wrappLogFile(named: Self.text(of: puppet.wrappLog, from: 0)) ?? puppet.wrappLog
 
-        var results: [(index: Int, step: InputRecording.Step, settled: Double?, rates: [Double])] = []
+        var results: [(index: Int, step: InputRecording.Step, reacted: Double?, settled: Double?, rates: [Double])] = []
         var previousTime = from > 1 ? recorded.steps[from - 2].time : 0
+        var previousSent: Date?
         for index in (from - 1)..<last {
             puppet.touch()
             let step = recorded.steps[index]
-            // At least the person's own gap (they waited for something), but
-            // not their idle minutes.
+            // No sooner after the step before than the person acted (they
+            // waited for something: a move between scenes has still moments
+            // a click is lost in, and every step after it then plays in the
+            // wrong room), but not their idle minutes.
             let gap = min(max(0, step.time - previousTime), maxGap)
             previousTime = step.time
-            if gap > 0 { try await Task.sleep(for: .seconds(gap)) }
+            let wait = previousSent.map { gap - Date().timeIntervalSince($0) } ?? 0
+            if wait > 0 { try await Task.sleep(for: .seconds(wait)) }
             guard puppet.wrappPID.map({ kill($0, 0) == 0 }) ?? false else {
                 session.ui.line("the program ended before step \(index + 1)")
                 throw ExitCode(4)
             }
             let window = (try? puppet.ask(.state, timeout: 10)).flatMap(PuppetWindowState.init)
             guard let window else { throw SCError("\(name)'s game didn't say where its window is before step \(index + 1).") }
-            let picture = window.picture ?? CGRect(origin: .zero, size: window.size)
+            let picture = givenPicture ?? window.picture ?? CGRect(origin: .zero, size: window.size)
             let request = try InputRecording.request(step.action, picture: picture)
             let logStart = Self.size(of: log)
             let before = Probe.thumbnail(puppet)
             let sent = Date()
+            previousSent = sent
             puppet.noteAction("replay \(index + 1): \(step.description)")
             _ = try puppet.ask(request, timeout: request.timeout)
+            // Waited for first: a game slow to answer a click shows nothing
+            // at all for a while, which looks still.
+            let reacted = try await waitForChange(puppet, from: before, sent: sent)
             let settled = try await waitUntilStill(puppet, sent: sent)
             let after = Probe.thumbnail(puppet)
             let rates = InputRecording.frameRates(in: Self.text(of: log, from: logStart))
-            results.append((index + 1, step, settled, rates))
+            results.append((index + 1, step, reacted, settled, rates))
             var line = String(format: "%4d/%d  t=%6.1f  %@", index + 1, recorded.steps.count, step.time, step.description)
             if let a = before, let b = after { line += " → changed \(Frames.changed(a, b))%" }
+            line += reacted.map { String(format: " · reacted after %.1f s", $0) } ?? String(format: " · no change in %.0f s", reactTimeout)
             line += settled.map { String(format: " · still after %.1f s", $0) } ?? String(format: " · not still after %.0f s", timeout)
             if let summary = Self.rateSummary(rates) { line += " · \(summary)" }
             session.ui.line(line)
@@ -256,12 +271,39 @@ struct PuppetReplayCommand: AsyncParsableCommand {
         session.ui.line("slowest to settle: " + slowest.map { result in
             "\(result.index) (\(result.settled.map { String(format: "%.1f s", $0) } ?? "never"))"
         }.joined(separator: ", "))
+        if let trend = Self.reactionTrend(results.compactMap(\.reacted)) {
+            session.ui.line("time to react to a step, by quarter of the replay (median): " + trend)
+        }
         let all = results.flatMap(\.rates)
         if let summary = Self.rateSummary(all) {
             let lowest = results.filter { !$0.rates.isEmpty }.sorted { ($0.rates.min() ?? 0) < ($1.rates.min() ?? 0) }.prefix(5)
             session.ui.line("frame rates over the replay: \(summary); lowest at steps "
                             + lowest.map { "\($0.index) (\(String(format: "%.1f", $0.rates.min() ?? 0)))" }.joined(separator: ", "))
         }
+    }
+
+    /// Seconds from `sent` until the picture differs from `before`; nil if
+    /// it didn't within --react-timeout.
+    private func waitForChange(_ puppet: PuppetSession, from before: [UInt8]?, sent: Date) async throws -> Double? {
+        guard let before else { return nil }
+        while Date().timeIntervalSince(sent) < reactTimeout {
+            if let now = Probe.thumbnail(puppet), Frames.changed(before, now) > stillThreshold {
+                return Date().timeIntervalSince(sent)
+            }
+            guard puppet.wrappPID.map({ kill($0, 0) == 0 }) ?? false else { return nil }
+            try await Task.sleep(for: .seconds(0.1))
+        }
+        return nil
+    }
+
+    /// The median time to react in each quarter of the steps, so a game that
+    /// grows slower as it's played shows it: "0.7 s, 2.1 s, 3.4 s, 4.9 s".
+    static func reactionTrend(_ times: [Double]) -> String? {
+        guard times.count >= 4 else { return nil }
+        let quarters = (0..<4).map { quarter in
+            times[(times.count * quarter / 4)..<(times.count * (quarter + 1) / 4)].sorted()
+        }
+        return quarters.map { String(format: "%.1f s", $0[$0.count / 2]) }.joined(separator: ", ")
     }
 
     /// Seconds from `sent` until the picture has been still for `settle`
@@ -279,6 +321,15 @@ struct PuppetReplayCommand: AsyncParsableCommand {
             guard puppet.wrappPID.map({ kill($0, 0) == 0 }) ?? false else { return nil }
         }
         return nil
+    }
+
+    /// `x,y,w,h` as a rectangle.
+    static func rect(_ text: String) throws -> CGRect {
+        let figures = text.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard figures.count == 4, figures[2] > 0, figures[3] > 0 else {
+            throw ValidationError("--picture is x,y,w,h in points, as state's picture= is: \(text)")
+        }
+        return CGRect(x: figures[0], y: figures[1], width: figures[2], height: figures[3])
     }
 
     /// The wrapp's own log, from the `log: <path>` line it starts with.

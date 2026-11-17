@@ -1221,18 +1221,27 @@ The replay goes by the game, not the clock. Before the first step it waits
 until the game has run as long as it had when the person first acted
 (counted from its process's start, as the recorder starts with the game),
 then for the picture to be still. A held logo is still too, so stillness
-alone clicked the main menu's New Game before it had appeared. Before each
-step after that it waits the person's own gap, up to `--max-gap` (2 s), and
-after each until the picture has been still for `--settle` (1 s), up to
-`--timeout` (30 s). Still means no more than `--still-threshold` (2) % of a
+alone clicked the main menu's New Game before it had appeared. After each
+step it waits for the picture to change at all, up to `--react-timeout`
+(15 s), as a game slow to answer a click shows nothing for a while, which
+looks still; then until it has been still for `--settle` (1 s), up to
+`--timeout` (30 s); and until as long after the step as the person waited
+before their next, up to `--max-gap` (15 s). Stillness alone isn't enough:
+Waverly's move between scenes has still moments, a click in one is lost, and
+every step after it plays in the wrong room. Still means no more than `--still-threshold` (2) % of a
 thumbnail changed, so falling snow doesn't count as movement. A line a step
-says what changed, how long the picture took to go still, and, for a
+says what changed, how long the game took to react and the picture to go
+still, and, for a
 session started with `--debug wine=+fps`, the frame rates Wine logged until
 the next step. Those are read from the wrapp's own log, which `wrapp.log`
 names as the wrapp starts: Wine's trace lines are logged at debug level, so
 the copy on stderr leaves them out. The replay ends with the slowest steps
-to settle and those with the lowest frame rates. `--from` and `--to` replay a
-part.
+to settle, the median time to react in each quarter of the replay (so a
+game that grows slower as it's played shows it), and the steps with the
+lowest frame rates. `--from` and `--to` replay a
+part, and `--picture x,y,w,h` gives the game's picture by hand for a game
+whose `state` names its whole window rather than the part it draws in, so
+the recorded shares land where they should.
 
 ### Wine dialogs and installers
 
