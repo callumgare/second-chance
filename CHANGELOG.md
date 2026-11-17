@@ -2,6 +2,36 @@
 
 All notable changes to Second Chance.
 
+## 2.0.0-beta.2 — 2026-11-17
+
+### New
+
+- Show classic Mac programs in the app's own window, with its own menu bar, Dock icon and fullscreen. Quitting the app now also shuts the Mac down cleanly.
+
+### Fixed
+
+- Fix the window freezing after choosing Steam and clicking Continue. You now go straight to a progress screen that says what's happening.
+- Fix Waverly Academy getting slower the longer it's played. Clicks used to take seconds to respond after a while, and now they stay quick.
+- Fix some games being reported as quitting unexpectedly when you quit them yourself from their own menu. The Deadly Device was one of them.
+- Fix some games not being able to fill the screen properly, and clicks missing in some games, such as Shadow Ranch and Old Clock, on certain setups.
+
+<details>
+<summary>Behind the scenes</summary>
+
+- Puppet tooling: a new input recorder (`sc wrapp run --debug record-input`) writes each click and key the game gets as JSON lines, with clicks stored as a share of the game's picture so they land in the same place on a different screen size. `sc puppet replay` plays a recording back, waiting for the game to answer each step (`--react-timeout`, 15 s), keeping the person's own gap between steps (`--max-gap`, 15 s), and reporting how long each step took and the median per quarter of the replay, so a game that slows down shows it. `--picture` gives the game's picture by hand, and `sc puppet start --player-saves` starts a session with a copy of the player's saves.
+- The Waverly Academy slowdown (issue 7) came from every Lua warning also being added to Her's hidden debug console, which nothing empties and which was laid out again on every frame. The Rosetta fixes' proxy now finds the function that adds a line to that console by byte pattern and makes it return at once. A replayed route across the map answers each click in about 0.6 s throughout, where it grew from 0.8 s to 4 s. The stats build also gained a sampling profiler and counts of D3DX text drawn.
+- The Steam and Big Fish builds now show a 'Getting ready' progress screen at once. Modules are read once per build and off the main thread, and the engine store lookup, Steam sign-in checks and saved sign-in copies run off it too. A Steam build from scratch shows its first step 0.3 s in and logs no main-thread stall.
+- Engines: a Wine engine package can now come from `wine-mac-builds`. A module version marked `preview: true` is picked only by a constraint naming it exactly, such as `wine@11.21-macfixes.1`.
+- A Wine version's `has:` list (msync, cocoa-start-wait, rosetta-fs-addr32, rosetta-softice-probes) is recorded in the wrapp's lock and passed to the in-process helpers as `WINE_ENGINE_HAS`. msync and esync are asked for only of a Wine that has them, the Cocoa start wait stands down on a Wine with the fix, and the Rosetta fault fix is left out of an engine that fixes both its faults.
+- In-process helpers: imports are now looked up in the library the image's two-level ordinal names, as dyld does, rather than across every loaded image. On a Wine built for macOS before 12, lazy imports bound through `__la_symbol_ptr` are now redirected too, which fixes clicks missing in test sessions. Mode scaling leaves Direct3D's backing size to Wine from 10.8, and native fullscreen handles the GDI picture Wine 11 centres itself (seen with Bioscopia on a macfixes 11.22 build).
+- The quit check no longer blames a quit on a Wine error the game logs all along: an error logged for 10 s or more before the exit, or 20 times in the second before it, is ignored. Errors are matched by kind, and the check keeps when it first and last saw each. WrappPuppeteer now fails a run when a click can't land on a game that has already gone, instead of reading the exit as a clean quit.
+- Native fullscreen now reports `settling=<s>`, the seconds until it gives up on a window it can't put in a Space, and `sc puppet` prints it when a wait times out without a picture.
+- `sc` fixes: a screen lease whose holder is stuck exiting, or a zombie, now counts as gone and is taken over by the next command. `sc release` prints the link to the published release instead of the draft's, which stops working once it's published.
+- Docs: Direct3D in an emulated mode is zoomed on WineHQ's 11.x, so Direct3D games stay on 10.0_8 until a Wine with the Mac driver fix is offered. The docs also had Wine's BITSPIXEL change in 10.20, and it is 10.19.
+- Refactor: Wine no longer sets `CX_ROOT`, which none of our engines reads. `WINEBOOT_HIDE_DIALOG` stays.
+
+</details>
+
 ## 2.0.0-beta.1 — 2026-11-15
 
 ### New

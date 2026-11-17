@@ -869,7 +869,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 969;
+				CURRENT_PROJECT_VERSION = 990;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 8VJ5DZRB7T;
 				ENABLE_APP_SANDBOX = NO;
@@ -887,7 +887,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 2.0.0-beta.1;
+				MARKETING_VERSION = 2.0.0-beta.2;
 				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance;
 				PRODUCT_MODULE_NAME = SecondChance;
 				PRODUCT_NAME = "Second Chance";
@@ -917,7 +917,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 969;
+				CURRENT_PROJECT_VERSION = 990;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 8VJ5DZRB7T;
 				ENABLE_APP_SANDBOX = NO;
@@ -935,7 +935,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 2.0.0-beta.1;
+				MARKETING_VERSION = 2.0.0-beta.2;
 				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance;
 				PRODUCT_MODULE_NAME = SecondChance;
 				PRODUCT_NAME = "Second Chance";
@@ -963,7 +963,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 969;
+				CURRENT_PROJECT_VERSION = 990;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 8VJ5DZRB7T;
 				ENABLE_APP_SANDBOX = NO;
@@ -979,7 +979,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 2.0.0-beta.1;
+				MARKETING_VERSION = 2.0.0-beta.2;
 				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.WrappTemplate;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1003,7 +1003,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 969;
+				CURRENT_PROJECT_VERSION = 990;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 8VJ5DZRB7T;
 				ENABLE_APP_SANDBOX = NO;
@@ -1019,7 +1019,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 2.0.0-beta.1;
+				MARKETING_VERSION = 2.0.0-beta.2;
 				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.WrappTemplate;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
