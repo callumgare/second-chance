@@ -388,7 +388,10 @@ struct ScreenLease: Codable, Equatable, Sendable {
         if isTakenByHand { return expires != nil }
         guard kill(pid, 0) == 0 || errno == EPERM else { return false }
         guard let start = ProcessFacts.startTime(of: pid) else { return false }
-        return abs(start - pidStarted) < 1
+        // A process that's exiting has given the screen up, even when it can't
+        // finish: one that crashed under a wedged crash handler (a VS Code
+        // terminal's) stays exiting until that handler goes, beyond kill -9.
+        return abs(start - pidStarted) < 1 && !ProcessFacts.isExiting(pid)
     }
 
     /// The holder's agent session's name and title as they were when it took the lease.
@@ -499,6 +502,13 @@ enum ProcessFacts {
         guard let info = info(pid) else { return nil }
         let start = info.kp_proc.p_un.__p_starttime
         return Double(start.tv_sec) + Double(start.tv_usec) / 1_000_000
+    }
+
+    /// Whether the process is exiting (or a zombie): it has ended as far as
+    /// anything it held goes, whether or not the kernel has finished with it.
+    static func isExiting(_ pid: pid_t) -> Bool {
+        guard let info = info(pid) else { return false }
+        return info.kp_proc.p_flag & P_WEXIT != 0 || info.kp_proc.p_stat == SZOMB
     }
 
     static func isAncestor(_ ancestor: pid_t, of pid: pid_t) -> Bool {

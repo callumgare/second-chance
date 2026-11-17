@@ -788,7 +788,12 @@ drawn.
 **A lease lasts as long as the process that took it.** sc releases it on
 exit. If the process is killed or the Mac restarts, the next command finds
 that process gone and takes the stale lease over. The holder is checked by its
-pid and its start time, so a reused pid doesn't count as the holder. A command
+pid and its start time, so a reused pid doesn't count as the holder. Nor
+does a process that is exiting, or a zombie: it has ended as far as the
+screen goes, though `kill(pid, 0)` still finds it. A wrapp that crashed under
+a VS Code terminal's wedged crash handler stays that way, exiting, beyond
+`kill -9`, until VS Code quits ([failure-reports.md](failure-reports.md#testing-a-crash-from-a-terminal-in-vs-code)),
+and its lease held the screen for two days. A command
 that sc itself starts inside a leased run (a descendant of the holder) runs
 under the same lease.
 

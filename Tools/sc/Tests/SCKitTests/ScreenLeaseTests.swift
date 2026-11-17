@@ -161,6 +161,25 @@ struct ScreenLeaseTests {
         #expect(!reused.isAlive)
     }
 
+    @Test("A holder that has ended but not gone, a zombie or one stuck exiting, has given the lease up")
+    func exitingHolder() async throws {
+        #expect(!ProcessFacts.isExiting(getpid()))
+        // A child that exits and isn't reaped stays a zombie: still there for
+        // kill(pid, 0), as a crash stuck in a wedged crash handler is.
+        var pid: pid_t = 0
+        let arguments: [UnsafeMutablePointer<CChar>?] = [strdup("/usr/bin/true"), nil]
+        defer { arguments.forEach { free($0) } }
+        #expect(posix_spawn(&pid, "/usr/bin/true", nil, nil, arguments, nil) == 0)
+        defer { waitpid(pid, nil, 0) }
+        let deadline = Date().addingTimeInterval(10)
+        while !ProcessFacts.isExiting(pid), Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(kill(pid, 0) == 0)
+        #expect(ProcessFacts.isExiting(pid))
+        var holder = lease(pid: pid)
+        holder.pidStarted = ProcessFacts.startTime(of: pid) ?? 0
+        #expect(!holder.isAlive)
+    }
+
     @Test("The parent of a re-run is recognised as its ancestor")
     func ancestor() {
         #expect(ProcessFacts.isAncestor(getppid(), of: getpid()))
