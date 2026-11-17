@@ -20,6 +20,10 @@
 //    Vorbis code is never called again, as those four are all it uses.
 // 2. The particle system's catch-up (below, at particle_pattern).
 //
+// A third place grew slower the longer the game was played (below, at
+// console_pattern): its hidden debug console, which gained a line for each
+// script warning and laid every line out again each frame.
+//
 // Steam's copies are encrypted until they start (Steam's DRM), so for them
 // the patterns are looked for once the game's own code first runs (below, at
 // deferred_GetCommandLineA). A game whose .exe doesn't match a fix's patterns
@@ -61,14 +65,21 @@ static void say(const char *format, ...) {
 
 #ifdef ROSETTA_FIXES_STATS
 // For experiments: calls and time in each entry point, every two seconds.
-static volatile LONG particle_most, particle_capped, particle_warmups;
+static volatile LONG particle_most, particle_capped, particle_warmups, particle_updates, particle_run;
+// The particle systems updated in the period, told apart by their address.
+static const void *particle_systems[256];
+static int particle_system_count;
 static LONGLONG stat_calls[4], stat_ticks[4], stat_bytes, stat_last, stat_frequency;
+static void stat_report(LARGE_INTEGER now);
 static void stat(int which, LONGLONG start, long bytes) {
     LARGE_INTEGER now;
     QueryPerformanceCounter(&now);
     stat_calls[which]++;
     stat_ticks[which] += now.QuadPart - start;
     if (bytes > 0) stat_bytes += bytes;
+    stat_report(now);
+}
+static void stat_report(LARGE_INTEGER now) {
     if (!stat_frequency) {
         LARGE_INTEGER f;
         QueryPerformanceFrequency(&f);
@@ -80,9 +91,11 @@ static void stat(int which, LONGLONG start, long bytes) {
         say("stats: open %lld (%.0f ms), clear %lld (%.0f ms), seek %lld (%.0f ms), read %lld (%.0f ms, %lld bytes)",
             stat_calls[0], stat_ticks[0] * ms, stat_calls[1], stat_ticks[1] * ms, stat_calls[2], stat_ticks[2] * ms,
             stat_calls[3], stat_ticks[3] * ms, stat_bytes);
-        say("stats: particle steps due at most %ld, capped %ld times, warm-ups run whole %ld", particle_most,
-            particle_capped, particle_warmups);
-        particle_most = particle_capped = particle_warmups = 0;
+        say("stats: particle steps due at most %ld, capped %ld times, warm-ups run whole %ld; "
+            "%ld updates of %d systems, %ld steps run", particle_most, particle_capped, particle_warmups,
+            particle_updates, particle_system_count, particle_run);
+        particle_most = particle_capped = particle_warmups = particle_updates = particle_run = 0;
+        particle_system_count = 0;
         memset(stat_calls, 0, sizeof stat_calls);
         memset(stat_ticks, 0, sizeof stat_ticks);
         stat_bytes = 0;
@@ -282,6 +295,15 @@ __attribute__((used)) int __cdecl particle_steps(int due, int before, const doub
     if (due > particle_most) particle_most = due;
     if (due > most && before == 0) particle_warmups++;
     if (due > most && before != 0) particle_capped++;
+    int run = before != 0 && due > most ? most : due;
+    particle_updates++;
+    if (run > 0) particle_run += run;
+    int known = 0;
+    for (int i = 0; i < particle_system_count; i++) known |= particle_systems[i] == stepsPerSecond;
+    if (!known && particle_system_count < 256) particle_systems[particle_system_count++] = stepsPerSecond;
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    stat_report(now);
 #endif
     return before != 0 && due > most ? most : due;
 }
@@ -313,6 +335,49 @@ static BOOL redirect_span(BYTE *from, void *to, int length) {
     VirtualProtect(from, length, old, &old);
     FlushInstructionCache(GetCurrentProcess(), from, length);
     return TRUE;
+}
+
+// The debug console. Each warning a game script gives (Waverly's
+// SneakActivity_SC.lua warns about a flag on every scene it runs in) is
+// written to the game's log and also made a new line of text in a console
+// the player never sees (ConsoleDialog, a ConsoleLine control each, through
+// Ndui.dll), which nothing removes. Ndui lays every line out again each
+// frame, wrapping it by measuring each prefix of it with ID3DXFont's
+// DrawText, and Wine's DrawText takes about 15 µs under Rosetta. So each
+// scene visited made every frame slower: after three laps of the school,
+// moving between views took 4-5 s, and the console's layout was most of each
+// frame. The function that adds a line is made to return at once; the
+// warning still goes to the log.
+//
+// The function, from its entry (an SEH frame; esi the console, the text the
+// one argument, which it doesn't free):
+//     push 4 / mov eax, <handler> / call <SEH prolog>
+//     push [esi+4] / lea eax, [ebp-0x10] / push eax / call <format the line's name>
+//     and [ebp-4], 0 / mov ecx, [<Ndui>]
+//     push 1 / push <...> / push "ConsoleDialog" / push <...> / push [ebp-0x10]
+//     add ecx, 8 / call [<Ndui: make a control>]
+// becomes `ret 4`.
+static const char console_pattern[] =
+    "6A 04 B8 ?? ?? ?? ?? E8 ?? ?? ?? ?? FF 76 04 8D 45 F0 50 E8 ?? ?? ?? ?? 83 65 FC 00 8B 0D ?? ?? ?? ?? "
+    "6A 01 68 ?? ?? ?? ?? 68 ?? ?? ?? ?? 68 ?? ?? ?? ?? FF 75 F0 83 C1 08 FF 15";
+
+static void install_console(const char *name, BYTE *code, BYTE *codeEnd) {
+    BYTE *found = NULL;
+    int count = find(code, codeEnd, console_pattern, &found);
+    if (count != 1) {
+        say("%s: the debug console's new line found %d times, not once; its console is left as it is", name, count);
+        return;
+    }
+    static const BYTE ret4[] = {0xC2, 0x04, 0x00};
+    DWORD old;
+    if (!VirtualProtect(found, sizeof ret4, PAGE_EXECUTE_READWRITE, &old)) {
+        say("%s: couldn't patch the debug console (error %lu)", name, GetLastError());
+        return;
+    }
+    memcpy(found, ret4, sizeof ret4);
+    VirtualProtect(found, sizeof ret4, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), found, sizeof ret4);
+    say("%s: script warnings kept out of the hidden debug console (0x%p)", name, found);
 }
 
 static void install_particles(const char *name, BYTE *code, BYTE *codeEnd) {
@@ -380,6 +445,7 @@ static BYTE *program_code, *program_code_end;
 static void install_all(void) {
     install_sound(program_name, program_code, program_code_end);
     install_particles(program_name, program_code, program_code_end);
+    install_console(program_name, program_code, program_code_end);
 }
 
 // Steam's copies are wrapped in its DRM (SteamStub, a .bind section): their
@@ -530,11 +596,210 @@ FORWARD(PrintDlgExW)
 FORWARD(ReplaceTextA)
 FORWARD(ReplaceTextW)
 
+#ifdef ROSETTA_FIXES_STATS
+// For experiments: where the game's main thread is in the program's code,
+// sampled from a thread of our own (pausing it and reading its registers),
+// the busiest 16-byte blocks and the blocks their callers return to, every
+// 10 s. The Mac's sampler sees only Rosetta's translations, not these.
+#define PROFILE_SLOTS (1 << 16)
+static HANDLE profiled_thread;
+// Open addressing: each slot a 16-byte block's address and its count.
+typedef struct { DWORD block; unsigned count; } ProfileSlot;
+static ProfileSlot profile_leaf[PROFILE_SLOTS], profile_caller[PROFILE_SLOTS];
+static void profile_add(ProfileSlot *table, DWORD address) {
+    DWORD block = address & ~15u;
+    if (!block) return;
+    for (unsigned i = (block >> 4) * 2654435761u % PROFILE_SLOTS, n = 0; n < 64; i = (i + 1) % PROFILE_SLOTS, n++) {
+        if (table[i].block == block) { table[i].count++; return; }
+        if (!table[i].block) { table[i].block = block; table[i].count = 1; return; }
+    }
+}
+static void profile_top(const char *what, ProfileSlot *table, unsigned total) {
+    for (int n = 0; n < 10; n++) {
+        unsigned best = 0, at = 0;
+        for (unsigned i = 0; i < PROFILE_SLOTS; i++) if (table[i].count > best) { best = table[i].count; at = i; }
+        if (!best) break;
+        DWORD block = table[at].block;
+        HMODULE module = NULL;
+        char name[MAX_PATH] = "?";
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCSTR)block, &module)) {
+            GetModuleFileNameA(module, name, sizeof name);
+        }
+        const char *base = strrchr(name, '\\');
+        say("profile: %s %5.1f%% %s+0x%lx (%p)", what, 100.0 * best / total, base ? base + 1 : name,
+            module ? (unsigned long)(block - (DWORD)module) : 0ul, (void *)block);
+        table[at].count = 0;
+    }
+}
+static DWORD WINAPI profiler(void *unused) {
+    (void)unused;
+    unsigned total = 0;
+    DWORD last = GetTickCount();
+    for (;;) {
+        Sleep(4);
+        if (SuspendThread(profiled_thread) == (DWORD)-1) continue;
+        CONTEXT context;
+        context.ContextFlags = CONTEXT_CONTROL;
+        BOOL ok = GetThreadContext(profiled_thread, &context);
+        DWORD caller = 0;
+        if (ok) ReadProcessMemory(GetCurrentProcess(), (void *)(context.Ebp + 4), &caller, sizeof caller, NULL);
+        ResumeThread(profiled_thread);
+        if (ok) {
+            total++;
+            profile_add(profile_leaf, context.Eip);
+            profile_add(profile_caller, caller);
+        }
+        if (GetTickCount() - last > 10000 && total) {
+            say("profile: %u samples", total);
+            profile_top("where", profile_leaf, total);
+            profile_top("returning to", profile_caller, total);
+            memset(profile_leaf, 0, sizeof profile_leaf);
+            memset(profile_caller, 0, sizeof profile_caller);
+            total = 0;
+            last = GetTickCount();
+        }
+    }
+    return 0;
+}
+
+// For experiments: the text a game draws with D3DX fonts (Ndui.dll, Her's UI
+// library, makes them), every 10 s: fonts made, DrawText calls, characters,
+// distinct strings and the most drawn. The fonts' shared vtable's DrawTextA
+// and DrawTextW are pointed here when the first font is made.
+typedef INT (WINAPI *DrawTextWFn)(void *font, void *sprite, const WCHAR *text, INT count, RECT *rect, DWORD format, DWORD color);
+typedef INT (WINAPI *DrawTextAFn)(void *font, void *sprite, const char *text, INT count, RECT *rect, DWORD format, DWORD color);
+typedef HRESULT (WINAPI *CreateFontWFn)(void *device, INT height, UINT width, UINT weight, UINT miplevels, BOOL italic,
+                                       DWORD charset, DWORD precision, DWORD quality, DWORD pitch, const WCHAR *face, void **font);
+static DrawTextWFn real_DrawTextW;
+static DrawTextAFn real_DrawTextA;
+static CreateFontWFn real_CreateFontW;
+static volatile LONG font_made, text_calls, text_chars;
+static LONGLONG text_ticks;
+#define TEXT_SLOTS 4096
+static struct { DWORD hash; unsigned count; char sample[200]; DWORD format; LONG width; } text_seen[TEXT_SLOTS];
+static DWORD text_last;
+static void text_note(DWORD hash, const char *sample, int chars, LONGLONG ticks, DWORD format, const RECT *rect) {
+    text_calls++;
+    text_chars += chars;
+    text_ticks += ticks;
+    for (unsigned i = hash % TEXT_SLOTS, n = 0; n < 32; i = (i + 1) % TEXT_SLOTS, n++) {
+        if (text_seen[i].count && text_seen[i].hash == hash) { text_seen[i].count++; break; }
+        if (!text_seen[i].count) {
+            text_seen[i].hash = hash;
+            text_seen[i].count = 1;
+            lstrcpynA(text_seen[i].sample, sample, sizeof text_seen[i].sample);
+            text_seen[i].format = format;
+            text_seen[i].width = rect ? rect->right - rect->left : -1;
+            break;
+        }
+    }
+    if (!text_last) text_last = GetTickCount();
+    if (GetTickCount() - text_last < 10000) return;
+    LARGE_INTEGER f;
+    QueryPerformanceFrequency(&f);
+    int distinct = 0;
+    for (int i = 0; i < TEXT_SLOTS; i++) distinct += text_seen[i].count != 0;
+    say("text: %ld fonts made so far; %ld DrawText calls, %ld characters, %.0f ms, %d distinct strings", font_made,
+        text_calls, text_chars, text_ticks * 1000.0 / f.QuadPart, distinct);
+    for (int n = 0; n < 12; n++) {
+        unsigned best = 0, at = 0;
+        for (unsigned i = 0; i < TEXT_SLOTS; i++)
+            if (text_seen[i].count > best || (text_seen[i].count == best && best && strlen(text_seen[i].sample) > strlen(text_seen[at].sample))) { best = text_seen[i].count; at = i; }
+        if (!best) break;
+        say("text:   %u x (format 0x%lx, width %ld) \"%s\"", best, text_seen[at].format, text_seen[at].width, text_seen[at].sample);
+        text_seen[at].count = 0;
+    }
+    memset(text_seen, 0, sizeof text_seen);
+    text_calls = text_chars = 0;
+    text_ticks = 0;
+    text_last = GetTickCount();
+}
+static INT WINAPI stats_DrawTextW(void *font, void *sprite, const WCHAR *text, INT count, RECT *rect, DWORD format, DWORD color) {
+    LARGE_INTEGER a, b;
+    QueryPerformanceCounter(&a);
+    INT result = real_DrawTextW(font, sprite, text, count, rect, format, color);
+    QueryPerformanceCounter(&b);
+    int chars = 0;
+    DWORD hash = 2166136261u;
+    char sample[200];
+    if (text) {
+        for (; count < 0 ? text[chars] : chars < count; chars++) {
+            hash = (hash ^ text[chars]) * 16777619u;
+            if (chars < (int)sizeof sample - 1) sample[chars] = text[chars] < 128 && text[chars] >= 32 ? (char)text[chars] : '?';
+        }
+    }
+    sample[chars < (int)sizeof sample - 1 ? chars : (int)sizeof sample - 1] = 0;
+    text_note(hash, sample, chars, b.QuadPart - a.QuadPart, format, rect);
+    return result;
+}
+static INT WINAPI stats_DrawTextA(void *font, void *sprite, const char *text, INT count, RECT *rect, DWORD format, DWORD color) {
+    LARGE_INTEGER a, b;
+    QueryPerformanceCounter(&a);
+    INT result = real_DrawTextA(font, sprite, text, count, rect, format, color);
+    QueryPerformanceCounter(&b);
+    int chars = 0;
+    DWORD hash = 2166136261u;
+    if (text) for (; count < 0 ? text[chars] : chars < count; chars++) hash = (hash ^ (BYTE)text[chars]) * 16777619u;
+    char sample[200];
+    lstrcpynA(sample, text ? text : "", chars + 1 < (int)sizeof sample ? chars + 1 : (int)sizeof sample);
+    text_note(hash, sample, chars, b.QuadPart - a.QuadPart, format, rect);
+    return result;
+}
+static HRESULT WINAPI stats_CreateFontW(void *device, INT height, UINT width, UINT weight, UINT miplevels, BOOL italic,
+                                        DWORD charset, DWORD precision, DWORD quality, DWORD pitch, const WCHAR *face, void **font) {
+    HRESULT hr = real_CreateFontW(device, height, width, weight, miplevels, italic, charset, precision, quality, pitch, face, font);
+    if (SUCCEEDED(hr) && font && *font) {
+        font_made++;
+        void **vtable = *(void ***)*font;
+        if (vtable[15] != (void *)stats_DrawTextW) {
+            DWORD old;
+            if (VirtualProtect(&vtable[14], 2 * sizeof(void *), PAGE_READWRITE, &old)) {
+                real_DrawTextA = (DrawTextAFn)vtable[14];
+                real_DrawTextW = (DrawTextWFn)vtable[15];
+                vtable[14] = (void *)stats_DrawTextA;
+                vtable[15] = (void *)stats_DrawTextW;
+                VirtualProtect(&vtable[14], 2 * sizeof(void *), old, &old);
+                say("text: watching D3DX fonts' DrawText");
+            }
+        }
+    }
+    return hr;
+}
+static void install_text_stats(void) {
+    BYTE *image = (BYTE *)GetModuleHandleA("Ndui.dll");
+    HMODULE d3dx = GetModuleHandleA("d3dx9_33.dll");
+    if (!image || !d3dx) { say("text: Ndui.dll or d3dx9_33.dll isn't loaded"); return; }
+    real_CreateFontW = (CreateFontWFn)GetProcAddress(d3dx, "D3DXCreateFontW");
+    IMAGE_NT_HEADERS *headers = (IMAGE_NT_HEADERS *)(image + ((IMAGE_DOS_HEADER *)image)->e_lfanew);
+    IMAGE_DATA_DIRECTORY imports = headers->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    for (IMAGE_IMPORT_DESCRIPTOR *d = (IMAGE_IMPORT_DESCRIPTOR *)(image + imports.VirtualAddress); d->Name; d++) {
+        for (IMAGE_THUNK_DATA *slot = (IMAGE_THUNK_DATA *)(image + d->FirstThunk); slot->u1.Function; slot++) {
+            if (slot->u1.Function != (DWORD)real_CreateFontW) continue;
+            DWORD old;
+            if (VirtualProtect(slot, sizeof *slot, PAGE_READWRITE, &old)) {
+                slot->u1.Function = (DWORD)stats_CreateFontW;
+                VirtualProtect(slot, sizeof *slot, old, &old);
+                say("text: Ndui.dll's D3DXCreateFontW watched");
+            }
+            return;
+        }
+    }
+    say("text: D3DXCreateFontW isn't in Ndui.dll's imports");
+}
+#endif
+
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved) {
     (void)reserved;
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(instance);
         install();
+#ifdef ROSETTA_FIXES_STATS
+        if (program_code && DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &profiled_thread,
+                                            0, FALSE, DUPLICATE_SAME_ACCESS))
+            CloseHandle(CreateThread(NULL, 0, profiler, NULL, 0, NULL));
+        install_text_stats();
+#endif
     }
     return TRUE;
 }

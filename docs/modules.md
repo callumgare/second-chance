@@ -401,8 +401,17 @@ scene with sounds and snow ran at a frame every couple of seconds.
   slow frame leaves more steps to catch up. Under emulation the catch-up
   fell further behind each frame, stalling the game for 30–60 s.
 
+A third grew slower the longer the game was played. Each warning a script
+gives (Waverly's `SneakActivity_SC.lua` warns about a flag on every scene it
+runs in) also became a new line in a debug console the player never sees,
+and nothing removed it. Ndui, Her's UI library, laid every line out again
+each frame, measuring each prefix of each line with `ID3DXFont::DrawText`
+to wrap it. Each of those measurements takes about a microsecond on Windows
+and 15 µs in Wine under Rosetta. After three laps of the school, moving
+between views took 4–5 s, and the console's layout was most of each frame.
+
 `DO nancy-drew.rosetta-fixes --into=<game folder> --exe=<program>` fixes
-both. It copies the nancy-drew module's `assets/rosetta-fixes/comdlg32.dll`
+all three. It copies the nancy-drew module's `assets/rosetta-fixes/comdlg32.dll`
 into the game's folder, and makes Wine load it before its own for that
 program (`AppDefaults\<program>\DllOverrides`, `native,builtin`). Wine 10
 has no `AppInit_DLLs`, and `Waverly.exe` imports `comdlg32.dll`
@@ -418,6 +427,9 @@ in the program's code for each fix's pattern:
 - **The particle fix** looks for the particle update's catch-up count. It
   caps the count at 0.25 s of steps. The first update of a view is left
   whole, as that is its warm-up (2 s of snow falling before it's seen).
+- **The console fix** looks for the function that adds a line to the debug
+  console, and makes it return at once. The warning still goes to the
+  game's log.
 
 Steam's copy is wrapped in Steam's DRM (SteamStub, a `.bind` section). Its
 code is encrypted on disk and is decrypted only when the game starts, after
@@ -426,8 +438,8 @@ game's import of `GetCommandLineA` at itself. The first call from the game's
 own code, which comes as its C runtime starts up, puts the import back and
 makes the fixes then.
 
-A fix is made only where its pattern is found exactly once, and the two are
-independent. A game it doesn't recognise, such as a different build or an
+A fix is made only where its pattern is found exactly once, and each is
+independent of the others. A game it doesn't recognise, such as a different build or an
 Armadillo-packed Big Fish copy, is left as it was, and the log says which.
 Its lines come through Wine's debug output, so they show up in the wrapp's
 log as `[rosetta-fixes] …`. `SECOND_CHANCE_ROSETTA_FIXES=0` (`--debug
@@ -438,8 +450,13 @@ The source is `Packages/Modules/nancy-drew/RosettaFixes/`.
 libogg's and libvorbis's releases, pinned by their hashes. It refuses a
 build that leaves x87 instructions in the decoding path, and writes the
 stripped DLL into the module's assets, where it is checked in. Building
-with `-DROSETTA_FIXES_STATS` adds counters to the log every 2 s: time spent
-decoding, and the most particle steps due in a frame. The CD and Steam
+with `-DROSETTA_FIXES_STATS` adds counters to the log: every 2 s, the time
+spent decoding and the particle updates; every 10 s, the text drawn with D3DX
+fonts (calls, characters, time and the strings drawn most), and where the
+game's main thread is, sampled from a thread of the DLL's own by pausing it
+and reading its registers. That gives the module and offset of the busiest
+x86 code, which the Mac's `sample` can't, as it sees only Rosetta's
+translations. The CD and Steam
 editions' `Waverly.exe` match the patterns (Steam's is a different build at
 different addresses). Her's Windows download hasn't been tried. Other Her
 games are likely to differ, as whole-program optimisation picks each build's
