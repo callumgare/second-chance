@@ -88,6 +88,27 @@ struct PuppetSession: Codable {
         try? files.removeItem(at: aside)
     }
 
+    /// A copy of the player's own saves and settings for the wrapp at
+    /// `app` (its folder in Application Support, named by its bundle id),
+    /// put in the session's `appSupport`, so a recording made from a save
+    /// the player loaded can load it (`sc puppet start --player-saves`).
+    /// The player's own are only read.
+    static func copyPlayerFiles(of app: URL, into appSupport: URL,
+                                from playerAppSupport: URL = FileManager.default.homeDirectoryForCurrentUser
+                                    .appendingPathComponent("Library/Application Support")) throws -> URL? {
+        let info = app.appendingPathComponent("Contents/Info.plist")
+        guard let plist = NSDictionary(contentsOf: info), let bundleID = plist["CFBundleIdentifier"] as? String else {
+            throw SCError("Couldn't read \(app.lastPathComponent)'s bundle id, which names its saves' folder.")
+        }
+        let source = playerAppSupport.appendingPathComponent(bundleID)
+        guard FileManager.default.fileExists(atPath: source.path) else { return nil }
+        let destination = appSupport.appendingPathComponent(bundleID)
+        try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.copyItem(at: source, to: destination)
+        return source
+    }
+
     static func load(_ name: String) throws -> PuppetSession {
         let file = folder(name).appendingPathComponent("session.json")
         guard let data = try? Data(contentsOf: file) else {

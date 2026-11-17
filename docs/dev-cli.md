@@ -248,6 +248,7 @@ They map onto the app's and wrapp's own switches:
 | `no-mode-scaling`         | `SECOND_CHANCE_MODE_SCALING=0`        |           |               | ✓           |
 | `no-rosetta-fixes`        | `SECOND_CHANCE_ROSETTA_FIXES=0`       |           |               | ✓           |
 | `no-basilisk-display`     | `SECOND_CHANCE_BASILISK_DISPLAY=0`    |           |               | ✓           |
+| `record-input`            | `SECOND_CHANCE_RECORD_INPUT=<file>`   |           |               | ✓           |
 | `no-cocoa-start-wait`     | `SECOND_CHANCE_COCOA_START_WAIT=0`    | ✓         | ✓             | ✓           |
 | `no-prestart-desktop`     | `SECOND_CHANCE_PRESTART_DESKTOP=0`    |           |               | ✓           |
 | `no-diagnostics`          | `SECOND_CHANCE_DIAGNOSTICS=0`         |           |               | ✓           |
@@ -1093,7 +1094,11 @@ shots, and an app-support folder of its own, so the player's saves are
 never touched. A new `start` of the same name begins with an empty folder,
 unless it's given `--keep-saves`: then the last session's saves stay, its
 app-support folder, an engine's `HOME` and a `--wine` session's own prefix,
-so a save made in one session can be loaded after a relaunch.
+so a save made in one session can be loaded after a relaunch. With
+`--player-saves` it begins with a copy of this user's own saves and settings
+for the wrapp instead (its folder in Application Support, named by the
+wrapp's bundle id), which are only read: a recording made from a person's
+save loads it ([below](#replaying-a-recording)).
 
 `start --debug` takes the values `sc wrapp run --debug` does
 ([Debug options](#debug-options)): `--debug wine=+seh,+d3d9` traces Wine's
@@ -1183,6 +1188,46 @@ Beyond a single picture:
 
 Run it in a [test session](#test-sessions), `sc --on <user>@<mac> puppet …`,
 to leave the Mac's screen free.
+
+### Replaying a recording
+
+**A route through a game played once by hand can be replayed whenever a
+change needs trying on it**, as a lag that only shows walking the whole map
+did. The person records it with `sc wrapp run <program> --debug
+record-input`: the input recorder, an in-process helper
+([wine-in-process-helpers.md](wine-in-process-helpers.md#input-recorder)),
+writes every click and key the game gets into
+`~/Library/Logs/SecondChance/recordings/input-<time>.jsonl`, which the
+wrapp's log names (`[Helpers] Input recorder armed (… recording clicks and
+keys into <file>)`). Wine games only, as the helper is Wine's Mac driver's.
+
+`sc puppet replay <name> <file>` gives a puppet session's game the same
+clicks and keys. Start the session with `--player-saves` (and the file copied
+over, for a test session) when the person began from one of their saves.
+Clicks are placed by their share of the game's picture
+(`helperGamePicture`, which `state`'s `picture=` reports), so they land where
+the person clicked on a screen of another size. A game that draws its own
+black bars, rather than switching the display mode, is all picture, so on a
+screen of another shape its clicks can land a little off. A press and its
+release within a second and a hundredth of the picture of each other are one
+click, held as long; anything else is a press and a release.
+
+The replay goes by the game, not the clock. Before the first step it waits
+until the game has run as long as it had when the person first acted
+(counted from its process's start, as the recorder starts with the game),
+then for the picture to be still. A held logo is still too, so stillness
+alone clicked the main menu's New Game before it had appeared. Before each
+step after that it waits the person's own gap, up to `--max-gap` (2 s), and
+after each until the picture has been still for `--settle` (1 s), up to
+`--timeout` (30 s). Still means no more than `--still-threshold` (2) % of a
+thumbnail changed, so falling snow doesn't count as movement. A line a step
+says what changed, how long the picture took to go still, and, for a
+session started with `--debug wine=+fps`, the frame rates Wine logged until
+the next step. Those are read from the wrapp's own log, which `wrapp.log`
+names as the wrapp starts: Wine's trace lines are logged at debug level, so
+the copy on stderr leaves them out. The replay ends with the slowest steps
+to settle and those with the lowest frame rates. `--from` and `--to` replay a
+part.
 
 ### Wine dialogs and installers
 

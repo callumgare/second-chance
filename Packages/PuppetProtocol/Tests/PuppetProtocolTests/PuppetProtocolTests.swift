@@ -105,6 +105,10 @@ struct PuppetReplyTests {
         let settling = try #require(PuppetWindowState(PuppetReply(
             "ok window=7 size=2560x1440 scale=1 fullscreen=1 native=0 key=1 active=1 onspace=1 cursor=free cursorlock=off settling=63")))
         #expect(settling.settlingSeconds == 63)
+        #expect(state.picture == nil)
+        let picture = try #require(PuppetWindowState(PuppetReply(
+            "ok window=7 size=1512x982 scale=2 fullscreen=1 native=1 key=1 active=1 onspace=1 cursor=free cursorlock=off picture=101,0,1310,982")))
+        #expect(picture.picture == CGRect(x: 101, y: 0, width: 1310, height: 982))
     }
 
     @Test("windows lists each window, its title decoded")

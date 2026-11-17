@@ -108,6 +108,10 @@ nonisolated public struct PuppetWindowState: Sendable, Equatable {
     /// Seconds until native fullscreen, still looking for a window to put in
     /// a Space, gives up, after which captures work; nil when it isn't looking.
     public let settlingSeconds: Int?
+    /// Where the game's picture is in the window, in points from its top
+    /// left (the helper's `helperGamePicture`); nil from a helper that
+    /// doesn't say, whose picture is taken to be the whole window.
+    public let picture: CGRect?
 
     /// From a `state` reply; nil for an error or a reply missing the window.
     public init?(_ reply: PuppetReply) {
@@ -126,6 +130,10 @@ nonisolated public struct PuppetWindowState: Sendable, Equatable {
         cursorHeld = fields["cursor"] == "held"
         cursorLock = fields["cursorlock"]
         settlingSeconds = fields["settling"].flatMap(Int.init)
+        picture = fields["picture"].flatMap { field in
+            let numbers = field.split(separator: ",").compactMap { Double($0) }
+            return numbers.count == 4 ? CGRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3]) : nil
+        }
     }
 }
 

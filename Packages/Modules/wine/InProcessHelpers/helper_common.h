@@ -257,6 +257,15 @@ CGSize wineMainDisplaySize(void);
 /// emulated_mode_scaling.m isn't armed.
 int windowShowsScaledPicture(NSWindow *window);
 
+/// Where the game's picture is in `window`, in points from its top left: in
+/// a window covering the screen, the game's display mode fitted to it and
+/// centred, as mode scaling and Wine draw it; otherwise, or while the mode
+/// isn't known (emulated_mode_scaling.m unarmed), the whole window. The
+/// input recorder writes clicks as a share of it and puppet control's
+/// `state` says it, so a recording replays on a screen of another shape.
+/// Main thread only.
+NSRect helperGamePicture(NSWindow *window);
+
 // ## Such a picture in a window of its own (scaled_picture_window.m)
 //
 // Out of its Space at the player's asking, a window that shows a scaled GDI
@@ -398,6 +407,10 @@ int helperKeyCode(NSString *name, BOOL *shift);
 /// key's state but the characters for what it types, and a game reading
 /// typed keys (Icy Tower's menus) misses a key without them.
 NSString *helperKeyCharacters(NSString *name, int code);
+
+/// A key's name from its virtual keycode, as helperKeyCode reads it; nil for
+/// a key without one.
+NSString *helperKeyName(int code);
 
 /// The modifier keys, in the order they go down (and the reverse up): each
 /// one's flag and its keycode, sent as a flags-changed event, which is how

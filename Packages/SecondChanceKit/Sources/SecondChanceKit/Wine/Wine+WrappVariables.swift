@@ -160,6 +160,13 @@ nonisolated extension Wine {
         if puppetDirectory(in: environment) != nil {
             env["PUPPET_CONTROL_EXE"] = gameExe
         }
+        // SECOND_CHANCE_RECORD_INPUT names a file the input recorder writes
+        // the person's clicks and keys into, for `sc puppet replay`
+        // (`sc wrapp run --debug record-input`); no player's launch sets it.
+        if let file = environment["SECOND_CHANCE_RECORD_INPUT"], !file.isEmpty {
+            env["INPUT_RECORDER_EXE"] = gameExe
+            env["INPUT_RECORDER_FILE"] = file
+        }
         return env
     }
 

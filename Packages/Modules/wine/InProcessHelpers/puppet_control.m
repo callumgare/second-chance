@@ -28,7 +28,10 @@
 //                                       window shows this one's screen, below)
 //    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 native=0|1 key=0|1 active=0|1 onspace=0|1
 //                           cursor=held|free cursorlock=off|waiting|locked|not-locked
-//                           [settling=<s>]
+//                           picture=<x>,<y>,<w>,<h> [settling=<s>]
+//                                       (picture: where the game's picture is in the window, in
+//                                       points -- helperGamePicture -- which a recording's clicks
+//                                       are shares of)
 //                                       (settling: native fullscreen is still looking for a window to
 //                                       put in a Space, and gives up in <s> seconds; until then, or
 //                                       until the window is in its Space, capture refuses)
@@ -264,6 +267,9 @@ static NSString *stateCommand(void) {
                  window.backingScaleFactor, native || coversScreen, native, window.isKeyWindow, NSApp.isActive,
                  window.isOnActiveSpace,
                  cursorLockHeld() ? "held" : "free", cursorLockStatus()];
+        NSRect picture = helperGamePicture(window);
+        reply = [reply stringByAppendingFormat:@" picture=%.0f,%.0f,%.0f,%.0f", picture.origin.x, picture.origin.y,
+                 picture.size.width, picture.size.height];
         int settling = nativeFullscreenSecondsToGiveUp();
         if (settling > 0) reply = [reply stringByAppendingFormat:@" settling=%d", settling];
         return YES;

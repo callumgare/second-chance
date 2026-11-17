@@ -51,6 +51,32 @@ int helperKeyCode(NSString *name, BOOL *shift) {
     return -1;
 }
 
+/// A key's name in the notation, from its virtual keycode (US layout), its
+/// unshifted character for a printable one; nil for a key without one (a
+/// modifier on its own). What the input recorder writes, so a replay can
+/// press it again through helperKeyCode.
+NSString *helperKeyName(int code) {
+    static NSDictionary<NSNumber *, NSString *> *names;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSMutableDictionary<NSNumber *, NSString *> *found = [NSMutableDictionary dictionary];
+        // The canonical names first, so `return` wins over `enter`.
+        NSArray<NSString *> *candidates = @[@"return", @"tab", @"space", @"delete", @"escape", @"forwarddelete",
+                                            @"home", @"end", @"pageup", @"pagedown", @"left", @"right", @"down", @"up",
+                                            @"f1", @"f2", @"f3", @"f4", @"f5", @"f6", @"f7", @"f8", @"f9", @"f10", @"f11", @"f12"];
+        NSString *characters = @"abcdefghijklmnopqrstuvwxyz0123456789`-=[]\\;',./";
+        NSMutableArray<NSString *> *all = [candidates mutableCopy];
+        for (NSUInteger i = 0; i < characters.length; i++) [all addObject:[characters substringWithRange:NSMakeRange(i, 1)]];
+        for (NSString *name in all) {
+            BOOL shift = NO;
+            int key = helperKeyCode(name, &shift);
+            if (key >= 0 && !shift && !found[@(key)]) found[@(key)] = name;
+        }
+        names = found;
+    });
+    return names[@(code)];
+}
+
 /// The characters a key types, for the event: Wine reads the keycode, but
 /// AppKit wants characters on a key event.
 NSString *helperKeyCharacters(NSString *name, int code) {

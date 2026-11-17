@@ -617,6 +617,7 @@
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/basilisk_mac.m",
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/basilisk_display.m",
 				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/screen_depth.m",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/input_recorder.m",
 			);
 			name = "Build In-Process Helpers";
 			outputFileListPaths = (

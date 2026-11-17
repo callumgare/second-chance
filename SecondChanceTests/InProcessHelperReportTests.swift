@@ -53,6 +53,18 @@ struct InProcessHelperReportTests {
         #expect(InProcessHelperReport(armingVariables: puppeteer, logger: logger).check() == [.nativeFullscreen, .cursorLock, .modeScaling, .quitWatch, .puppetControl])
     }
 
+    @Test("The input recorder is armed only when a file to record into is named")
+    func armsInputRecorderOnlyWhenAsked() {
+        let player = Wine.inProcessHelperVariables(gameExe: unreadableExe, environment: [:])
+        #expect(player["INPUT_RECORDER_EXE"] == nil)
+        #expect(player["INPUT_RECORDER_FILE"] == nil)
+        let recording = Wine.inProcessHelperVariables(
+            gameExe: unreadableExe, environment: ["SECOND_CHANCE_RECORD_INPUT": "/tmp/input.jsonl"])
+        #expect(recording["INPUT_RECORDER_EXE"] == "Game.exe")
+        #expect(recording["INPUT_RECORDER_FILE"] == "/tmp/input.jsonl")
+        #expect(InProcessHelperReport(armingVariables: recording, logger: logger).check().contains(.inputRecorder))
+    }
+
     @Test("A wrapp shows Wine the display below the notch unless native fullscreen is off")
     func belowNotchFollowsNativeFullscreen() {
         #expect(Wine.wrappSessionVariables(environment: [:]) == ["NATIVE_FULLSCREEN_BELOW_NOTCH": "1"])

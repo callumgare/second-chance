@@ -21,7 +21,7 @@ struct PuppetCommand: AsyncParsableCommand {
             PuppetActionCommand.self, PuppetShotCommand.self, PuppetTextCommand.self, PuppetWindowsCommand.self,
             PuppetWaitCommand.self, PuppetLogCommand.self, PuppetSavesCommand.self, PuppetServeCommand.self,
             PuppetControlsCommand.self, PuppetAutoItCommand.self,
-            PuppetRecordCommand.self, PuppetSheetCommand.self, PuppetAudioCommand.self,
+            PuppetRecordCommand.self, PuppetReplayCommand.self, PuppetSheetCommand.self, PuppetAudioCommand.self,
             PuppetScreenCommand.self, PuppetNameCommand.self, PuppetExpectCommand.self,
         ]
     )
@@ -65,6 +65,10 @@ struct PuppetStartCommand: AsyncParsableCommand {
                              + "and a --wine prefix of its own, so a save can be loaded after a relaunch."))
     var keepSaves = false
 
+    @Flag(help: ArgumentHelp("Start with a copy of the player's own saves and settings for the wrapp, so a recording "
+                             + "made from one of their saves loads it (sc puppet replay). Theirs are only read."))
+    var playerSaves = false
+
     @OptionGroup var debug: WrappDebugOptions
 
     @Option(help: ArgumentHelp("Stop it after this long with no command: 10m, 30m, 1h.", valueName: "time"))
@@ -77,6 +81,7 @@ struct PuppetStartCommand: AsyncParsableCommand {
         guard PuppetSession.validName(name) else { throw ValidationError("A session's name is lower-case letters, digits and dashes.") }
         guard (wrapp == nil) != command.isEmpty else { throw ValidationError("Give --wrapp <app>, or a command after --, not both.") }
         guard wine != nil || (prefix == nil && disc == nil && autoit == nil) else { throw ValidationError("--prefix, --disc and --autoit go with --wine.") }
+        guard !playerSaves || (wrapp != nil && !keepSaves) else { throw ValidationError("--player-saves goes with --wrapp, in place of --keep-saves.") }
         guard ScreenLease.parseDuration(idle) != nil, ScreenLease.parseDuration(max) != nil else {
             throw ValidationError("--idle and --max take a time such as 10m or 2h, of at most 8 hours.")
         }
@@ -110,6 +115,13 @@ struct PuppetStartCommand: AsyncParsableCommand {
                                                                ui: session.ui)
             app = executable
             program = [executable.path] + command.dropFirst()
+        }
+        if playerSaves {
+            if let copied = try PuppetSession.copyPlayerFiles(of: app, into: PuppetSession.folder(name).appendingPathComponent("app-support")) {
+                session.ui.detail("Copied the player's saves and settings from \(copied.path)")
+            } else {
+                session.ui.detail("The player has no saves for \(app.lastPathComponent) yet: starting with none.")
+            }
         }
         var puppet = PuppetSession(name: name, app: app.path, command: program, helper: helperPath, purpose: global.purpose,
                                    started: Date(), idleMinutes: (ScreenLease.parseDuration(idle) ?? 600) / 60,

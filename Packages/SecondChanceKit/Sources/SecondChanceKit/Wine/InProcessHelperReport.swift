@@ -21,6 +21,7 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
         case quitWatch = "QuitWatch"
         case puppetControl = "PuppetControl"
         case screenDepth = "ScreenDepth"
+        case inputRecorder = "InputRecorder"
 
         var name: String {
             switch self {
@@ -30,6 +31,7 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
             case .quitWatch: return "Quit watch"
             case .puppetControl: return "Puppet control"
             case .screenDepth: return "Screen depth"
+            case .inputRecorder: return "Input recorder"
             }
         }
 
@@ -42,6 +44,7 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
             case .quitWatch: return "QUIT_WATCH_EXE"
             case .puppetControl: return "PUPPET_CONTROL_EXE"
             case .screenDepth: return "SCREEN_DEPTH_EXE"
+            case .inputRecorder: return "INPUT_RECORDER_EXE"
             }
         }
 
@@ -54,6 +57,7 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
             case .quitWatch: return "a game that quits before it has drawn anything won't be reported as failing"
             case .puppetControl: return "WrappPuppeteer can't see or click the game"
             case .screenDepth: return "a game that needs fewer colours will say the screen has too many"
+            case .inputRecorder: return "the clicks and keys given the game aren't recorded"
             }
         }
 

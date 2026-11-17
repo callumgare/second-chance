@@ -607,6 +607,20 @@ int windowShowsScaledPicture(NSWindow *window) {
     return scaledPictureFrame(window, &frame) || wineShowsScaledPicture(window);
 }
 
+NSRect helperGamePicture(NSWindow *window) {
+    NSSize size = window.frame.size;
+    NSRect whole = NSMakeRect(0, 0, size.width, size.height);
+    // Only a window covering the screen has its picture scaled to fit it; a
+    // window of the game's own is its picture.
+    BOOL inSpace = (window.styleMask & NSWindowStyleMaskFullScreen) != 0;
+    BOOL coversScreen = window.screen && NSEqualRects(window.frame, window.screen.frame);
+    CGSize mode;
+    if ((!inSpace && !coversScreen) || !knownModeSize(&mode) || mode.width < 1 || mode.height < 1) return whole;
+    CGFloat scale = fmin(size.width / mode.width, size.height / mode.height);
+    CGFloat width = mode.width * scale, height = mode.height * scale;
+    return NSMakeRect((size.width - width) / 2, (size.height - height) / 2, width, height);
+}
+
 /// How much of a client view of `client` points win32u's scaled surface
 /// paints, which can be a pixel or so of the mode short of it. The client
 /// view is placed by the display's size over the mode's exactly

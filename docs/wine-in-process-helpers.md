@@ -1399,7 +1399,7 @@ macOS 26 doesn't leave the surface undersized.
 | Request | Reply |
 | --- | --- |
 | `hello` | `ok version=6 pid=<n> exe=<name> commands=<list> [shownby=<pid>]`: `shownby` names the process whose window shows this one's screen, when another's does (the wrapp, for Basilisk II's Mac: [modules.md](modules.md#the-mac-in-the-wrapps-window)), and every request then acts on that screen, WrappPuppeteer waiting for that process's window and judging focus by it; older helpers in built wrapps answer `error unknown request`, which says they're version 1; version 2 has no `scroll`, 3 no `audio`, 4 no key sequences' steps in `key`, 5 takes one step a `key` request |
-| `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 native=0\|1 key=0\|1 active=0\|1 onspace=0\|1 cursor=held\|free cursorlock=off\|waiting\|locked\|not-locked` — `fullscreen` for a macOS fullscreen Space (`native`) or a borderless window exactly covering the screen, as Direct3D games draw; `onspace` whether the window is on the Space on screen; `cursor` whether cnc-ddraw holds the mouse now, and `cursorlock` how the [cursor lock](#cursor-lock) got on (`off` where it isn't armed, as in ScummVM) |
+| `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 native=0\|1 key=0\|1 active=0\|1 onspace=0\|1 cursor=held\|free cursorlock=off\|waiting\|locked\|not-locked picture=<x>,<y>,<w>,<h>` — `picture` where the game's picture is in the window, in points ([input recorder](#input-recorder)); older helpers leave it out; `fullscreen` for a macOS fullscreen Space (`native`) or a borderless window exactly covering the screen, as Direct3D games draw; `onspace` whether the window is on the Space on screen; `cursor` whether cnc-ddraw holds the mouse now, and `cursorlock` how the [cursor lock](#cursor-lock) got on (`off` where it isn't armed, as in ScummVM) |
 | `windows` | `ok <n> windows`, then a line each: `id=<n> frame=<x>,<y>,<w>,<h> level=<n> visible=0\|1 key=0\|1 main=0\|1 kind=game\|panel\|other title=<percent-encoded>`, the frame from the screen's top left; `game` is the window the other requests act on |
 | `capture <path> [region=<x>,<y>,<w>,<h>] [scale=<s>]` | `ok <w>x<h>`, with a PNG of the game window at `<path>`: a part of it (in points) for `region`, and at `scale` pixels a point rather than the window's own |
 | `click <x> <y> [button=left\|right] [count=1-3] [hold=<ms>]` | `ok`: a mouse move, 150 ms for the game to see it, then the button held for 100 ms (or `hold`), `count` times |
@@ -1483,6 +1483,41 @@ start the wrapp with the variable and talk to the socket:
 mkdir -m 700 /tmp/wp && SECOND_CHANCE_PUPPET_DIR=/tmp/wp "<wrapp>.app/Contents/MacOS/WrappTemplate" &
 echo state | /usr/bin/nc -U /tmp/wp/game-<pid>.sock   # the game process's PID
 ```
+
+## Input recorder
+
+**A person's route through a game can be recorded and replayed**
+([dev-cli.md](dev-cli.md#replaying-a-recording)). `input_recorder.m` writes
+down the clicks and keys the game gets. It arms when
+`SECOND_CHANCE_RECORD_INPUT` names a file (`sc wrapp run --debug
+record-input`): `Wine.inProcessHelperVariables` then sets
+`INPUT_RECORDER_EXE` to the game's `.exe` and `INPUT_RECORDER_FILE` to the
+file, and the wrapp expects it to arm as it does the others. No player's
+launch sets them.
+
+It watches the game's events with an AppKit local monitor (mouse buttons
+down and up, keys down, a held key's repeats left out) and writes a JSON line
+for each. The first line says what it is,
+`{"exe":"Waverly.exe","format":1,"started":"…"}`. Each line after it has `t`,
+seconds since the recorder armed, which is as the game's process starts:
+
+- **A button** (`"event":"down"` or `"up"`, `"button":"left"` or `"right"`)
+  has `x` and `y` as its share of the game's picture, from 0 to 1, with
+  `points` and `picture` as the window points they came from. The picture
+  is `helperGamePicture` (`emulated_mode_scaling.m`). In a window covering
+  the screen, it's the game's display mode fitted to the window and centred,
+  as mode scaling and Wine draw it. Otherwise, or while mode scaling hasn't
+  learnt the mode (it isn't armed), it's the whole window.
+- **A key** (`"event":"key"`) has `key`, its name in the [key
+  notation](wrappfile.md#key-sequences) (`helperKeyName`, `key_names.m`'s
+  table read the other way), and `mods` for those held with it, joined by
+  `+`.
+
+Puppet control's own events carry `kPuppetEventTag`, and the recorder leaves
+them out, so replaying in a game that is also recording doesn't record the
+replay over the person's route. Clicks made by the test session's own
+pointer (`sc session do … click`) aren't tagged, so they are recorded as a
+person's would be, which is how the recorder was tested.
 
 ## Audio levels
 
